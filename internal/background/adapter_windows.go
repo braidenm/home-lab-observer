@@ -47,7 +47,7 @@ func (a *windowsAdapter) registration(Settings) (registration, error) {
 		return registration{}, err
 	}
 	powershell := filepath.Join(systemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe")
-	argument := fmt.Sprintf(`-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "&amp; &apos;%s&apos; background run --install-root &apos;%s&apos;"`, xmlEscape(launcher), xmlEscape(a.root))
+	argument := fmt.Sprintf(`-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command "&amp; &apos;%s&apos; background run --install-root &apos;%s&apos;"`, xmlEscape(launcher), xmlEscape(a.root))
 	content := fmt.Sprintf(`<?xml version="1.0"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo><Description>Home Lab Observer per-user session profile</Description></RegistrationInfo>
@@ -104,6 +104,7 @@ func canonicalTaskXML(value []byte) ([]string, error) {
 	var tokens []string
 	var elements []xml.Name
 	registrationURISeen := false
+	defaultFieldsSeen := make(map[string]bool)
 	for {
 		token, err := decoder.Token()
 		if err != nil {
@@ -118,11 +119,20 @@ func canonicalTaskXML(value []byte) ([]string, error) {
 				if registrationURISeen {
 					return nil, errors.New("task XML contains duplicate registration URI metadata")
 				}
-				var uri string
-				if err := decoder.DecodeElement(&uri, &typed); err != nil || strings.TrimSpace(uri) != managerIdentity {
+				if err := consumeExactSimpleTaskElement(decoder, typed, managerIdentity); err != nil {
 					return nil, errors.New("task XML registration URI does not match the managed task")
 				}
 				registrationURISeen = true
+				continue
+			}
+			if path, defaultValue, ok := normalizedTaskDefault(elements, typed.Name); ok {
+				if defaultFieldsSeen[path] {
+					return nil, errors.New("task XML contains duplicate default-valued metadata")
+				}
+				if err := consumeExactSimpleTaskElement(decoder, typed, defaultValue); err != nil {
+					return nil, errors.New("task XML contains changed default-valued metadata")
+				}
+				defaultFieldsSeen[path] = true
 				continue
 			}
 			attributes := make([]string, 0, len(typed.Attr))
@@ -142,6 +152,71 @@ func canonicalTaskXML(value []byte) ([]string, error) {
 			if text := strings.TrimSpace(string(typed)); text != "" {
 				tokens = append(tokens, "="+text)
 			}
+		}
+	}
+}
+
+// Task Scheduler omits these exact default-valued fields when it persists a
+// task. Normalize only the documented schema defaults observed in the saved
+// task, plus the effective least-privilege RunLevel default. A present field
+// must still have the exact expected value and may occur only once.
+func normalizedTaskDefault(parents []xml.Name, current xml.Name) (string, string, bool) {
+	path, ok := exactTaskPath(parents, current)
+	if !ok {
+		return "", "", false
+	}
+	switch path {
+	case "Task/Triggers/LogonTrigger/Enabled",
+		"Task/Settings/AllowHardTerminate",
+		"Task/Settings/AllowStartOnDemand",
+		"Task/Settings/Enabled":
+		return path, "true", true
+	case "Task/Settings/RunOnlyIfNetworkAvailable",
+		"Task/Settings/Hidden",
+		"Task/Settings/RunOnlyIfIdle",
+		"Task/Settings/DisallowStartOnRemoteAppSession",
+		"Task/Settings/WakeToRun":
+		return path, "false", true
+	case "Task/Principals/Principal/RunLevel":
+		return path, "LeastPrivilege", true
+	case "Task/Settings/Priority":
+		return path, "7", true
+	default:
+		return "", "", false
+	}
+}
+
+func exactTaskPath(parents []xml.Name, current xml.Name) (string, bool) {
+	names := make([]string, 0, len(parents)+1)
+	for _, element := range append(append([]xml.Name(nil), parents...), current) {
+		if element.Space != taskXMLNamespace {
+			return "", false
+		}
+		names = append(names, element.Local)
+	}
+	return strings.Join(names, "/"), true
+}
+
+func consumeExactSimpleTaskElement(decoder *xml.Decoder, start xml.StartElement, expected string) error {
+	if len(start.Attr) != 0 {
+		return errors.New("task XML metadata contains attributes")
+	}
+	var contents strings.Builder
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		switch typed := token.(type) {
+		case xml.CharData:
+			contents.Write(typed)
+		case xml.EndElement:
+			if typed.Name != start.Name || strings.TrimSpace(contents.String()) != expected {
+				return errors.New("task XML metadata value changed")
+			}
+			return nil
+		default:
+			return errors.New("task XML metadata is not a simple value")
 		}
 	}
 }
