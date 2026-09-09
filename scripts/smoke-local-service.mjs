@@ -121,7 +121,7 @@ try {
       await page.reload();
       await page.getByRole('button', { name: 'Workloads', exact: true }).click();
       await page.getByRole('tab', { name: 'Containers', exact: true }).click();
-      const table = page.getByRole('table', { name: 'Containers: name and image, state, CPU, memory, metrics quality, and alias', exact: true });
+      const table = page.getByRole('table', { name: 'Containers: name and image, state, host-capacity CPU, engine-reported memory, metrics quality, and alias', exact: true });
       await table.waitFor();
       const stopped = table.getByRole('row').filter({ hasText: 'sample-worker' });
       assert.equal(await stopped.count(), 1);
