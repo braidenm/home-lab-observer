@@ -56,9 +56,14 @@ guard and under-lock identity revalidation must both be verified before acceptan
 normalization remains a failing required check; the in-memory native template round trip is not a substitute for
 that real manager lifecycle test. Linux/macOS native runtime and packaged tests pass on the current PR candidate.
 
+The shared guard received independent approval after the under-lock identity fix (`4446fbc`): repeated background
+tests (`-count=20`) and PowerShell 5.1 installer tests pass. The reviewer also approved sanitized failure precedence
+(`45fd89a`); a failed cleanup cannot hide the original bounded Windows manager diagnostic. These resolve the guard
+review blocker, not the separate real Windows registration gate.
+
 The process-exit smoke helper now clears completed deadlines: a successful background smoke completes in roughly
 two seconds locally rather than waiting for an unused 45-second timer. A regression test verifies timer/listener
-cleanup. Final independent guard sign-off, all required CI checks and publication evidence are still pending.
+cleanup. All required CI checks and publication evidence are still pending.
 
 ## Scope safeguards
 
