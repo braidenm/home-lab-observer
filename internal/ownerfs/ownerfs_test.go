@@ -9,7 +9,7 @@ import (
 )
 
 func TestEnsurePrivateSubdirCreatesOnlyFixedChild(t *testing.T) {
-	state := testStateDir(t)
+	state := filepath.Join(canonicalTempDir(t), "missing", "state")
 	directory, err := EnsurePrivateSubdir(state, "diagnostics")
 	if err != nil {
 		t.Fatal(err)

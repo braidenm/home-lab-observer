@@ -16,9 +16,26 @@ var ErrUnsafePath = errors.New("unsafe owner-only path")
 // EnsurePrivateSubdir creates and restricts a fixed child of a dedicated state
 // directory. Callers must supply a code-owned child name, not user input.
 func EnsurePrivateSubdir(stateDir, child string) (string, error) {
-	stateDir, err := validateStateDir(stateDir, child)
+	stateDir, err := resolveStateDir(stateDir, child)
 	if err != nil {
 		return "", err
+	}
+	existed, err := validateExistingDirectoryPrefix(stateDir)
+	if err != nil {
+		return "", err
+	}
+	if !existed {
+		if err := os.MkdirAll(stateDir, 0o700); err != nil {
+			return "", err
+		}
+	}
+	if err := validateDirectoryPath(stateDir); err != nil {
+		return "", err
+	}
+	if !existed {
+		if err := RestrictDirectory(stateDir); err != nil {
+			return "", err
+		}
 	}
 
 	directory := filepath.Join(stateDir, child)
@@ -38,8 +55,11 @@ func EnsurePrivateSubdir(stateDir, child string) (string, error) {
 // changing anything. It is used by stop/status paths that must be read-only
 // when no managed runtime exists.
 func OpenPrivateSubdir(stateDir, child string) (string, error) {
-	stateDir, err := validateStateDir(stateDir, child)
+	stateDir, err := resolveStateDir(stateDir, child)
 	if err != nil {
+		return "", err
+	}
+	if err := validateDirectoryPath(stateDir); err != nil {
 		return "", err
 	}
 	directory := filepath.Join(stateDir, child)
@@ -49,7 +69,7 @@ func OpenPrivateSubdir(stateDir, child string) (string, error) {
 	return directory, nil
 }
 
-func validateStateDir(stateDir, child string) (string, error) {
+func resolveStateDir(stateDir, child string) (string, error) {
 	if strings.TrimSpace(stateDir) == "" || child == "" || filepath.Base(child) != child || child == "." || child == ".." {
 		return "", fmt.Errorf("%w: invalid directory", ErrUnsafePath)
 	}
@@ -62,10 +82,36 @@ func validateStateDir(stateDir, child string) (string, error) {
 	if filepath.Dir(stateDir) == stateDir || (userHome != "" && strings.EqualFold(stateDir, filepath.Clean(userHome))) {
 		return "", fmt.Errorf("%w: use a dedicated state directory", ErrUnsafePath)
 	}
-	if err := validateDirectoryPath(stateDir); err != nil {
-		return "", err
-	}
 	return stateDir, nil
+}
+
+// validateExistingDirectoryPrefix validates components in order and stops at
+// the first missing component. Callers may create the missing suffix only
+// after every reachable ancestor has passed the link/reparse checks.
+func validateExistingDirectoryPrefix(path string) (bool, error) {
+	volume := filepath.VolumeName(path)
+	current := volume + string(os.PathSeparator)
+	relative, err := filepath.Rel(current, path)
+	if err != nil || relative == "." || relative == "" {
+		return false, ErrUnsafePath
+	}
+	for _, part := range splitPath(relative) {
+		current = filepath.Join(current, part)
+		info, err := os.Lstat(current)
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return false, ErrUnsafePath
+		}
+		if err := validateNotReparse(current); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
 }
 
 // validateDirectoryPath walks every existing component before callers create
