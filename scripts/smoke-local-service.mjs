@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,7 +10,7 @@ import Ajv from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const temporary = await mkdtemp(join(tmpdir(), 'observer-smoke-'));
+const temporary = await realpath(await mkdtemp(join(tmpdir(), 'observer-smoke-')));
 const binary = process.env.OBSERVER_SMOKE_BINARY
   ? resolve(process.env.OBSERVER_SMOKE_BINARY)
   : join(temporary, process.platform === 'win32' ? 'observer.exe' : 'observer');
