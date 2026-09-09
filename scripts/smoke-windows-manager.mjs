@@ -110,14 +110,25 @@ function Get-ComparableChildren($Node,[string]$LogicalPath) {
     $childPath=$LogicalPath+'/'+[string]$child.LocalName
     if (-not (Test-NormalizedElement $child $childPath)) { $children += $child }
   }
-  if ($LogicalPath -ceq 'Task') {
-    $allowed=@('RegistrationInfo','Triggers','Settings','Data','Principals','Actions')
+  $allowed=$null
+  $required=@()
+  switch -CaseSensitive ($LogicalPath) {
+    'Task' {$allowed=@('RegistrationInfo','Triggers','Settings','Data','Principals','Actions');$required=@('Actions')}
+    'Task/RegistrationInfo' {$allowed=@('Description','URI')}
+    'Task/Settings' {$allowed=@('MultipleInstancesPolicy','DisallowStartIfOnBatteries','StopIfGoingOnBatteries','AllowHardTerminate','StartWhenAvailable','RunOnlyIfNetworkAvailable','IdleSettings','AllowStartOnDemand','Enabled','Hidden','RunOnlyIfIdle','DisallowStartOnRemoteAppSession','UseUnifiedSchedulingEngine','WakeToRun','ExecutionTimeLimit','Priority','RestartOnFailure')}
+    'Task/Settings/IdleSettings' {$allowed=@('StopOnIdleEnd','RestartOnIdle')}
+    'Task/Settings/RestartOnFailure' {$allowed=@('Interval','Count');$required=@('Interval','Count')}
+    'Task/Principals/Principal' {$allowed=@('UserId','LogonType','RunLevel')}
+    'Task/Actions/Exec' {$allowed=@('Command','Arguments','WorkingDirectory');$required=@('Command')}
+  }
+  if ($null -ne $allowed) {
     $seen=@{}
     foreach ($child in $children) {
       if ([string]$child.NamespaceURI -cne 'http://schemas.microsoft.com/windows/2004/02/mit/task' -or $allowed -cnotcontains [string]$child.LocalName -or $seen.ContainsKey([string]$child.LocalName)) { return $children }
       $seen[[string]$child.LocalName]=$true
     }
-    if ($seen.ContainsKey('Actions')) { return @($children | Sort-Object @{Expression={[string]$_.LocalName}}) }
+    foreach ($name in $required) { if (-not $seen.ContainsKey($name)) { return $children } }
+    return @($children | Sort-Object @{Expression={[string]$_.LocalName}})
   }
   return $children
 }

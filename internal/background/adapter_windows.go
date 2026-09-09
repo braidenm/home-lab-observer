@@ -21,6 +21,11 @@ const managerIdentity = `\Home Lab Observer`
 
 const taskXMLNamespace = "http://schemas.microsoft.com/windows/2004/02/mit/task"
 
+const (
+	maxTaskXMLDepth    = 32
+	maxTaskXMLElements = 512
+)
+
 type windowsAdapter struct {
 	runner commandRunner
 	root   string
@@ -29,6 +34,16 @@ type windowsAdapter struct {
 type taskChildSpan struct {
 	name       string
 	start, end int
+}
+
+type taskElementFrame struct {
+	name       xml.Name
+	path       string
+	start      int
+	childStart int
+	allGroup   bool
+	children   []taskChildSpan
+	counts     map[string]int
 }
 
 func launcherName() string { return "observer.cmd" }
@@ -111,22 +126,20 @@ func canonicalTaskXML(value []byte) ([]string, error) {
 	}
 	decoder := xml.NewDecoder(bytes.NewReader(normalized))
 	var tokens []string
-	var elements []xml.Name
+	var frames []taskElementFrame
 	registrationURISeen := false
 	defaultFieldsSeen := make(map[string]bool)
-	rootTask := false
-	directChildCounts := make(map[string]int)
-	var directChildren []taskChildSpan
-	openDirectChild := taskChildSpan{start: -1}
+	rootSeen := false
+	elementCount := 0
 	for {
 		token, err := decoder.Token()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				if len(elements) != 0 {
+				if len(frames) != 0 {
 					return nil, errors.New("task XML element nesting is incomplete")
 				}
-				if rootTask {
-					return canonicalizeDirectTaskChildren(tokens, directChildren, directChildCounts)
+				if !rootSeen {
+					return nil, errors.New("task XML root is missing")
 				}
 				return tokens, nil
 			}
@@ -134,22 +147,34 @@ func canonicalTaskXML(value []byte) ([]string, error) {
 		}
 		switch typed := token.(type) {
 		case xml.StartElement:
-			if len(elements) == 0 {
-				if len(tokens) != 0 {
+			elementCount++
+			if elementCount > maxTaskXMLElements || len(frames)+1 > maxTaskXMLDepth {
+				return nil, errors.New("task XML structure exceeds its limit")
+			}
+			if len(frames) == 0 {
+				if rootSeen || len(tokens) != 0 {
 					return nil, errors.New("task XML contains multiple roots")
 				}
-				rootTask = typed.Name.Space == taskXMLNamespace && typed.Name.Local == "Task"
-			} else if rootTask && len(elements) == 1 {
-				if typed.Name.Space != taskXMLNamespace || !allowedDirectTaskChild(typed.Name.Local) {
-					return nil, errors.New("task XML contains an unknown direct task child")
+				if typed.Name.Space != taskXMLNamespace || typed.Name.Local != "Task" {
+					return nil, errors.New("task XML root is not Task")
 				}
-				directChildCounts[typed.Name.Local]++
-				if directChildCounts[typed.Name.Local] != 1 {
-					return nil, errors.New("task XML contains a duplicate direct task child")
-				}
-				openDirectChild = taskChildSpan{name: typed.Name.Local, start: len(tokens)}
+				rootSeen = true
 			}
-			if isTaskRegistrationURI(elements, typed.Name) {
+			parents := taskFrameNames(frames)
+			path, pathOK := exactTaskPath(parents, typed.Name)
+			childStart := -1
+			if len(frames) != 0 && frames[len(frames)-1].allGroup {
+				parent := &frames[len(frames)-1]
+				if typed.Name.Space != taskXMLNamespace || !allowedTaskAllChild(parent.path, typed.Name.Local) {
+					return nil, errors.New("task XML contains an unknown child in an unordered group")
+				}
+				parent.counts[typed.Name.Local]++
+				if parent.counts[typed.Name.Local] != 1 {
+					return nil, errors.New("task XML contains a duplicate child in an unordered group")
+				}
+				childStart = len(tokens)
+			}
+			if isTaskRegistrationURI(parents, typed.Name) {
 				if registrationURISeen {
 					return nil, errors.New("task XML contains duplicate registration URI metadata")
 				}
@@ -159,14 +184,14 @@ func canonicalTaskXML(value []byte) ([]string, error) {
 				registrationURISeen = true
 				continue
 			}
-			if path, defaultValue, ok := normalizedTaskDefault(elements, typed.Name); ok {
-				if defaultFieldsSeen[path] {
+			if defaultPath, defaultValue, ok := normalizedTaskDefault(parents, typed.Name); ok {
+				if defaultFieldsSeen[defaultPath] {
 					return nil, errors.New("task XML contains duplicate default-valued metadata")
 				}
 				if err := consumeExactSimpleTaskElement(decoder, typed, defaultValue); err != nil {
 					return nil, errors.New("task XML contains changed default-valued metadata")
 				}
-				defaultFieldsSeen[path] = true
+				defaultFieldsSeen[defaultPath] = true
 				continue
 			}
 			attributes := make([]string, 0, len(typed.Attr))
@@ -175,22 +200,31 @@ func canonicalTaskXML(value []byte) ([]string, error) {
 			}
 			sort.Strings(attributes)
 			tokens = append(tokens, "<"+typed.Name.Space+"|"+typed.Name.Local+" "+strings.Join(attributes, " ")+">")
-			elements = append(elements, typed.Name)
+			allGroup := pathOK && isTaskAllGroup(path)
+			frames = append(frames, taskElementFrame{
+				name: typed.Name, path: path, start: len(tokens) - 1, childStart: childStart,
+				allGroup: allGroup, counts: make(map[string]int),
+			})
 		case xml.EndElement:
-			if len(elements) == 0 || elements[len(elements)-1] != typed.Name {
+			if len(frames) == 0 || frames[len(frames)-1].name != typed.Name {
 				return nil, errors.New("task XML element nesting is invalid")
 			}
 			tokens = append(tokens, "</"+typed.Name.Space+"|"+typed.Name.Local+">")
-			if rootTask && len(elements) == 2 {
-				openDirectChild.end = len(tokens)
-				directChildren = append(directChildren, openDirectChild)
-				openDirectChild = taskChildSpan{start: -1}
+			frame := frames[len(frames)-1]
+			if frame.allGroup {
+				if err := canonicalizeTaskAllGroup(tokens, frame); err != nil {
+					return nil, err
+				}
 			}
-			elements = elements[:len(elements)-1]
+			frames = frames[:len(frames)-1]
+			if len(frames) != 0 && frame.childStart >= 0 {
+				parent := &frames[len(frames)-1]
+				parent.children = append(parent.children, taskChildSpan{name: frame.name.Local, start: frame.childStart, end: len(tokens)})
+			}
 		case xml.CharData:
 			if text := strings.TrimSpace(string(typed)); text != "" {
-				if rootTask && len(elements) == 1 {
-					return nil, errors.New("task XML contains direct task text")
+				if len(frames) != 0 && frames[len(frames)-1].allGroup {
+					return nil, errors.New("task XML contains text in an unordered group")
 				}
 				tokens = append(tokens, "="+text)
 			}
@@ -198,40 +232,87 @@ func canonicalTaskXML(value []byte) ([]string, error) {
 	}
 }
 
-func allowedDirectTaskChild(name string) bool {
-	switch name {
-	case "RegistrationInfo", "Triggers", "Settings", "Data", "Principals", "Actions":
+func taskFrameNames(frames []taskElementFrame) []xml.Name {
+	names := make([]xml.Name, len(frames))
+	for index := range frames {
+		names[index] = frames[index].name
+	}
+	return names
+}
+
+// These are the exact xs:all groups used by the observer's fixed task profile.
+// Other Task Scheduler structures remain order-sensitive and exact.
+func isTaskAllGroup(path string) bool {
+	switch path {
+	case "Task", "Task/RegistrationInfo", "Task/Settings", "Task/Settings/IdleSettings",
+		"Task/Settings/RestartOnFailure", "Task/Principals/Principal", "Task/Actions/Exec":
 		return true
 	default:
 		return false
 	}
 }
 
-// taskType uses xs:all, so Task Scheduler may persist the direct children in
-// any order. Normalize that one confirmed schema boundary while keeping each
-// entire child subtree, including its order, values and attributes, exact.
-func canonicalizeDirectTaskChildren(tokens []string, children []taskChildSpan, counts map[string]int) ([]string, error) {
-	if len(tokens) < 2 || counts["Actions"] != 1 || len(children) == 0 {
-		return nil, errors.New("task XML is missing its required action")
+func allowedTaskAllChild(path, child string) bool {
+	var allowed string
+	switch path {
+	case "Task":
+		allowed = " RegistrationInfo Triggers Settings Data Principals Actions "
+	case "Task/RegistrationInfo":
+		allowed = " Description URI "
+	case "Task/Settings":
+		allowed = " MultipleInstancesPolicy DisallowStartIfOnBatteries StopIfGoingOnBatteries AllowHardTerminate StartWhenAvailable RunOnlyIfNetworkAvailable IdleSettings AllowStartOnDemand Enabled Hidden RunOnlyIfIdle DisallowStartOnRemoteAppSession UseUnifiedSchedulingEngine WakeToRun ExecutionTimeLimit Priority RestartOnFailure "
+	case "Task/Settings/IdleSettings":
+		allowed = " StopOnIdleEnd RestartOnIdle "
+	case "Task/Settings/RestartOnFailure":
+		allowed = " Interval Count "
+	case "Task/Principals/Principal":
+		allowed = " UserId LogonType RunLevel "
+	case "Task/Actions/Exec":
+		allowed = " Command Arguments WorkingDirectory "
+	default:
+		return false
 	}
-	cursor := 1
-	for _, child := range children {
+	return strings.Contains(allowed, " "+child+" ")
+}
+
+func requiredTaskAllChildren(path string) []string {
+	switch path {
+	case "Task":
+		return []string{"Actions"}
+	case "Task/Settings/RestartOnFailure":
+		return []string{"Interval", "Count"}
+	case "Task/Actions/Exec":
+		return []string{"Command"}
+	default:
+		return nil
+	}
+}
+
+// Task Scheduler may persist an xs:all group's children in any order. Sort
+// only the exact groups above, preserving every child subtree byte-for-token.
+func canonicalizeTaskAllGroup(tokens []string, frame taskElementFrame) error {
+	for _, required := range requiredTaskAllChildren(frame.path) {
+		if frame.counts[required] != 1 {
+			return errors.New("task XML is missing a required child in an unordered group")
+		}
+	}
+	cursor := frame.start + 1
+	for _, child := range frame.children {
 		if child.start != cursor || child.end <= child.start || child.end > len(tokens)-1 {
-			return nil, errors.New("task XML direct child boundaries are invalid")
+			return errors.New("task XML unordered child boundaries are invalid")
 		}
 		cursor = child.end
 	}
 	if cursor != len(tokens)-1 {
-		return nil, errors.New("task XML contains content outside direct task children")
+		return errors.New("task XML contains content outside unordered children")
 	}
-	sort.Slice(children, func(left, right int) bool { return children[left].name < children[right].name })
-	canonical := make([]string, 0, len(tokens))
-	canonical = append(canonical, tokens[0])
-	for _, child := range children {
-		canonical = append(canonical, tokens[child.start:child.end]...)
+	sort.Slice(frame.children, func(left, right int) bool { return frame.children[left].name < frame.children[right].name })
+	inner := make([]string, 0, len(tokens)-frame.start-2)
+	for _, child := range frame.children {
+		inner = append(inner, tokens[child.start:child.end]...)
 	}
-	canonical = append(canonical, tokens[len(tokens)-1])
-	return canonical, nil
+	copy(tokens[frame.start+1:len(tokens)-1], inner)
+	return nil
 }
 
 // Task Scheduler omits these exact default-valued fields when it persists a

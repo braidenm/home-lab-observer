@@ -155,7 +155,7 @@ func TestWindowsSavedTaskMayOmitOnlyExactKnownDefaults(t *testing.T) {
 	}
 }
 
-func TestWindowsSavedTaskMayReorderOnlyDirectTaskChildren(t *testing.T) {
+func TestWindowsSavedTaskMayReorderExactSchemaAllGroups(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "Home Lab Observer")
 	adapter, err := newPlatformAdapter(nil, root)
 	if err != nil {
@@ -166,33 +166,86 @@ func TestWindowsSavedTaskMayReorderOnlyDirectTaskChildren(t *testing.T) {
 		t.Fatal(err)
 	}
 	original := string(definition.content)
-	reordered := swapXMLSections(t, original, "Triggers", "Principals")
-	if !validTaskXML(reordered, definition.content) {
-		t.Fatal("schema-valid direct Task child reordering was rejected")
+	reorderedRegistration := strings.Replace(original,
+		"<RegistrationInfo><Description>",
+		"<RegistrationInfo><URI>\\Home Lab Observer</URI><Description>", 1)
+	for name, reordered := range map[string]string{
+		"Task":             swapXMLSections(t, original, "Triggers", "Principals"),
+		"RegistrationInfo": reorderedRegistration,
+		"Settings":         swapXMLSections(t, original, "MultipleInstancesPolicy", "StartWhenAvailable"),
+		"IdleSettings":     swapXMLSections(t, original, "StopOnIdleEnd", "RestartOnIdle"),
+		"RestartOnFailure": swapXMLSections(t, original, "Interval", "Count"),
+		"Principal":        swapXMLSectionsWithin(t, original, "Principals", "UserId", "LogonType"),
+		"Exec":             swapXMLSections(t, original, "Command", "Arguments"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if !validTaskXML(reordered, definition.content) {
+				t.Fatal("schema-valid unordered child reordering was rejected")
+			}
+		})
 	}
 
 	actions := xmlSection(t, original, "Actions")
+	orderedTriggerExpected := strings.Replace(original, "<Enabled>true</Enabled>", "<Enabled>true</Enabled><StartBoundary>2026-09-09T00:00:00Z</StartBoundary>", 1)
+	orderedTriggerChanged := strings.Replace(orderedTriggerExpected,
+		"<StartBoundary>2026-09-09T00:00:00Z</StartBoundary><UserId>",
+		"<UserId>", 1)
+	orderedTriggerChanged = strings.Replace(orderedTriggerChanged, "</UserId></LogonTrigger>", "</UserId><StartBoundary>2026-09-09T00:00:00Z</StartBoundary></LogonTrigger>", 1)
 	for name, changed := range map[string]string{
-		"duplicate known child": strings.Replace(original, "</Task>", xmlSection(t, original, "Triggers")+"\n</Task>", 1),
-		"unknown child":         strings.Replace(original, "</Task>", "<Unknown/>\n</Task>", 1),
-		"missing actions":       strings.Replace(original, actions, "", 1),
-		"duplicate actions":     strings.Replace(original, "</Task>", actions+"\n</Task>", 1),
-		"nested reorder":        swapXMLSections(t, original, "StopOnIdleEnd", "RestartOnIdle"),
-		"changed namespace":     strings.Replace(original, taskXMLNamespace, "urn:unexpected-task", 1),
-		"direct task text":      strings.Replace(original, "<RegistrationInfo>", "unexpected<RegistrationInfo>", 1),
-		"multiple roots":        original + strings.Replace(original, `<?xml version="1.0"?>`, "", 1),
+		"duplicate known child":  strings.Replace(original, "</Task>", xmlSection(t, original, "Triggers")+"\n</Task>", 1),
+		"unknown child":          strings.Replace(original, "</Task>", "<Unknown/>\n</Task>", 1),
+		"missing actions":        strings.Replace(original, actions, "", 1),
+		"duplicate actions":      strings.Replace(original, "</Task>", actions+"\n</Task>", 1),
+		"duplicate nested child": strings.Replace(original, "</Settings>", "<StartWhenAvailable>true</StartWhenAvailable></Settings>", 1),
+		"unknown nested child":   strings.Replace(original, "</IdleSettings>", "<Unknown/></IdleSettings>", 1),
+		"missing restart count":  strings.Replace(original, "<Count>3</Count>", "", 1),
+		"missing command":        strings.Replace(original, xmlSection(t, original, "Command"), "", 1),
+		"sequence changed":       orderedTriggerChanged,
+		"changed namespace":      strings.Replace(original, taskXMLNamespace, "urn:unexpected-task", 1),
+		"direct task text":       strings.Replace(original, "<RegistrationInfo>", "unexpected<RegistrationInfo>", 1),
+		"multiple roots":         original + strings.Replace(original, `<?xml version="1.0"?>`, "", 1),
 	} {
 		t.Run(name, func(t *testing.T) {
-			if validTaskXML(changed, definition.content) {
+			expected := definition.content
+			if name == "sequence changed" {
+				expected = []byte(orderedTriggerExpected)
+			}
+			if validTaskXML(changed, expected) {
 				t.Fatal("non-owned task structure was accepted")
 			}
 		})
 	}
 }
 
+func TestWindowsTaskCanonicalizationBoundsStructure(t *testing.T) {
+	prefix := `<?xml version="1.0"?><Task xmlns="` + taskXMLNamespace + `"><Data>`
+	actions := `<Actions><Exec><Command>x</Command></Exec></Actions>`
+	atDepthLimit := prefix + strings.Repeat("<Nested>", maxTaskXMLDepth-2) + strings.Repeat("</Nested>", maxTaskXMLDepth-2) + `</Data>` + actions + `</Task>`
+	if _, err := canonicalTaskXML([]byte(atDepthLimit)); err != nil {
+		t.Fatalf("task XML at the depth limit was rejected: %v", err)
+	}
+	deep := prefix + strings.Repeat("<Nested>", maxTaskXMLDepth-1) + strings.Repeat("</Nested>", maxTaskXMLDepth-1) + `</Data>` + actions + `</Task>`
+	if _, err := canonicalTaskXML([]byte(deep)); err == nil {
+		t.Fatal("deep task XML was accepted")
+	}
+
+	widePrefix := `<?xml version="1.0"?><Task xmlns="` + taskXMLNamespace + `"><Triggers>`
+	atElementLimit := widePrefix + strings.Repeat("<Entry></Entry>", maxTaskXMLElements-5) + `</Triggers>` + actions + `</Task>`
+	if _, err := canonicalTaskXML([]byte(atElementLimit)); err != nil {
+		t.Fatalf("task XML at the element limit was rejected: %v", err)
+	}
+	wide := widePrefix + strings.Repeat("<Entry></Entry>", maxTaskXMLElements-4) + `</Triggers>` + actions + `</Task>`
+	if _, err := canonicalTaskXML([]byte(wide)); err == nil {
+		t.Fatal("task XML with too many elements was accepted")
+	}
+}
+
 func xmlSection(t *testing.T, value, name string) string {
 	t.Helper()
-	start := strings.Index(value, "<"+name)
+	start := strings.Index(value, "<"+name+">")
+	if attributed := strings.Index(value, "<"+name+" "); start < 0 || (attributed >= 0 && attributed < start) {
+		start = attributed
+	}
 	if start < 0 {
 		t.Fatalf("opening %s element is missing", name)
 	}
@@ -202,6 +255,13 @@ func xmlSection(t *testing.T, value, name string) string {
 		t.Fatalf("closing %s element is missing", name)
 	}
 	return value[start : start+endOffset+len(endMarker)]
+}
+
+func swapXMLSectionsWithin(t *testing.T, value, parentName, firstName, secondName string) string {
+	t.Helper()
+	parent := xmlSection(t, value, parentName)
+	reordered := swapXMLSections(t, parent, firstName, secondName)
+	return strings.Replace(value, parent, reordered, 1)
 }
 
 func swapXMLSections(t *testing.T, value, firstName, secondName string) string {
