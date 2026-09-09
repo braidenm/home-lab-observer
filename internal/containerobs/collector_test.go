@@ -37,6 +37,19 @@ func TestDisabledDoesNotAccessDocker(t *testing.T) {
 	}
 }
 
+func TestNullInventoryIsNotReportedAsHealthyEmpty(t *testing.T) {
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Path == "/version" {
+			return jsonResponse(200, `{"ApiVersion":"1.45","Os":"linux"}`), nil
+		}
+		return jsonResponse(200, `null`), nil
+	})}
+	got := newCollectorForTest(client, time.Now).Collect(context.Background())
+	if got.SupportState != SupportUnavailable || got.ReasonCode == nil || *got.ReasonCode != "INVALID_RESPONSE" {
+		t.Fatalf("null inventory must not become healthy zero: %+v", got)
+	}
+}
+
 func TestCollectNormalizesInventoryAndStats(t *testing.T) {
 	now := time.Date(2026, 9, 9, 12, 0, 0, 0, time.FixedZone("test", 3600))
 	var paths []string

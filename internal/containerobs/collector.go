@@ -217,6 +217,9 @@ func (c *Collector) listContainers(ctx context.Context, version string) ([]engin
 	if err := c.getJSON(ctx, "/"+version+"/containers/json?all=1", maxInventoryBody, &response); err != nil {
 		return nil, err
 	}
+	if response == nil {
+		return nil, protocolError{code: "INVALID_RESPONSE"}
+	}
 	seen := make(map[string]struct{}, len(response))
 	for _, item := range response {
 		if !containerIDPattern.MatchString(item.ID) {
