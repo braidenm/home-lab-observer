@@ -352,6 +352,52 @@ func TestOperationsAreSerializedByOSLock(t *testing.T) {
 	}
 }
 
+func TestInstallAndBackgroundOperationsShareFailClosedGuard(t *testing.T) {
+	controller, _, _, settings := testController(t)
+	guardPath := filepath.Join(controller.installRoot, installGuard)
+	if err := os.Mkdir(guardPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := controller.Enable(context.Background(), settings); !IsCode(err, CodeOperationActive) {
+		t.Fatalf("Enable error = %v, want operation active", err)
+	}
+	if _, err := os.Lstat(controller.backgroundDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("contended background operation mutated state: %v", err)
+	}
+	if err := os.Remove(guardPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(guardPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(guardPath, guardOwner), []byte(guardOwnerMarker), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := controller.Enable(context.Background(), settings); err != nil {
+		t.Fatalf("retry did not recover crashed background guard: %v", err)
+	}
+	if _, err := os.Lstat(guardPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("successful operation retained shared guard: %v", err)
+	}
+	releaseBackground, err := controller.lock(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	contender := newController(controller.installRoot, &fakeAdapter{state: managerState{available: true}}, &fakeStopper{}, fakeProbe{value: ReadinessReady})
+	if _, err := contender.Enable(context.Background(), settings); !IsCode(err, CodeOperationActive) {
+		releaseBackground()
+		t.Fatalf("concurrent background operation = %v, want operation active", err)
+	}
+	if err := os.Mkdir(guardPath, 0o700); !errors.Is(err, os.ErrExist) {
+		releaseBackground()
+		t.Fatalf("installer guard acquisition during background operation = %v, want already exists", err)
+	}
+	releaseBackground()
+	if _, err := os.Lstat(guardPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("background operation release retained shared guard: %v", err)
+	}
+}
+
 func TestSettingsAreClosedAndOutsideProgramFiles(t *testing.T) {
 	controller, _, _, settings := testController(t)
 	settings.StateDir = filepath.Join(controller.installRoot, "state")

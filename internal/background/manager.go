@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -18,7 +19,11 @@ const (
 	settingsFile  = "settings.json"
 	lockDirectory = ".operation-lock"
 	disablingFile = ".disabling"
+	installGuard  = ".install-lock"
+	guardOwner    = ".background-owner"
 )
+
+const guardOwnerMarker = "home-lab-observer-background-install-guard-v1\n"
 
 type registration struct {
 	fileName string
@@ -399,6 +404,17 @@ func statusFor(manager managerState, readiness Readiness) Status {
 }
 
 func (c *controller) lock(create bool) (func(), error) {
+	releaseInstallGuard, err := c.acquireInstallGuard()
+	if err != nil {
+		return nil, err
+	}
+	keepInstallGuard := false
+	defer func() {
+		if !keepInstallGuard {
+			releaseInstallGuard()
+		}
+	}()
+
 	createdDirectory := false
 	if create {
 		if err := os.Mkdir(c.backgroundDir, 0o700); err == nil {
@@ -452,7 +468,129 @@ func (c *controller) lock(create bool) (func(), error) {
 		file.Close()
 		return nil, coded(CodeOperationActive, errors.New("another background operation is active"))
 	}
-	return func() { _ = releaseOperationLock(file); _ = file.Close() }, nil
+	keepInstallGuard = true
+	return func() {
+		_ = releaseOperationLock(file)
+		_ = file.Close()
+		releaseInstallGuard()
+	}, nil
+}
+
+func (c *controller) acquireInstallGuard() (func(), error) {
+	rootInfo, err := os.Lstat(c.installRoot)
+	if err != nil || !rootInfo.IsDir() || rootInfo.Mode()&os.ModeSymlink != 0 || rejectReparse(c.installRoot) != nil {
+		return nil, coded(CodeUnsafeManagedState, errors.New("install root is unsafe"))
+	}
+	path := filepath.Join(c.installRoot, installGuard)
+	if err := os.Mkdir(path, 0o700); err != nil {
+		if !errors.Is(err, os.ErrExist) {
+			return nil, coded(CodeUnsafeManagedState, err)
+		}
+		recovered, recoverErr := recoverBackgroundInstallGuard(path)
+		if recoverErr != nil {
+			return nil, coded(CodeUnsafeManagedState, recoverErr)
+		}
+		if !recovered {
+			return nil, coded(CodeOperationActive, errors.New("an install or background operation is active"))
+		}
+		if err := os.Mkdir(path, 0o700); err != nil {
+			return nil, coded(CodeOperationActive, errors.New("an install or background operation is active"))
+		}
+	}
+	if err := ownerfs.RestrictDirectory(path); err != nil {
+		_ = os.Remove(path)
+		return nil, coded(CodeUnsafeManagedState, err)
+	}
+	ownerPath := filepath.Join(path, guardOwner)
+	file, err := os.OpenFile(ownerPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		_ = os.Remove(path)
+		return nil, coded(CodeUnsafeManagedState, err)
+	}
+	cleanup := func() {
+		_ = file.Truncate(0)
+		_ = file.Sync()
+		_ = releaseOperationLock(file)
+		_ = file.Close()
+		_ = os.Remove(ownerPath)
+		_ = os.Remove(path)
+	}
+	if err := ownerfs.RestrictFile(ownerPath); err != nil {
+		cleanup()
+		return nil, coded(CodeUnsafeManagedState, err)
+	}
+	if err := tryOperationLock(file); err != nil {
+		cleanup()
+		return nil, coded(CodeOperationActive, errors.New("an install or background operation is active"))
+	}
+	if written, err := file.WriteString(guardOwnerMarker); err != nil || written != len(guardOwnerMarker) {
+		cleanup()
+		if err == nil {
+			err = io.ErrShortWrite
+		}
+		return nil, coded(CodeUnsafeManagedState, err)
+	}
+	if err := file.Sync(); err != nil {
+		cleanup()
+		return nil, coded(CodeUnsafeManagedState, err)
+	}
+	return cleanup, nil
+}
+
+// recoverBackgroundInstallGuard removes only a complete guard created by a
+// crashed background operation. Installer-owned or malformed guards remain
+// fail-closed and are never guessed stale from age or process identifiers.
+func recoverBackgroundInstallGuard(path string) (bool, error) {
+	info, err := os.Lstat(path)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || rejectReparse(path) != nil {
+		return false, nil
+	}
+	entries, err := os.ReadDir(path)
+	if err != nil || len(entries) != 1 || entries[0].Name() != guardOwner || entries[0].IsDir() || entries[0].Type()&os.ModeSymlink != 0 {
+		return false, nil
+	}
+	ownerPath := filepath.Join(path, guardOwner)
+	pathInfo, err := ownerfs.ValidateRegular(ownerPath, 64)
+	if err != nil {
+		return false, nil
+	}
+	file, err := os.OpenFile(ownerPath, os.O_RDWR, 0o600)
+	if err != nil {
+		return false, nil
+	}
+	openedInfo, statErr := file.Stat()
+	if statErr != nil || !os.SameFile(pathInfo, openedInfo) {
+		file.Close()
+		return false, nil
+	}
+	if err := tryOperationLock(file); err != nil {
+		file.Close()
+		return false, nil
+	}
+	contents, readErr := io.ReadAll(io.LimitReader(file, 65))
+	if readErr != nil || string(contents) != guardOwnerMarker {
+		_ = releaseOperationLock(file)
+		_ = file.Close()
+		return false, nil
+	}
+	// Invalidate the proof while the exclusive OS lock is still held. Another
+	// process can only fail closed during the subsequent bounded removal.
+	truncateErr := file.Truncate(0)
+	if truncateErr == nil {
+		truncateErr = file.Sync()
+	}
+	_ = releaseOperationLock(file)
+	closeErr := file.Close()
+	if err := errors.Join(truncateErr, closeErr); err != nil {
+		return false, err
+	}
+	if err := os.Remove(ownerPath); err != nil {
+		return false, err
+	}
+	if err := os.Remove(path); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (c *controller) hasManagedState() (bool, error) {

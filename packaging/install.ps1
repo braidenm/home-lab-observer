@@ -438,6 +438,9 @@ try {
             Assert-ManagedRoot $resolvedRoot
         }
         Enter-InstallLock $resolvedRoot
+        # Background lifecycle operations acquire the same guard. Revalidate
+        # after ownership so enable/disable cannot race program-file mutation.
+        Assert-ManagedRoot $resolvedRoot
         $versions = Join-Path $resolvedRoot 'versions'
         [IO.Directory]::CreateDirectory($versions) | Out-Null
         $target = Join-Path $versions $Version
@@ -471,6 +474,8 @@ try {
         Assert-ManagedRoot $resolvedRoot
         Assert-VersionDirectory (Join-Path (Join-Path $resolvedRoot 'versions') $Rollback) $Rollback
         Enter-InstallLock $resolvedRoot
+        Assert-ManagedRoot $resolvedRoot
+        Assert-VersionDirectory (Join-Path (Join-Path $resolvedRoot 'versions') $Rollback) $Rollback
         $current = Join-Path $resolvedRoot 'current'
         $oldVersion = ([IO.File]::ReadAllText($current)).TrimEnd("`r", "`n")
         if ($oldVersion -ceq $Rollback) { Fail "version is already selected: $Rollback" }
@@ -484,6 +489,10 @@ try {
             Fail "background operation is enabled; run 'observer background disable' before uninstalling"
         }
         Enter-InstallLock $resolvedRoot
+        Assert-ManagedRoot $resolvedRoot
+        if (Test-Path -LiteralPath (Join-Path $resolvedRoot 'background\.managed')) {
+            Fail "background operation is enabled; run 'observer background disable' before uninstalling"
+        }
         $bin = Join-Path $resolvedRoot 'bin'
         if (Test-Path -LiteralPath $bin) {
             [IO.File]::Delete((Join-Path $bin 'observer.cmd'))

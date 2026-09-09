@@ -160,6 +160,11 @@ try {
     Invoke-Installer @('-Uninstall', '-InstallRoot', $InstallRoot) $false | Out-Null
     Assert-True -Condition (Test-Path -LiteralPath (Join-Path $InstallRoot 'current')) -Message 'refused uninstall removed program files'
     foreach ($name in @('.managed', 'settings.json', 'task.xml')) { [IO.File]::Delete((Join-Path $Background $name)) }
+    [IO.Directory]::CreateDirectory((Join-Path $InstallRoot '.install-lock')) | Out-Null
+    Invoke-Installer @('-Uninstall', '-InstallRoot', $InstallRoot) $false | Out-Null
+    Assert-True -Condition (Test-Path -LiteralPath (Join-Path $InstallRoot 'current')) -Message 'contended uninstall removed program files'
+    Assert-True -Condition (Test-Path -LiteralPath (Join-Path $Background '.operation-lock')) -Message 'contended uninstall removed background lock evidence'
+    [IO.Directory]::Delete((Join-Path $InstallRoot '.install-lock'), $false)
     [IO.File]::WriteAllText((Join-Path $Background 'unknown'), 'owner-data')
     Invoke-Installer @('-Uninstall', '-InstallRoot', $InstallRoot) $false | Out-Null
     Assert-True -Condition (Test-Path -LiteralPath (Join-Path $Background 'unknown')) -Message 'uninstall removed unknown background data'

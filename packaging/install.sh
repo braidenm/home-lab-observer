@@ -408,6 +408,9 @@ if [ "$action" = install ]; then
     validate_managed_tree
   fi
   acquire_lock
+  # Background lifecycle operations acquire the same guard. Revalidate only
+  # after owning it so enable/disable cannot race program-file mutation.
+  validate_managed_tree
   mkdir -p "$install_root/versions"
   chmod 700 "$install_root" "$install_root/versions"
   target_dir="$install_root/versions/$version"
@@ -448,6 +451,8 @@ elif [ "$action" = rollback ]; then
   validate_managed_tree
   validate_version_directory "$install_root/versions/$version" "$version" || die "rollback version is not installed: $version"
   acquire_lock
+  validate_managed_tree
+  validate_version_directory "$install_root/versions/$version" "$version" || die "rollback version is not installed: $version"
   old_version=$(cat "$install_root/current")
   [ "$old_version" != "$version" ] || die "version is already selected: $version"
   write_atomic "$install_root/previous" "$old_version"
@@ -462,6 +467,10 @@ else
     die "background operation is enabled; run 'observer background disable' before uninstalling"
   fi
   acquire_lock
+  validate_managed_tree
+  if [ -f "$install_root/background/.managed" ]; then
+    die "background operation is enabled; run 'observer background disable' before uninstalling"
+  fi
   if [ -d "$install_root/bin" ]; then
     rm -f "$install_root/bin/observer"
     rmdir "$install_root/bin"
