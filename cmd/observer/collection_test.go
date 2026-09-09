@@ -5,12 +5,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/braidenm/home-lab-observer/internal/containerobs"
 	"github.com/braidenm/home-lab-observer/internal/observation"
 )
 
 type testContainerCollection func(context.Context)
 
-func (collect testContainerCollection) Collect(ctx context.Context) { collect(ctx) }
+func (collect testContainerCollection) Collect(ctx context.Context) containerobs.Inventory {
+	collect(ctx)
+	return containerobs.Disabled()
+}
 
 func TestContainerCollectionRunsAlongsideHostAndJoinsBeforeReturn(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
