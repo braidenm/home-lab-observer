@@ -6,10 +6,9 @@ The project is intentionally public and self-contained. It does not contain, bui
 
 ## Project status
 
-The foundation is accepted in [Spec 001](specs/001-repository-foundation/spec.md), the local API contract in
-[Spec 002](specs/002-cross-platform-observer/spec.md), and the reusable dashboard in
-[Spec 004](specs/004-reusable-dashboard/spec.md). Runtime, native collection, and distribution remain separate slices;
-this repository does not yet publish an installable agent.
+The foundation, local API contract, native snapshot preview, and reusable dashboard are complete. Work is now tracked
+in [Spec 005](specs/005-local-data-plane/spec.md): a secure loopback service, bounded history, real trends, and an
+embedded local dashboard. The project remains pre-release and does not yet publish an installable agent.
 
 ## Product shape
 
@@ -47,6 +46,7 @@ exits 1 but cannot guarantee a complete JSON document.
 - [Constitution](.specify/memory/constitution.md)
 - [Repository standards](docs/coding-standards.md)
 - [Architecture research](docs/architecture-research/001-cross-platform-observer.md)
+- [Dashboard and signal research](docs/architecture-research/002-meaningful-machine-observability.md)
 - [Architecture decisions](docs/adr/README.md)
 - [Specifications](specs/README.md)
 - [Security model](SECURITY.md)
