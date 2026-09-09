@@ -41,7 +41,7 @@ func validPrivateTokenACL(path string) bool {
 	}
 	var ace *windows.ACCESS_ALLOWED_ACE
 	fileAllAccess := windows.ACCESS_MASK(windows.STANDARD_RIGHTS_REQUIRED | windows.SYNCHRONIZE | 0x1ff)
-	if err := windows.GetAce(dacl, 0, &ace); err != nil || ace == nil || ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE || (ace.Mask != windows.GENERIC_ALL && ace.Mask != fileAllAccess) {
+	if err := windows.GetAce(dacl, 0, &ace); err != nil || ace == nil || ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE || ace.Header.AceFlags != 0 || (ace.Mask != windows.GENERIC_ALL && ace.Mask != fileAllAccess) {
 		return false
 	}
 	sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
