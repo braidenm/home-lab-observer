@@ -94,6 +94,33 @@ export interface ContainerObservation {
   memoryBytes: number;
 }
 
+export type ContainerState = "created" | "running" | "paused" | "restarting" | "removing" | "exited" | "dead" | "unknown";
+export type ContainerMetricsState = "AVAILABLE" | "PARTIAL" | "UNAVAILABLE" | "NOT_RUNNING";
+
+export interface ContainerInventoryItem {
+  idAlias: string;
+  name: string;
+  image: string;
+  state: ContainerState;
+  cpuPercent: number | null;
+  memoryBytes: number | null;
+  metricsState: ContainerMetricsState;
+  reasonCode: string | null;
+}
+
+export interface ContainerInventory extends SectionQuality {
+  schemaVersion: "observer-container-inventory/v1";
+  totalCount: number;
+  returnedCount: number;
+  truncated: boolean;
+  items: ContainerInventoryItem[];
+  policy: {
+    readOnly: true;
+    dataClassification: "LOCAL_SENSITIVE";
+    remoteUploadEligible: false;
+  };
+}
+
 export interface LogMetadata {
   observedAt: string;
   source: string;
@@ -179,6 +206,8 @@ export interface ObserverDataSource {
   getCurrentSnapshot(signal?: AbortSignal): Promise<CurrentSnapshot>;
   /** Optional so remote consumers can omit local-only historical series. */
   getTrends?(range: TrendRange, signal?: AbortSignal): Promise<TrendSnapshot>;
+  /** Optional so existing consumers can keep using the legacy snapshot container projection. */
+  getContainerInventory?(signal?: AbortSignal): Promise<ContainerInventory>;
 }
 
 export interface ObserverProblemDetails {

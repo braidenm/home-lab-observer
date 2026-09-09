@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { CurrentSnapshot, ObserverCapabilities, ObserverDataSource, TrendRange, TrendSnapshot } from "../types";
+import type { ContainerInventory, CurrentSnapshot, ObserverCapabilities, ObserverDataSource, TrendRange, TrendSnapshot } from "../types";
 
 export interface ResourceState<T> {
   value: T | null;
@@ -16,6 +16,9 @@ export function useObserverData(dataSource: ObserverDataSource, range: TrendRang
   const [trends, setTrends] = useState<ResourceState<TrendSnapshot>>(
     dataSource.getTrends ? loading : { value: null, status: "unsupported", error: null }
   );
+  const [containerInventory, setContainerInventory] = useState<ResourceState<ContainerInventory>>(
+    dataSource.getContainerInventory ? loading : { value: null, status: "unsupported", error: null }
+  );
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -23,6 +26,7 @@ export function useObserverData(dataSource: ObserverDataSource, range: TrendRang
     setCapabilities((current) => ({ ...current, status: "loading", error: null }));
     setSnapshot((current) => ({ ...current, status: "loading", error: null }));
     setTrends((current) => dataSource.getTrends ? { ...current, status: "loading", error: null } : { value: null, status: "unsupported", error: null });
+    setContainerInventory((current) => dataSource.getContainerInventory ? { ...current, status: "loading", error: null } : { value: null, status: "unsupported", error: null });
 
     const settle = <T,>(promise: Promise<T>, update: (state: ResourceState<T>) => void) => {
       void promise.then(
@@ -33,12 +37,13 @@ export function useObserverData(dataSource: ObserverDataSource, range: TrendRang
     settle(dataSource.getCapabilities(controller.signal), setCapabilities);
     settle(dataSource.getCurrentSnapshot(controller.signal), setSnapshot);
     if (dataSource.getTrends) settle(dataSource.getTrends(range, controller.signal), setTrends);
+    if (dataSource.getContainerInventory) settle(dataSource.getContainerInventory(controller.signal), setContainerInventory);
     return () => controller.abort();
   }, [dataSource, range, refreshKey]);
 
   const refresh = useCallback(() => setRefreshKey((current) => current + 1), []);
-  const isLoading = capabilities.status === "loading" || snapshot.status === "loading" || trends.status === "loading";
-  return { capabilities, snapshot, trends, refreshedAt, isLoading, refresh };
+  const isLoading = capabilities.status === "loading" || snapshot.status === "loading" || trends.status === "loading" || containerInventory.status === "loading";
+  return { capabilities, snapshot, trends, containerInventory, refreshedAt, isLoading, refresh };
 }
 
 function safeMessage(error: unknown): string {

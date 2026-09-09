@@ -9,11 +9,27 @@ import metricSeries from "../../../../schemas/v1/fixtures/valid/metric-series-6h
 import unsupportedMetricSeries from "../../../../schemas/v1/fixtures/valid/metric-series-unsupported.json";
 import arbitraryMetricSeries from "../../../../schemas/v1/fixtures/invalid/metric-series-arbitrary-query.json";
 import invalidQueryProblem from "../../../../schemas/v1/fixtures/valid/problem-invalid-query.json";
-import { LocalHttpObserverDataSource, ObserverTransportError, mapCapabilities, mapCurrentSnapshot, mapMetricSeries } from "./local-http";
+import { LocalHttpObserverDataSource, ObserverTransportError, mapCapabilities, mapContainerInventory, mapCurrentSnapshot, mapMetricSeries } from "./local-http";
 
 const jsonResponse = (body: unknown, status = 200, contentType = "application/json; charset=utf-8") =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": contentType } });
 const cloneFixture = <T>(value: T): any => JSON.parse(JSON.stringify(value));
+const containerInventory = {
+  schema_version: "observer-container-inventory/v1",
+  observed_at: "2026-09-09T12:00:00Z",
+  support_state: "SUPPORTED",
+  collection_state: "PARTIAL",
+  freshness: "CURRENT",
+  reason_code: "SOME_STATS_UNAVAILABLE",
+  total_count: 2,
+  returned_count: 2,
+  truncated: false,
+  items: [
+    { id_alias: "ctr_0000000000000001", name: "observer-smoke-running", image: "example.invalid/observer:1.0", state: "running", cpu_percent: 0, memory_bytes: 134217728, metrics_state: "AVAILABLE", reason_code: null },
+    { id_alias: "ctr_0000000000000002", name: "observer-smoke-stopped", image: "example.invalid/worker:1.0", state: "exited", cpu_percent: null, memory_bytes: null, metrics_state: "NOT_RUNNING", reason_code: "CONTAINER_NOT_RUNNING" }
+  ],
+  policy: { read_only: true, data_classification: "LOCAL_SENSITIVE", remote_upload_eligible: false }
+};
 
 describe("LocalHttpObserverDataSource", () => {
   it("cancels an oversized stream before consuming an unbounded response", async () => {
@@ -63,6 +79,36 @@ describe("LocalHttpObserverDataSource", () => {
     expect(snapshot.sections.services).toMatchObject({ supportState: "UNAVAILABLE", collectionState: "NOT_RUN", freshness: "UNKNOWN", observedAt: null });
     expect(snapshot.sections.logs.items[0]).toEqual({ metadata: { observedAt: "2026-09-09T11:59:58Z", source: "sample-api", severity: "INFO", eventCode: "READY" }, body: { state: "OMITTED" } });
     expect(trends).toMatchObject({ schemaVersion: "observer-metric-series/v1", range: "6h", sampleIntervalSeconds: 900, privacy: { containsProcessIdentity: false, containsLogBodies: false, remoteUploadEligible: false } });
+  });
+
+  it("loads the bounded dedicated container endpoint with existing transport protections", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(containerInventory));
+    const source = new LocalHttpObserverDataSource({ bearerToken: "local-test-token", fetcher });
+    const inventory = await source.getContainerInventory();
+    expect(String(fetcher.mock.calls[0][0])).toBe("http://127.0.0.1:9847/api/v1/containers?limit=500");
+    expect(new Headers(fetcher.mock.calls[0][1]?.headers).get("Authorization")).toBe("Bearer local-test-token");
+    expect(fetcher.mock.calls[0][1]).toMatchObject({ method: "GET", credentials: "omit", cache: "no-store", redirect: "error" });
+    expect(inventory).toMatchObject({ schemaVersion: "observer-container-inventory/v1", totalCount: 2, returnedCount: 2, policy: { readOnly: true, dataClassification: "LOCAL_SENSITIVE", remoteUploadEligible: false } });
+    expect(inventory.items[0]).toMatchObject({ name: "observer-smoke-running", cpuPercent: 0, metricsState: "AVAILABLE" });
+    expect(inventory.items[1]).toMatchObject({ state: "exited", cpuPercent: null, memoryBytes: null, metricsState: "NOT_RUNNING" });
+  });
+
+  it("strictly rejects invalid or secret-bearing container inventory fields", () => {
+    const secret = cloneFixture(containerInventory);
+    secret.items[0].environment_variables = ["TOKEN=synthetic-secret"];
+    expect(() => mapContainerInventory(secret)).toThrow(/contract field/);
+
+    const hiddenRawID = cloneFixture(containerInventory);
+    hiddenRawID.items[0].id = "raw-container-id";
+    expect(() => mapContainerInventory(hiddenRawID)).toThrow(/contract field/);
+
+    const fabricatedStoppedZero = cloneFixture(containerInventory);
+    fabricatedStoppedZero.items[1].cpu_percent = 0;
+    expect(() => mapContainerInventory(fabricatedStoppedZero)).toThrow(/unavailable container metrics/);
+
+    const badPolicy = cloneFixture(containerInventory);
+    badPolicy.policy.remote_upload_eligible = true;
+    expect(() => mapContainerInventory(badPolicy)).toThrow(/literal/);
   });
 
   it("maps real series fixtures without inventing labels or filling collection gaps", () => {
@@ -177,5 +223,7 @@ describe("LocalHttpObserverDataSource", () => {
     await expect(oversized.getCapabilities()).rejects.toThrow(/size limit/);
     const oversizedSeries = new LocalHttpObserverDataSource({ fetcher: vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ padding: "x".repeat(1_048_600) })) });
     await expect(oversizedSeries.getTrends("1h")).rejects.toThrow(/size limit/);
+    const oversizedContainers = new LocalHttpObserverDataSource({ fetcher: vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ padding: "x".repeat(1_048_600) })) });
+    await expect(oversizedContainers.getContainerInventory()).rejects.toThrow(/size limit/);
   });
 });

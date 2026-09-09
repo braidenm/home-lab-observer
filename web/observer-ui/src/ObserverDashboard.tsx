@@ -25,7 +25,7 @@ export function ObserverDashboard({ dataSource, initialView = "overview", mode =
   const contentId = useId();
   const [activeView, setActiveView] = useState<ViewId>(initialView);
   const [range, setRange] = useState<TrendRange>("6h");
-  const { capabilities, snapshot, trends, refreshedAt, isLoading, refresh } = useObserverData(dataSource, range);
+  const { capabilities, snapshot, trends, containerInventory, refreshedAt, isLoading, refresh } = useObserverData(dataSource, range);
   const selectView = (view: ViewId) => { setActiveView(view); onViewChange?.(view); };
   const connectionLabel = mode === "demo" ? "Synthetic demo" : mode === "embedded" ? "Embedded data source" : "Local API";
   const boundary = mode === "demo" ? "Synthetic data source; no observer connection" : mode === "embedded" ? "Transport and egress are controlled by the embedding application" : capabilities.value ? `${capabilities.value.policy.readOnly ? "Read-only" : "Policy-reported writable"} · default bind ${capabilities.value.policy.defaultBind}` : "Local API policy unavailable";
@@ -40,7 +40,7 @@ export function ObserverDashboard({ dataSource, initialView = "overview", mode =
         <ResourceError label="Current snapshot" resource={snapshot} onRetry={refresh} />
         {activeView === "overview" && <SnapshotGate resource={snapshot}>{snapshot.value && <OverviewView snapshot={snapshot.value} />}</SnapshotGate>}
         {activeView === "trends" && <TrendsView trends={trends.value} status={trends.status} error={trends.error} range={range} onRangeChange={setRange} />}
-        {activeView === "workloads" && <SnapshotGate resource={snapshot}>{snapshot.value && <WorkloadsView snapshot={snapshot.value} />}</SnapshotGate>}
+        {activeView === "workloads" && <WorkloadsView snapshot={snapshot} containerInventory={containerInventory} />}
         {activeView === "logs" && <SnapshotGate resource={snapshot}>{snapshot.value && <LogsView snapshot={snapshot.value} capabilities={capabilities.value} />}</SnapshotGate>}
         {activeView === "health" && <HealthPrivacyView capabilities={capabilities.value} snapshot={snapshot.value} mode={mode} />}
       </main>
