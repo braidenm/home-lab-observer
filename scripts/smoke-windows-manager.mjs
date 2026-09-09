@@ -6,6 +6,7 @@ import { lstat, mkdtemp, realpath, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { managerSmokeFailure } from "./windows-manager-smoke-failure.mjs";
 
 const optedIn = process.env.OBSERVER_TEST_USER_MANAGER === "1";
 if (!optedIn) {
@@ -64,8 +65,8 @@ try {
   }
 }
 
-assert(cleanupConfirmed, `Windows manager cleanup could not be verified; isolated evidence was preserved at ${temporary}`);
-if (primaryFailure) throw primaryFailure;
+const finalFailure = managerSmokeFailure(primaryFailure, cleanupConfirmed);
+if (finalFailure) throw finalFailure;
 console.log("Windows user-manager smoke passed enable, status, graceful stop, restart, and verified disable.");
 
 function fixedTaskXMLShapeScript() {

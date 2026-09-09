@@ -8,6 +8,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { EventEmitter } from "node:events";
 import { waitForProcessExit } from "./wait-for-process-exit.mjs";
+import { managerSmokeFailure } from "./windows-manager-smoke-failure.mjs";
 
 test("process exit waits release listeners and recognize signal termination", async () => {
   const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
@@ -20,6 +21,15 @@ test("process exit waits release listeners and recognize signal termination", as
   child.signalCode = "SIGTERM";
   assert.equal(await waitForProcessExit(child, 1000), true);
   assert.equal(child.listenerCount("exit"), 0);
+});
+
+test("manager smoke preserves sanitized task shape when cleanup is unconfirmed", () => {
+  const primary = new Error('observer background enable failed (BACKGROUND_REGISTRATION_MISMATCH); task_xml_shape={"code":"TASK_XML_SHAPE_AVAILABLE","element_count":12}');
+  const failure = managerSmokeFailure(primary, false);
+  assert(failure instanceof Error);
+  assert.match(failure.message, /BACKGROUND_REGISTRATION_MISMATCH/);
+  assert.match(failure.message, /TASK_XML_SHAPE_AVAILABLE/);
+  assert.match(failure.message, /cleanup=BACKGROUND_CLEANUP_UNCONFIRMED$/);
 });
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
