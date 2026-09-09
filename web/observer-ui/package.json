@@ -32,6 +32,8 @@
     "test": "vitest run",
     "build:lib": "vite build --config vite.config.ts && tsc -p tsconfig.build.json",
     "build:demo": "vite build --config vite.demo.config.ts",
+    "build:embedded": "vite build --config vite.embedded.config.ts",
+    "check:embedded": "node ../../scripts/check-embedded-ui.mjs",
     "build": "npm run typecheck && npm run build:lib && npm run build:demo",
     "check": "npm run typecheck && npm run test && npm run build"
   },

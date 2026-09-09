@@ -37,6 +37,12 @@ $requiredFiles = @(
     'schemas/v1/problem-details-v1.schema.json',
     'schemas/v1/fixtures/manifest.json',
     'scripts/validate-contracts.mjs',
+    'scripts/check-embedded-ui.mjs',
+    'web/observer-ui/vite.embedded.config.ts',
+    'internal/webui/assets.go',
+    'internal/webui/assets/index.html',
+    'internal/webui/assets/static/dashboard.css',
+    'internal/webui/assets/static/dashboard.js',
     'package.json',
     'package-lock.json',
     '.github/workflows/contracts.yml'

@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "web/observer-ui/**"
+      - "internal/webui/**"
+      - "scripts/check-embedded-ui.mjs"
       - "api/**"
       - "schemas/**"
       - "specs/004-reusable-dashboard/**"
@@ -14,6 +16,8 @@ on:
       - main
     paths:
       - "web/observer-ui/**"
+      - "internal/webui/**"
+      - "scripts/check-embedded-ui.mjs"
       - "api/**"
       - "schemas/**"
       - "specs/004-reusable-dashboard/**"
@@ -32,9 +36,6 @@ jobs:
     name: Typecheck, test, and build
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: web/observer-ui
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -44,7 +45,19 @@ jobs:
           node-version: "22.22.3"
           cache: npm
           cache-dependency-path: web/observer-ui/package-lock.json
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
       - name: Install pinned dependencies
+        working-directory: web/observer-ui
         run: npm ci
       - name: Verify dashboard package
+        working-directory: web/observer-ui
         run: npm run check
+      - name: Rebuild embedded assets and reject drift
+        working-directory: web/observer-ui
+        run: npm run check:embedded
+      - name: Verify embedded asset server
+        run: go test ./internal/webui

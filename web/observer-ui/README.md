@@ -19,6 +19,13 @@ npm run check
 The demo uses deterministic synthetic data and makes no network requests. The production package emits an ES module,
 TypeScript declarations, and `observer-ui.css`.
 
+## Embedded build
+
+`npm run build:embedded` produces the closed, source-map-free asset set in `internal/webui/assets`. Those generated
+files are committed so `go build ./...` needs no Node.js installation. After changing dashboard source, run
+`npm run check:embedded`; it rebuilds and fails if the committed HTML, CSS, or JavaScript drifted. The build contains no
+CDN, analytics, external fonts, or external runtime assets.
+
 ## Data boundary
 
 The view model excludes process accounts, owners, user identifiers, arguments, and environment variables. Its log
