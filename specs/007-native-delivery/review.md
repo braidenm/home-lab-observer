@@ -59,6 +59,19 @@
 - Hosted installer results, independent final reviews and first-release download verification are recorded below
   when those checks complete. These pending checks are not represented as passed evidence.
 
+## Final merged and released evidence
+
+- [PR 10](https://github.com/braidenm/home-lab-observer/pull/10) auto-merged with all 12 required checks green,
+  including the repaired Windows native installer checks. Source commit: `74f715368876704ab9ade131bca14a3664a40d5e`.
+- [Release run 34396422509](https://github.com/braidenm/home-lab-observer/actions/runs/34396422509) completed on
+  2026-09-09: six native OS/architecture verification jobs, vulnerability scan, final-byte attestation, publication
+  and anonymous immutable download verification all passed.
+- The public [v0.1.0-preview.1 release](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-preview.1)
+  reports `immutable: true`, is not a draft, and contains the exact eleven-file payload.
+- Root independently downloaded the published Windows amd64 archive without authentication, matched its manifest
+  hash, verified provenance and executed its version report against the merged commit. That exact downloaded binary
+  passed the real local service, snapshot/history, authentication and JSON Schema smoke suite.
+
 ## Explicit limits
 
 This specification does not register background services, configure remote upload, enable container access, install
