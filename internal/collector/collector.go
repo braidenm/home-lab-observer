@@ -144,6 +144,7 @@ func (c *Collector) filesystems(ctx context.Context) observation.Section[[]obser
 		return observation.Section[[]observation.Filesystem]{State: st, ReasonCode: r, Quality: sq(c.clock.Now().Sub(start), 0, 1)}
 	}
 	sort.Slice(ps, func(i, j int) bool { return ps[i].Mountpoint < ps[j].Mountpoint })
+	total := len(ps)
 	if len(ps) > c.config.MaxFilesystems {
 		ps = ps[:c.config.MaxFilesystems]
 	}
@@ -165,7 +166,7 @@ func (c *Collector) filesystems(ctx context.Context) observation.Section[[]obser
 			continue
 		}
 		i := len(out) + 1
-		out = append(out, observation.Filesystem{ID: formatID("filesystem", i), DisplayName: formatName("Filesystem", i), TotalBytes: u.Total, UsedBytes: u.Used, FreeBytes: u.Free, UsagePercent: u.UsedPercent})
+		out = append(out, observation.Filesystem{ID: formatID("filesystem", i), DisplayName: formatName("Filesystem", i), Type: safeToken(p.Type, "unknown", 32), TotalBytes: u.Total, UsedBytes: u.Used, FreeBytes: u.Free, UsagePercent: u.UsedPercent})
 	}
 	if len(out) == 0 {
 		if errs == 0 {
@@ -183,7 +184,9 @@ func (c *Collector) filesystems(ctx context.Context) observation.Section[[]obser
 		st = observation.Degraded
 		r = observation.ReasonPartialCollection
 	}
-	return observation.Section[[]observation.Filesystem]{State: st, ReasonCode: r, Quality: sq(c.clock.Now().Sub(start), len(out), errs), Data: &out}
+	q := sq(c.clock.Now().Sub(start), len(out), errs)
+	q.Total, q.Truncated = total, total > len(out)
+	return observation.Section[[]observation.Filesystem]{State: st, ReasonCode: r, Quality: q, Data: &out}
 }
 func (c *Collector) network(ctx context.Context) observation.Section[observation.Network] {
 	start := c.clock.Now()
@@ -227,7 +230,7 @@ func (c *Collector) processes(ctx context.Context) observation.Section[[]observa
 			errs++
 			break
 		}
-		if p.PID <= 0 || !percentLoose(p.CPUPercent) {
+		if p.PID <= 0 || !percent(p.CPUPercent) {
 			errs++
 			continue
 		}
@@ -235,7 +238,7 @@ func (c *Collector) processes(ctx context.Context) observation.Section[[]observa
 		if p.CreateTimeMS > 0 && now > p.CreateTimeMS {
 			age = uint64((now - p.CreateTimeMS) / 1000)
 		}
-		out = append(out, observation.Process{PID: p.PID, Name: safeName(p.Name), CPUPercent: p.CPUPercent, MemoryBytes: p.MemoryBytes, UptimeSeconds: age})
+		out = append(out, observation.Process{PID: p.PID, Name: safeName(p.Name), State: safeToken(p.State, "unknown", 32), CPUPercent: p.CPUPercent, MemoryBytes: p.MemoryBytes, UptimeSeconds: age})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].MemoryBytes != out[j].MemoryBytes {
@@ -254,7 +257,9 @@ func (c *Collector) processes(ctx context.Context) observation.Section[[]observa
 		st = observation.Degraded
 		r = observation.ReasonPartialCollection
 	}
-	return observation.Section[[]observation.Process]{State: st, ReasonCode: r, Quality: sq(c.clock.Now().Sub(start), len(out), errs), Data: &out}
+	q := sq(c.clock.Now().Sub(start), len(out), errs)
+	q.Total, q.Truncated = len(ps), len(ps) > len(out)
+	return observation.Section[[]observation.Process]{State: st, ReasonCode: r, Quality: q, Data: &out}
 }
 
 func classify(e error) (observation.SupportState, observation.ReasonCode) {
@@ -283,8 +288,7 @@ func first(es ...error) error {
 func sq(d time.Duration, samples, errs int) observation.SectionQuality {
 	return observation.SectionQuality{DurationMS: max(0, d.Milliseconds()), Samples: samples, Errors: errs}
 }
-func percent(v float64) bool      { return !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0 && v <= 100 }
-func percentLoose(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0 }
+func percent(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0 && v <= 100 }
 func boolInt(v bool) int {
 	if v {
 		return 1
@@ -306,6 +310,22 @@ func safeName(v string) string {
 		return "process"
 	}
 	for len(v) > 128 {
+		_, n := utf8.DecodeLastRuneInString(v)
+		v = v[:len(v)-n]
+	}
+	return v
+}
+func safeToken(v, fallback string, limit int) string {
+	v = strings.TrimSpace(strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, strings.ToValidUTF8(v, "")))
+	if v == "" {
+		return fallback
+	}
+	for len(v) > limit {
 		_, n := utf8.DecodeLastRuneInString(v)
 		v = v[:len(v)-n]
 	}

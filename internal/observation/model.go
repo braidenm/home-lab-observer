@@ -68,6 +68,8 @@ type Quality struct {
 type SectionQuality struct {
 	DurationMS int64 `json:"duration_ms"`
 	Samples    int   `json:"samples"`
+	Total      int   `json:"total"`
+	Truncated  bool  `json:"truncated"`
 	Errors     int   `json:"errors"`
 }
 
@@ -101,6 +103,7 @@ type Memory struct {
 type Filesystem struct {
 	ID           string  `json:"id"`
 	DisplayName  string  `json:"display_name"`
+	Type         string  `json:"type"`
 	TotalBytes   uint64  `json:"total_bytes"`
 	UsedBytes    uint64  `json:"used_bytes"`
 	FreeBytes    uint64  `json:"free_bytes"`
@@ -125,6 +128,7 @@ type Uptime struct {
 type Process struct {
 	PID           int32   `json:"pid"`
 	Name          string  `json:"name"`
+	State         string  `json:"state"`
 	CPUPercent    float64 `json:"cpu_percent"`
 	MemoryBytes   uint64  `json:"memory_bytes"`
 	UptimeSeconds uint64  `json:"uptime_seconds"`

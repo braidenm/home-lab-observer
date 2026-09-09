@@ -10,13 +10,15 @@ import (
 	"time"
 
 	"github.com/braidenm/home-lab-observer/internal/collector"
+	"github.com/braidenm/home-lab-observer/internal/observation"
+	"github.com/braidenm/home-lab-observer/internal/projection"
 )
 
 var version = "dev"
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, nil)) }
 
-type collectFunc func(context.Context) any
+type collectFunc func(context.Context) observation.Snapshot
 
 func run(args []string, stdout, stderr io.Writer, collect collectFunc) int {
 	if len(args) == 0 || args[0] != "collect-once" {
@@ -38,9 +40,10 @@ func run(args []string, stdout, stderr io.Writer, collect collectFunc) int {
 		cfg := collector.DefaultConfig()
 		cfg.CollectorVersion, cfg.MaxProcesses, cfg.CollectProcesses = version, *maxProcesses, *processes
 		c := collector.New(collector.RealClock{}, collector.GopsutilProvider{}, cfg)
-		collect = func(ctx context.Context) any { return c.Collect(ctx) }
+		collect = c.Collect
 	}
-	if err := json.NewEncoder(stdout).Encode(collect(ctx)); err != nil {
+	current := projection.Current(collect(ctx), projection.NativeSystemInfo())
+	if err := json.NewEncoder(stdout).Encode(current); err != nil {
 		fmt.Fprintln(stderr, "failed to encode observation")
 		return 1
 	}

@@ -1,0 +1,48 @@
+name: Go runtime
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go test ./...
+      - run: go vet ./...
+
+  cross-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Cross-build native binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o build/observer-linux-amd64 ./cmd/observer
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -o build/observer-windows-amd64.exe ./cmd/observer
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -o build/observer-darwin-arm64 ./cmd/observer

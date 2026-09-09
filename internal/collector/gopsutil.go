@@ -48,7 +48,7 @@ func (GopsutilProvider) Partitions(ctx context.Context) ([]Partition, error) {
 	}
 	out := make([]Partition, 0, len(v))
 	for _, p := range v {
-		out = append(out, Partition{p.Mountpoint})
+		out = append(out, Partition{Mountpoint: p.Mountpoint, Type: p.Fstype})
 	}
 	return out, nil
 }
@@ -85,14 +85,19 @@ func (GopsutilProvider) Processes(ctx context.Context) ([]ProcessStat, int, erro
 			return out, skipped, ctx.Err()
 		}
 		name, e1 := p.NameWithContext(ctx)
-		cpuPct, e2 := p.CPUPercentWithContext(ctx)
-		mi, e3 := p.MemoryInfoWithContext(ctx)
-		ct, e4 := p.CreateTimeWithContext(ctx)
-		if e1 != nil || e2 != nil || e3 != nil || e4 != nil {
+		statuses, e2 := p.StatusWithContext(ctx)
+		cpuPct, e3 := p.CPUPercentWithContext(ctx)
+		mi, e4 := p.MemoryInfoWithContext(ctx)
+		ct, e5 := p.CreateTimeWithContext(ctx)
+		if e1 != nil || e2 != nil || e3 != nil || e4 != nil || e5 != nil {
 			skipped++
 			continue
 		}
-		out = append(out, ProcessStat{p.Pid, name, cpuPct, mi.RSS, ct})
+		status := "unknown"
+		if len(statuses) > 0 {
+			status = statuses[0]
+		}
+		out = append(out, ProcessStat{PID: p.Pid, Name: name, State: status, CPUPercent: cpuPct, MemoryBytes: mi.RSS, CreateTimeMS: ct})
 	}
 	return out, skipped, nil
 }

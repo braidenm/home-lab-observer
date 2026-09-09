@@ -18,7 +18,7 @@ type MemoryStat struct {
 	UsedPercent            float64
 }
 type SwapStat struct{ Total, Used uint64 }
-type Partition struct{ Mountpoint string }
+type Partition struct{ Mountpoint, Type string }
 type UsageStat struct {
 	Total, Used, Free uint64
 	UsedPercent       float64
@@ -27,6 +27,7 @@ type NetStat struct{ BytesSent, BytesRecv, PacketsSent, PacketsRecv, ErrorsIn, E
 type ProcessStat struct {
 	PID          int32
 	Name         string
+	State        string
 	CPUPercent   float64
 	MemoryBytes  uint64
 	CreateTimeMS int64

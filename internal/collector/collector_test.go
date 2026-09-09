@@ -30,7 +30,7 @@ func (f fakeProvider) Memory(context.Context) (MemoryStat, error) {
 }
 func (f fakeProvider) Swap(context.Context) (SwapStat, error) { return SwapStat{10, 2}, f.swapErr }
 func (f fakeProvider) Partitions(context.Context) ([]Partition, error) {
-	return []Partition{{`C:\Users\secret`}, {`D:\private`}}, f.partitionErr
+	return []Partition{{Mountpoint: `C:\Users\secret`, Type: "ntfs"}, {Mountpoint: `D:\private`, Type: "ntfs"}}, f.partitionErr
 }
 func (f fakeProvider) Usage(_ context.Context, p string) (UsageStat, error) {
 	if e := f.usageErr[p]; e != nil {
@@ -43,7 +43,7 @@ func (f fakeProvider) Network(context.Context) (NetStat, error) {
 }
 func (f fakeProvider) Uptime(context.Context) (uint64, error) { return 99, f.uptimeErr }
 func (f fakeProvider) Processes(context.Context) ([]ProcessStat, int, error) {
-	return []ProcessStat{{3, "small", 99, 10, 0}, {2, `C:\Users\secret\big` + "\x00name", 1, 100, 0}, {1, "medium", 2, 50, 0}}, 0, f.processErr
+	return []ProcessStat{{PID: 3, Name: "small", State: "running", CPUPercent: 99, MemoryBytes: 10}, {PID: 2, Name: `C:\Users\secret\big` + "\x00name", State: "running", CPUPercent: 1, MemoryBytes: 100}, {PID: 1, Name: "medium", State: "sleeping", CPUPercent: 2, MemoryBytes: 50}}, 0, f.processErr
 }
 
 func TestCollectDeterministicSafeAndBounded(t *testing.T) {

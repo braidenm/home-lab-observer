@@ -3,6 +3,7 @@
     { "schema": "schemas/v1/capabilities-v1.schema.json", "fixture": "schemas/v1/fixtures/valid/capabilities-linux.json", "valid": true },
     { "schema": "schemas/v1/capabilities-v1.schema.json", "fixture": "schemas/v1/fixtures/valid/capabilities-windows.json", "valid": true },
     { "schema": "schemas/v1/current-snapshot-v1.schema.json", "fixture": "schemas/v1/fixtures/valid/current-snapshot-linux.json", "valid": true },
+    { "schema": "schemas/v1/current-snapshot-v1.schema.json", "fixture": "schemas/v1/fixtures/valid/current-snapshot-native-preview.json", "valid": true },
     { "schema": "schemas/v1/current-snapshot-v1.schema.json", "fixture": "schemas/v1/fixtures/valid/current-snapshot-log-opt-in.json", "valid": true },
     { "schema": "schemas/v1/problem-details-v1.schema.json", "fixture": "schemas/v1/fixtures/valid/problem-invalid-query.json", "valid": true },
     { "schema": "schemas/v1/capabilities-v1.schema.json", "fixture": "schemas/v1/fixtures/invalid/capabilities-unknown-state.json", "valid": false },
