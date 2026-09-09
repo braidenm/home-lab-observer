@@ -41,7 +41,8 @@ system's user configuration directory. To choose a location, use a dedicated wri
 CPU utilization appears in Trends; the original current-snapshot contract exposes CPU capacity. Windows process status
 is explicitly `unknown` where the OS adapter cannot provide it; other available process readings remain useful.
 Services, containers,
-hardware sensors and native log sources appear as unsupported until their collector slices are implemented. Missing
+hardware sensors and native log sources appear as unsupported in the legacy snapshot until their collector slices are implemented.
+Docker containers have a separate opt-in Workloads view; see [container observations](container-observations.md). Missing
 observations show gaps or an unavailable state. Native Windows/macOS collection describes the host; a Linux container
 running inside Docker Desktop cannot provide the same host visibility.
 

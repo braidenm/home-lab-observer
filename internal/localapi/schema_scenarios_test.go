@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/braidenm/home-lab-observer/internal/containerobs"
 	"github.com/braidenm/home-lab-observer/internal/history"
 	"github.com/braidenm/home-lab-observer/internal/projection"
 )
@@ -52,6 +53,24 @@ func TestSchemaScenarioContracts(t *testing.T) {
 		}
 		t.Logf("SCHEMA_SCENARIO metric-series %s", strings.TrimSpace(response.Body.String()))
 	}
+}
+
+func TestContainerSchemaScenarioContract(t *testing.T) {
+	fixture, err := os.ReadFile("../../schemas/v1/fixtures/valid/container-inventory-running-stopped.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inventory containerobs.Inventory
+	if err := json.Unmarshal(fixture, &inventory); err != nil {
+		t.Fatal(err)
+	}
+	now := *inventory.ObservedAt
+	handler := newTestHandlerWithContainers(t, &fakeContainerSource{inventory: inventory}, now)
+	response := serve(handler, http.MethodGet, "/api/v1/containers?limit=2", testToken, "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("container status=%d body=%s", response.Code, response.Body.String())
+	}
+	t.Logf("SCHEMA_SCENARIO container-inventory %s", strings.TrimSpace(response.Body.String()))
 }
 
 type schemaMetricSource struct {

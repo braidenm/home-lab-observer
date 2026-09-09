@@ -1,6 +1,8 @@
 import type { LocalHttpObserverDataSourceOptions } from "./local-http.types";
 import type {
   CollectionState,
+  ContainerInventory,
+  ContainerInventoryItem,
   CurrentSnapshot,
   Freshness,
   ListSection,
@@ -24,6 +26,7 @@ const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 const CAPABILITIES_MAX_BYTES = 131_072;
 const SNAPSHOT_MAX_BYTES = 1_048_576;
 const SERIES_MAX_BYTES = 1_048_576;
+const CONTAINER_INVENTORY_MAX_BYTES = 1_048_576;
 const SECTION_NAMES: SectionName[] = ["overview", "filesystems", "processes", "services", "containers", "logs", "observer"];
 const METRIC_IDS: MetricId[] = [
   "cpu.utilization.percent",
@@ -91,6 +94,10 @@ export class LocalHttpObserverDataSource implements ObserverDataSource {
     const query = new URLSearchParams({ range });
     for (const metric of METRIC_IDS) query.append("metric", metric);
     return this.request(`/api/v1/metrics/series?${query.toString()}`, SERIES_MAX_BYTES, mapMetricSeries, signal);
+  }
+
+  getContainerInventory(signal?: AbortSignal): Promise<ContainerInventory> {
+    return this.request("/api/v1/containers?limit=500", CONTAINER_INVENTORY_MAX_BYTES, mapContainerInventory, signal);
   }
 
   private async request<T>(path: string, maximumBytes: number, map: (value: unknown) => T, signal?: AbortSignal): Promise<T> {
@@ -270,6 +277,67 @@ export function mapCurrentSnapshot(value: unknown): CurrentSnapshot {
         return { name: boundedText(item.name, 1, 64), state: item.state, value: number(item.value), unit: item.unit };
       })
     }
+  };
+}
+
+export function mapContainerInventory(value: unknown): ContainerInventory {
+  const root = object(value);
+  exactKeys(root, ["schema_version", "observed_at", "support_state", "collection_state", "freshness", "reason_code", "total_count", "returned_count", "truncated", "items", "policy"]);
+  const quality = mapQuality(root);
+  const policy = object(root.policy);
+  exactKeys(policy, ["read_only", "data_classification", "remote_upload_eligible"]);
+  const totalCount = nonNegativeInteger(root.total_count);
+  const returnedCount = integer(root.returned_count, 0, 500);
+  const truncated = boolean(root.truncated);
+  const items = boundedArray(root.items, 0, 500).map(mapContainerInventoryItem);
+  if (returnedCount !== items.length || returnedCount > totalCount || (!truncated && totalCount > returnedCount)) {
+    throw new Error("container inventory counts are inconsistent");
+  }
+  assertNonSupportedSectionIsEmpty(quality, totalCount === 0 && returnedCount === 0 && !truncated && items.length === 0);
+  return {
+    schemaVersion: literal(root.schema_version, "observer-container-inventory/v1"),
+    ...quality,
+    totalCount,
+    returnedCount,
+    truncated,
+    items,
+    policy: {
+      readOnly: literal(policy.read_only, true),
+      dataClassification: literal(policy.data_classification, "LOCAL_SENSITIVE"),
+      remoteUploadEligible: literal(policy.remote_upload_eligible, false)
+    }
+  };
+}
+
+function mapContainerInventoryItem(value: unknown): ContainerInventoryItem {
+  const item = object(value);
+  exactKeys(item, ["id_alias", "name", "image", "state", "cpu_percent", "memory_bytes", "metrics_state", "reason_code"]);
+  const state = containerState(item.state);
+  const cpuPercent = item.cpu_percent === null ? null : boundedNumber(item.cpu_percent, 0, 100);
+  const memoryBytes = item.memory_bytes === null ? null : nonNegativeInteger(item.memory_bytes);
+  const metricsState = containerMetricsState(item.metrics_state);
+  const reasonCode = reason(item.reason_code);
+  if (metricsState === "AVAILABLE" && (cpuPercent === null || memoryBytes === null || reasonCode !== null)) {
+    throw new Error("available container metrics are inconsistent");
+  }
+  if (metricsState === "PARTIAL" && ((cpuPercent === null) === (memoryBytes === null) || reasonCode === null)) {
+    throw new Error("partial container metrics are inconsistent");
+  }
+  if ((metricsState === "UNAVAILABLE" || metricsState === "NOT_RUNNING") && (cpuPercent !== null || memoryBytes !== null || reasonCode === null)) {
+    throw new Error("unavailable container metrics are inconsistent");
+  }
+  if ((state === "running") === (metricsState === "NOT_RUNNING")) {
+    throw new Error("container state and metrics state are inconsistent");
+  }
+  return {
+    idAlias: patternText(item.id_alias, /^ctr_[a-f0-9]{16}$/, "invalid container alias"),
+    name: boundedText(item.name, 1, 128),
+    image: boundedText(item.image, 1, 256),
+    state,
+    cpuPercent,
+    memoryBytes,
+    metricsState,
+    reasonCode
   };
 }
 
@@ -460,6 +528,8 @@ function sectionName(value: unknown): SectionName { const result = text(value); 
 function isTrendRange(value: unknown): value is TrendRange { return value === "1h" || value === "6h" || value === "24h" || value === "7d"; }
 function trendRange(value: unknown): TrendRange { if (!isTrendRange(value)) throw new Error("invalid trend range"); return value; }
 function metricId(value: unknown): MetricId { if (typeof value !== "string" || !(METRIC_IDS as string[]).includes(value)) throw new Error("invalid metric identifier"); return value as MetricId; }
+function containerState(value: unknown): ContainerInventoryItem["state"] { if (value !== "created" && value !== "running" && value !== "paused" && value !== "restarting" && value !== "removing" && value !== "exited" && value !== "dead" && value !== "unknown") throw new Error("invalid container state"); return value; }
+function containerMetricsState(value: unknown): ContainerInventoryItem["metricsState"] { if (value !== "AVAILABLE" && value !== "PARTIAL" && value !== "UNAVAILABLE" && value !== "NOT_RUNNING") throw new Error("invalid container metrics state"); return value; }
 function trendUnit(value: unknown): TrendSeries["unit"] { if (value !== "percent" && value !== "bytes_per_second" && value !== "count") throw new Error("invalid metric unit"); return value; }
 function seriesSupport(value: unknown): TrendSeries["supportState"] { if (value !== "SUPPORTED" && value !== "DISABLED" && value !== "UNAVAILABLE" && value !== "PERMISSION_DENIED" && value !== "UNSUPPORTED") throw new Error("invalid metric support state"); return value; }
 function seriesCollection(value: unknown): TrendSeries["collectionState"] { if (value !== "OK" && value !== "PARTIAL" && value !== "FAILED" && value !== "NOT_RUN") throw new Error("invalid metric collection state"); return value; }

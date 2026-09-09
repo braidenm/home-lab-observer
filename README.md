@@ -1,13 +1,15 @@
 # Home Lab Observer
 
-Home Lab Observer is a cross-platform, headless-first observability service for a single machine. The current source preview collects host and process signals, keeps bounded numeric history, and serves an authenticated local dashboard. Service/container observations, opt-in logs, downloadable installers, and secure upload to a management application such as Platform Demo are planned extensions.
+Home Lab Observer is a cross-platform, headless-first observability service for a single machine. The current source preview collects host and process signals, optionally observes local Docker containers, keeps bounded numeric host history, and serves an authenticated local dashboard. Service observations, opt-in logs, downloadable installers, and secure upload to a management application such as Platform Demo are planned extensions.
 
 The project is intentionally public and self-contained. It does not contain, build from, or grant access to the private home-lab infrastructure repository.
 
 ## Project status
 
 The source preview includes the [Spec 005](specs/005-local-data-plane/spec.md) loopback service, bounded history,
-real trends, and embedded local dashboard. See [build and run instructions](docs/local-service.md).
+real trends, and embedded local dashboard, plus [Spec 006](specs/006-container-observations/spec.md)
+opt-in container inventory and resource readings. See [build and run instructions](docs/local-service.md)
+and [connect a local Docker engine](docs/container-observations.md).
 The project remains pre-release and does not yet publish an installable agent.
 
 ## Target product shape
@@ -54,14 +56,15 @@ exits 1 but cannot guarantee a complete JSON document.
 - [Data policy](docs/privacy/data-policy.md)
 - [Reusable observer dashboard](web/observer-ui/README.md)
 - [Run and manage the local preview](docs/local-service.md)
+- [Enable and understand Docker observations](docs/container-observations.md)
 
 ## Supported delivery targets
 
 | Target | Native binary | Background service | Local UI | Docker observations |
 | --- | --- | --- | --- | --- |
-| Linux amd64/arm64 | Source preview | Planned: systemd | Source preview | Planned |
-| macOS Intel/Apple silicon | Source preview | Planned: launchd | Source preview | Planned: Docker Desktop |
-| Windows amd64/arm64 | Source preview | Planned: Windows Service | Source preview | Planned: Docker Desktop |
+| Linux amd64/arm64 | Source preview | Planned: systemd | Source preview | Opt-in local Unix socket |
+| macOS Intel/Apple silicon | Source preview | Planned: launchd | Source preview | Opt-in local Unix socket; Desktop live validation pending |
+| Windows amd64/arm64 | Source preview | Planned: Windows Service | Source preview | Opt-in local named pipe; Desktop live validation pending |
 | Linux container amd64/arm64 | Planned | Container restart policy | Planned | Planned through a constrained proxy |
 
 ## License

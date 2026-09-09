@@ -1,0 +1,17 @@
+{
+  "schema_version": "observer-container-inventory/v1",
+  "observed_at": "2026-09-09T12:00:00Z",
+  "support_state": "SUPPORTED",
+  "collection_state": "OK",
+  "freshness": "CURRENT",
+  "reason_code": null,
+  "total_count": 0,
+  "returned_count": 0,
+  "truncated": false,
+  "items": [],
+  "policy": {
+    "read_only": true,
+    "data_classification": "LOCAL_SENSITIVE",
+    "remote_upload_eligible": false
+  }
+}

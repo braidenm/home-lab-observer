@@ -1,0 +1,24 @@
+{
+  "schema_version": "observer-container-inventory/v1",
+  "observed_at": "2026-09-09T12:00:00Z",
+  "support_state": "SUPPORTED",
+  "collection_state": "OK",
+  "freshness": "CURRENT",
+  "reason_code": null,
+  "total_count": 1,
+  "returned_count": 1,
+  "truncated": false,
+  "items": [{
+    "id_alias": "ctr_2f7c8a41d0e9ad7e",
+    "name": "unsafe-api",
+    "image": "example.invalid/unsafe-api:1.0",
+    "state": "running",
+    "cpu_percent": 1,
+    "memory_bytes": 1024,
+    "metrics_state": "AVAILABLE",
+    "reason_code": null,
+    "raw_id": "2f7c8a41d0e9ad7e",
+    "command": "serve --credential synthetic"
+  }],
+  "policy": { "read_only": true, "data_classification": "LOCAL_SENSITIVE", "remote_upload_eligible": true }
+}

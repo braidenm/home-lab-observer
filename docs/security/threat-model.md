@@ -11,10 +11,10 @@
 - Local history, configuration, release metadata, and update state.
 - Docker/native OS read handles and future action credentials.
 
-## Spec 005 implemented boundary
+## Implemented source-preview boundary
 
-The source preview implements the collector, numeric store, and local API/UI only. Upload, enrollment, native log sources,
-service/container adapters, and signed installers remain future release requirements below. The local bearer token is
+The source preview implements native collection, opt-in Docker reads, the numeric host store, and local API/UI.
+Upload, enrollment, native log sources, service adapters, and signed installers remain future release requirements below. The local bearer token is
 generated with 256 bits of entropy, restricted to the current OS account, and accepted only in the Authorization header.
 The dashboard stores it in tab-scoped session storage only after validation and provides a lock/forget action. This
 protects against unrelated web origins, not malicious software already running as the same OS user or an administrator.
@@ -23,6 +23,17 @@ The listener accepts explicit IPv4 loopback only. Static assets are embedded and
 placed in startup output. Source names are rendered as text. Numeric history excludes process identities and log bodies.
 The database has a single process owner, bounded maintenance, and non-destructive corruption isolation. Preserved
 quarantine files are outside the active-history budget and require deliberate owner cleanup after diagnosis.
+
+Spec 006 adds an in-process Docker adapter bound to one explicitly configured local Unix socket or Windows named pipe.
+Only fixed version, inventory and one-shot stats GET requests are issued, with no proxy environment, redirects, remote
+endpoint, raw daemon forwarding or Docker CLI execution. Each cycle has a four-second budget, four stats workers,
+500 output rows, a two-MiB inventory response bound and a 256-KiB stats-response bound. Normalized metadata stays in
+memory and is served only through the protected specialized container API; it never enters history or upload.
+
+This is an application-level read-only boundary, not a reduction in OS socket authority. A compromised observer process
+with direct Docker access could exercise the authority of that socket. A separate constrained proxy/worker is a required
+future container-package defense, not a protection claimed by this native foreground preview. Owners should not enable
+Docker access unless they accept that privilege boundary. Windows/macOS live-engine validation remains outstanding.
 
 ## Trust boundaries
 

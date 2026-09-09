@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:home-lab-observer:schema:container-inventory:v1",
+  "title": "Home Lab Observer container inventory v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "observed_at", "support_state", "collection_state", "freshness", "reason_code", "total_count", "returned_count", "truncated", "items", "policy"],
+  "properties": {
+    "schema_version": { "const": "observer-container-inventory/v1" },
+    "observed_at": { "type": ["string", "null"], "format": "date-time" },
+    "support_state": { "$ref": "#/$defs/supportState" },
+    "collection_state": { "$ref": "#/$defs/collectionState" },
+    "freshness": { "$ref": "#/$defs/freshness" },
+    "reason_code": { "$ref": "#/$defs/reasonCode" },
+    "total_count": { "type": "integer", "minimum": 0 },
+    "returned_count": { "type": "integer", "minimum": 0, "maximum": 500 },
+    "truncated": { "type": "boolean" },
+    "items": {
+      "type": "array",
+      "maxItems": 500,
+      "items": { "$ref": "#/$defs/container" }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["read_only", "data_classification", "remote_upload_eligible"],
+      "properties": {
+        "read_only": { "const": true },
+        "data_classification": { "const": "LOCAL_SENSITIVE" },
+        "remote_upload_eligible": { "const": false }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "support_state": { "not": { "const": "SUPPORTED" } } }, "required": ["support_state"] },
+      "then": {
+        "properties": {
+          "observed_at": { "type": "null" },
+          "collection_state": { "const": "NOT_RUN" },
+          "freshness": { "const": "UNKNOWN" },
+          "reason_code": { "type": "string" },
+          "total_count": { "const": 0 },
+          "returned_count": { "const": 0 },
+          "truncated": { "const": false },
+          "items": { "maxItems": 0 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "support_state": { "const": "SUPPORTED" }, "collection_state": { "enum": ["OK", "PARTIAL"] } }, "required": ["support_state", "collection_state"] },
+      "then": {
+        "properties": {
+          "observed_at": { "type": "string" },
+          "freshness": { "enum": ["CURRENT", "STALE"] }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "supportState": { "enum": ["SUPPORTED", "DISABLED", "UNAVAILABLE", "PERMISSION_DENIED", "UNSUPPORTED"] },
+    "collectionState": { "enum": ["OK", "PARTIAL", "FAILED", "NOT_RUN"] },
+    "freshness": { "enum": ["CURRENT", "STALE", "UNKNOWN"] },
+    "reasonCode": { "type": ["string", "null"], "minLength": 1, "maxLength": 64, "pattern": "^[A-Z0-9_]+$" },
+    "container": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id_alias", "name", "image", "state", "cpu_percent", "memory_bytes", "metrics_state", "reason_code"],
+      "properties": {
+        "id_alias": { "type": "string", "pattern": "^ctr_[a-f0-9]{16}$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[^\\u0000-\\u001F\\u007F]+$" },
+        "image": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[^\\u0000-\\u001F\\u007F]+$" },
+        "state": { "enum": ["created", "running", "paused", "restarting", "removing", "exited", "dead", "unknown"] },
+        "cpu_percent": { "oneOf": [{ "type": "number", "minimum": 0, "maximum": 100 }, { "type": "null" }] },
+        "memory_bytes": { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] },
+        "metrics_state": { "enum": ["AVAILABLE", "PARTIAL", "UNAVAILABLE", "NOT_RUNNING"] },
+        "reason_code": { "$ref": "#/$defs/reasonCode" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "state": { "not": { "const": "running" } } }, "required": ["state"] },
+          "then": { "properties": { "cpu_percent": { "type": "null" }, "memory_bytes": { "type": "null" }, "metrics_state": { "const": "NOT_RUNNING" }, "reason_code": { "type": "string" } } }
+        },
+        {
+          "if": { "properties": { "state": { "const": "running" } }, "required": ["state"] },
+          "then": { "properties": { "metrics_state": { "enum": ["AVAILABLE", "PARTIAL", "UNAVAILABLE"] } } }
+        },
+        {
+          "if": { "properties": { "metrics_state": { "const": "AVAILABLE" } }, "required": ["metrics_state"] },
+          "then": { "properties": { "cpu_percent": { "type": "number" }, "memory_bytes": { "type": "integer" }, "reason_code": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "metrics_state": { "const": "PARTIAL" } }, "required": ["metrics_state"] },
+          "then": {
+            "properties": { "reason_code": { "type": "string" } },
+            "oneOf": [
+              { "properties": { "cpu_percent": { "type": "number" }, "memory_bytes": { "type": "null" } } },
+              { "properties": { "cpu_percent": { "type": "null" }, "memory_bytes": { "type": "integer" } } }
+            ]
+          }
+        },
+        {
+          "if": { "properties": { "metrics_state": { "enum": ["UNAVAILABLE", "NOT_RUNNING"] } }, "required": ["metrics_state"] },
+          "then": { "properties": { "cpu_percent": { "type": "null" }, "memory_bytes": { "type": "null" }, "reason_code": { "type": "string" } } }
+        }
+      ]
+    }
+  }
+}

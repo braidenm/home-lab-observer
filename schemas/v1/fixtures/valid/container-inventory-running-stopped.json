@@ -1,0 +1,48 @@
+{
+  "schema_version": "observer-container-inventory/v1",
+  "observed_at": "2026-09-09T12:00:00Z",
+  "support_state": "SUPPORTED",
+  "collection_state": "PARTIAL",
+  "freshness": "CURRENT",
+  "reason_code": "STATS_PARTIAL",
+  "total_count": 3,
+  "returned_count": 3,
+  "truncated": false,
+  "items": [
+    {
+      "id_alias": "ctr_2f7c8a41d0e9ad7e",
+      "name": "sample-api",
+      "image": "example.invalid/sample-api:1.0",
+      "state": "running",
+      "cpu_percent": 1.25,
+      "memory_bytes": 134217728,
+      "metrics_state": "AVAILABLE",
+      "reason_code": null
+    },
+    {
+      "id_alias": "ctr_8e2a7811cda4b925",
+      "name": "metrics-limited",
+      "image": "example.invalid/metrics-limited:2.0",
+      "state": "running",
+      "cpu_percent": 0,
+      "memory_bytes": null,
+      "metrics_state": "PARTIAL",
+      "reason_code": "METRIC_COUNTER_INVALID"
+    },
+    {
+      "id_alias": "ctr_04b9f5917af02c1d",
+      "name": "sample-worker",
+      "image": "example.invalid/sample-worker:1.0",
+      "state": "exited",
+      "cpu_percent": null,
+      "memory_bytes": null,
+      "metrics_state": "NOT_RUNNING",
+      "reason_code": "NOT_RUNNING"
+    }
+  ],
+  "policy": {
+    "read_only": true,
+    "data_classification": "LOCAL_SENSITIVE",
+    "remote_upload_eligible": false
+  }
+}

@@ -2,9 +2,11 @@
 
 This policy defines first-release defaults. The effective local configuration and Platform upload projection must be visible in the product.
 
-The Spec 005 source preview has no uploader and sends no observations to Platform Demo. It implements host/process
-current reads and six aggregate numeric history metrics only. Service, container, and log collection below are planned
-capabilities, not active collectors. Process observations are local-sensitive and not upload-eligible in the preview.
+The source preview has no uploader and sends no observations to Platform Demo. It implements host/process current
+reads, six aggregate numeric host history metrics, and explicitly enabled local Docker inventory/resource readings.
+Process and container observations are local-sensitive, current-memory-only and not upload-eligible in this preview.
+Service and log collection below remain planned capabilities. The table describes first-release targets; future history
+or upload projections need their own reviewed specifications before becoming active.
 
 | Data class | Collected by default | Kept locally | Eligible for remote upload | Notes |
 | --- | --- | --- | --- | --- |
@@ -12,7 +14,7 @@ capabilities, not active collectors. Process observations are local-sensitive an
 | Filesystem capacity | Yes | Current + aggregate trends | Yes | Sanitized display label; no arbitrary paths remotely |
 | Process identity/resource use | Bounded top-N | Current only | Bounded current snapshot | No argv, environment, executable path, user identity |
 | Service identity/state | Platform capability | Current + transitions | Bounded current snapshot | Names treated as sensitive metadata |
-| Container identity/state/resource use | When local Docker enabled | Current + aggregate trends | Bounded current snapshot | No environment, labels, mounts, command, raw socket |
+| Container identity/state/resource use | When local Docker enabled | Current memory only | No in this preview | No environment, labels, mounts, command, raw socket; history/upload need a new reviewed spec |
 | Log timestamps/severity/source/fingerprint/count | Enabled safe sources | Bounded rollups | Future bounded metadata contract | No body in the current snapshot |
 | Log message body | No | Local-only opt-in | No in first release | Per-source allowlist, redaction, 2 KiB record ceiling |
 | Observer health and upload status | Yes | Current + bounded events | Yes | No credentials or raw exception text |

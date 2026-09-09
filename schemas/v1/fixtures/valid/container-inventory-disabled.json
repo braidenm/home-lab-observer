@@ -1,0 +1,17 @@
+{
+  "schema_version": "observer-container-inventory/v1",
+  "observed_at": null,
+  "support_state": "DISABLED",
+  "collection_state": "NOT_RUN",
+  "freshness": "UNKNOWN",
+  "reason_code": "DOCKER_NOT_CONFIGURED",
+  "total_count": 0,
+  "returned_count": 0,
+  "truncated": false,
+  "items": [],
+  "policy": {
+    "read_only": true,
+    "data_classification": "LOCAL_SENSITIVE",
+    "remote_upload_eligible": false
+  }
+}
