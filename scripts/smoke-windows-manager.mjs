@@ -182,31 +182,59 @@ function Decode-TaskBytes([byte[]]$Bytes) {
   catch { return [pscustomobject]@{encoding=$encoding;decode='FAILED';text=$null} }
 }
 function Convert-TaskDocument($Decoded) {
-  if ($Decoded.decode -cne 'OK') { return $null }
+  if ($Decoded.decode -cne 'OK' -or $null -eq $Decoded.text -or ([string]$Decoded.text).Length -gt 131072) { return $null }
+  $reader=$null;$stringReader=$null
   try {
+    $settings=New-Object Xml.XmlReaderSettings
+    $settings.DtdProcessing=[Xml.DtdProcessing]::Prohibit
+    $settings.XmlResolver=$null
+    $settings.MaxCharactersInDocument=131072
+    $settings.MaxCharactersFromEntities=0
+    $stringReader=[IO.StringReader]::new([string]$Decoded.text)
+    $reader=[Xml.XmlReader]::Create($stringReader,$settings)
     $document=New-Object Xml.XmlDocument
     $document.PreserveWhitespace=$false
-    $document.LoadXml([string]$Decoded.text)
+    $document.XmlResolver=$null
+    $document.Load($reader)
     if ($document.DocumentElement.LocalName -cne 'Task' -or $document.DocumentElement.NamespaceURI -cne 'http://schemas.microsoft.com/windows/2004/02/mit/task') { return $null }
     return $document
   } catch { return $null }
+  finally { if ($null -ne $reader) {$reader.Dispose()};if ($null -ne $stringReader) {$stringReader.Dispose()} }
 }
 function Read-SchtasksBytes {
   $start=New-Object Diagnostics.ProcessStartInfo
   $start.FileName=[IO.Path]::Combine([Environment]::GetFolderPath('System'),'schtasks.exe')
   $start.Arguments='/Query /TN "\Home Lab Observer" /XML'
-  $start.UseShellExecute=$false;$start.CreateNoWindow=$true;$start.RedirectStandardOutput=$true
-  $process=[Diagnostics.Process]::Start($start)
+  $start.UseShellExecute=$false;$start.CreateNoWindow=$true;$start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
+  $process=$null
   $memory=New-Object IO.MemoryStream
   try {
+    $deadline=[DateTime]::UtcNow.AddSeconds(5)
+    $process=[Diagnostics.Process]::Start($start)
+    $discardError=$process.StandardError.BaseStream.CopyToAsync([IO.Stream]::Null)
     $buffer=New-Object byte[] 4096
-    while (($count=$process.StandardOutput.BaseStream.Read($buffer,0,$buffer.Length)) -gt 0) {
+    while ($true) {
+      $remaining=[int][Math]::Ceiling(($deadline-[DateTime]::UtcNow).TotalMilliseconds)
+      if ($remaining -le 0) { throw 'bounded query timed out' }
+      $read=$process.StandardOutput.BaseStream.ReadAsync($buffer,0,$buffer.Length)
+      if (-not $read.Wait($remaining)) { throw 'bounded query timed out' }
+      $count=$read.Result
+      if ($count -eq 0) { break }
       if ($memory.Length+$count -gt 131072) { throw 'bounded query output exceeded' }
       $memory.Write($buffer,0,$count)
     }
-    $process.WaitForExit()
+    $remaining=[int][Math]::Ceiling(($deadline-[DateTime]::UtcNow).TotalMilliseconds)
+    if ($remaining -le 0 -or -not $process.WaitForExit($remaining)) { throw 'bounded query timed out' }
+    $remaining=[int][Math]::Ceiling(($deadline-[DateTime]::UtcNow).TotalMilliseconds)
+    if ($remaining -le 0 -or -not $discardError.Wait($remaining)) { throw 'bounded query timed out' }
     return [pscustomobject]@{exit=if($process.ExitCode -eq 0){'ZERO'}else{'NONZERO'};bytes=[Convert]::ToBase64String($memory.ToArray())}
-  } finally { $memory.Dispose();$process.Dispose() }
+  } finally {
+    if ($null -ne $process) {
+      try { if (-not $process.HasExited) {$process.Kill();[void]$process.WaitForExit(2000)} } catch {}
+      $process.Dispose()
+    }
+    $memory.Dispose()
+  }
 }
 try {
   $expectedPath=[IO.Path]::Combine($env:OBSERVER_SMOKE_INSTALL_ROOT,'background','task.xml')
@@ -217,7 +245,9 @@ try {
   $service=New-Object -ComObject 'Schedule.Service'
   $service.Connect()
   $task=$service.GetFolder('\').GetTask('\Home Lab Observer')
-  $comDecoded=[pscustomobject]@{encoding='DOTNET_STRING';decode='OK';text=[string]$task.Xml}
+  $comText=[string]$task.Xml
+  if ($comText.Length -gt 131072 -or [Text.Encoding]::UTF8.GetByteCount($comText) -gt 131072) { throw 'bounded COM task XML exceeded' }
+  $comDecoded=[pscustomobject]@{encoding='DOTNET_STRING';decode='OK';text=$comText}
   $comDocument=Convert-TaskDocument $comDecoded
   $queryExit='START_FAILED';$queryDecoded=[pscustomobject]@{encoding='UNKNOWN';decode='NOT_RUN';text=$null};$queryDocument=$null
   try {
