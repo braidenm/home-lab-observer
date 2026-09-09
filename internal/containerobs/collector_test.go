@@ -50,7 +50,7 @@ func TestCollectNormalizesInventoryAndStats(t *testing.T) {
 		lock.Unlock()
 		switch request.URL.RequestURI() {
 		case "/version":
-			return jsonResponse(http.StatusOK, `{"ApiVersion":"1.47"}`), nil
+			return jsonResponse(http.StatusOK, `{"ApiVersion":"1.47","Os":"linux"}`), nil
 		case "/v1.45/containers/json?all=1":
 			return jsonResponse(http.StatusOK, `[{"Id":"`+testID1+`","Names":["/app token=secret-canary"],"Image":"https://user:pass@example.invalid/image user@example.com","State":"RUNNING","Env":["SECRET=leak"],"Labels":{"token":"leak"}},{"Id":"`+testID2+`","Names":["/db"],"Image":"postgres:17","State":"exited"}]`), nil
 		case "/v1.45/containers/" + testID1 + "/stats?one-shot=true&stream=false":
@@ -96,7 +96,7 @@ func TestCPUUsesPreviousBoundedPollWhenPreCPUIsAbsent(t *testing.T) {
 	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Path {
 		case "/version":
-			return jsonResponse(200, `{"ApiVersion":"1.45"}`), nil
+			return jsonResponse(200, `{"ApiVersion":"1.45","Os":"linux"}`), nil
 		case "/v1.45/containers/json":
 			return jsonResponse(200, `[{"Id":"`+testID1+`","Names":["/app"],"Image":"app","State":"running"}]`), nil
 		default:
@@ -129,12 +129,16 @@ func TestCollectBoundsFanoutAndTruncatesInventory(t *testing.T) {
 	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Path {
 		case "/version":
-			return jsonResponse(200, `{"ApiVersion":"1.45"}`), nil
+			return jsonResponse(200, `{"ApiVersion":"1.45","Os":"linux"}`), nil
 		case "/v1.45/containers/json":
 			return jsonResponse(200, string(payload)), nil
 		default:
 			current := active.Add(1)
-			for current > peak.Load() && !peak.CompareAndSwap(peak.Load(), current) {
+			for {
+				observed := peak.Load()
+				if current <= observed || peak.CompareAndSwap(observed, current) {
+					break
+				}
 			}
 			time.Sleep(time.Millisecond)
 			active.Add(-1)
@@ -192,12 +196,40 @@ func TestUnsupportedVersionAndImmutableCurrent(t *testing.T) {
 }
 
 func TestEngineMinimumVersionAboveReaderRangeIsUnsupported(t *testing.T) {
-	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
-		return jsonResponse(200, `{"ApiVersion":"1.50","MinAPIVersion":"1.46"}`), nil
+	for _, version := range []string{
+		`{"ApiVersion":"1.50","MinAPIVersion":"1.46","Os":"linux"}`,
+		`{"ApiVersion":"1.41","MinAPIVersion":"1.45","Os":"linux"}`,
+	} {
+		client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return jsonResponse(200, version), nil
+		})}
+		got := newCollectorForTest(client, time.Now).Collect(context.Background())
+		if got.SupportState != SupportUnsupported || got.ReasonCode == nil || *got.ReasonCode != "API_VERSION_UNSUPPORTED" {
+			t.Fatalf("unexpected result for %s: %+v", version, got)
+		}
+	}
+}
+
+func TestNonLinuxEngineRetainsInventoryWithoutClaimingStats(t *testing.T) {
+	var statsRequested atomic.Bool
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Path {
+		case "/version":
+			return jsonResponse(200, `{"ApiVersion":"1.45","MinAPIVersion":"1.24","Os":"windows"}`), nil
+		case "/v1.45/containers/json":
+			return jsonResponse(200, `[{"Id":"`+testID1+`","Names":["/windows-workload"],"Image":"windows","State":"running"}]`), nil
+		default:
+			statsRequested.Store(true)
+			return jsonResponse(200, `{}`), nil
+		}
 	})}
 	got := newCollectorForTest(client, time.Now).Collect(context.Background())
-	if got.SupportState != SupportUnsupported || got.ReasonCode == nil || *got.ReasonCode != "API_VERSION_UNSUPPORTED" {
-		t.Fatalf("unexpected result: %+v", got)
+	if statsRequested.Load() || got.SupportState != SupportSupported || got.CollectionState != CollectionPartial || len(got.Items) != 1 {
+		t.Fatalf("non-Linux inventory was not retained truthfully: %+v stats=%v", got, statsRequested.Load())
+	}
+	item := got.Items[0]
+	if item.MetricsState != MetricsUnavailable || item.CPUPercent != nil || item.MemoryBytes != nil || item.ReasonCode == nil || *item.ReasonCode != "ENGINE_OS_UNSUPPORTED" {
+		t.Fatalf("non-Linux stats were claimed: %+v", item)
 	}
 }
 
@@ -205,7 +237,7 @@ func TestPerContainerFailureRetainsSafeInventory(t *testing.T) {
 	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Path {
 		case "/version":
-			return jsonResponse(200, `{"ApiVersion":"1.45"}`), nil
+			return jsonResponse(200, `{"ApiVersion":"1.45","Os":"linux"}`), nil
 		case "/v1.45/containers/json":
 			return jsonResponse(200, `[{"Id":"`+testID1+`","Names":["/app"],"Image":"app","State":"running"}]`), nil
 		default:
@@ -247,7 +279,7 @@ func TestDuplicateIDsAndInvalidCountersAreRejectedOrNull(t *testing.T) {
 	duplicatePayload := `[{"Id":"` + testID1 + `","State":"running"},{"Id":"` + testID1 + `","State":"running"}]`
 	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		if request.URL.Path == "/version" {
-			return jsonResponse(200, `{"ApiVersion":"1.45"}`), nil
+			return jsonResponse(200, `{"ApiVersion":"1.45","Os":"linux"}`), nil
 		}
 		return jsonResponse(200, duplicatePayload), nil
 	})}
@@ -274,12 +306,13 @@ func TestDuplicateIDsAndInvalidCountersAreRejectedOrNull(t *testing.T) {
 }
 
 func TestSanitizeMetadataRedactsCommonCanariesAndBoundsUnicode(t *testing.T) {
-	input := "\x00 ssh://person:pass@host.invalid/repo person:pass@registry.invalid/image token=topsecret github_pat_ABCDEFGHIJKLMNOPQRSTUVWXYZ123456 user@example.com " + strings.Repeat("界", 200)
+	githubCanaryPrefix := "github" + "_pat_"
+	input := "\x00 ssh://person:pass@host.invalid/repo person:pass@registry.invalid/image token=topsecret " + githubCanaryPrefix + strings.Repeat("A", 30) + " user@example.com " + strings.Repeat("界", 200)
 	got := sanitizeMetadata(input, 128, "fallback")
 	if len([]rune(got)) > 128 || strings.ContainsRune(got, '\x00') {
 		t.Fatalf("metadata was not normalized and bounded: %q", got)
 	}
-	for _, secret := range []string{"person:pass", "topsecret", "github_pat_", "user@example.com"} {
+	for _, secret := range []string{"person:pass", "topsecret", githubCanaryPrefix, "user@example.com"} {
 		if strings.Contains(got, secret) {
 			t.Fatalf("secret canary %q survived: %q", secret, got)
 		}

@@ -102,7 +102,7 @@ func (c *Collector) Close() error {
 }
 
 func (c *Collector) collect(ctx context.Context) Inventory {
-	version, err := c.negotiateVersion(ctx)
+	version, engineOS, err := c.negotiateVersion(ctx)
 	if err != nil {
 		return failedInventory(err)
 	}
@@ -125,7 +125,7 @@ func (c *Collector) collect(ctx context.Context) Inventory {
 		go func() {
 			defer workers.Done()
 			for index := range jobs {
-				items[index] = c.observeContainer(ctx, version, containers[index])
+				items[index] = c.observeContainer(ctx, version, engineOS, containers[index])
 			}
 		}()
 	}
@@ -157,6 +157,7 @@ type engineContainer struct {
 type engineVersion struct {
 	APIVersion    string `json:"ApiVersion"`
 	MinAPIVersion string `json:"MinAPIVersion"`
+	OS            string `json:"Os"`
 }
 
 type engineStats struct {
@@ -185,25 +186,30 @@ type cpuCounters struct {
 	capacity uint64
 }
 
-func (c *Collector) negotiateVersion(ctx context.Context) (string, error) {
+func (c *Collector) negotiateVersion(ctx context.Context) (string, string, error) {
 	var response engineVersion
 	if err := c.getJSON(ctx, "/version", maxVersionBody, &response); err != nil {
-		return "", err
+		return "", "", err
 	}
 	major, minor, ok := parseAPIVersion(response.APIVersion)
 	if !ok || lessVersion(major, minor, minSupportedAPIMajor, minSupportedAPIMinor) {
-		return "", protocolError{code: "API_VERSION_UNSUPPORTED", unsupported: true}
+		return "", "", protocolError{code: "API_VERSION_UNSUPPORTED", unsupported: true}
 	}
+	minimumMajor, minimumMinor := 0, 0
 	if response.MinAPIVersion != "" {
-		minimumMajor, minimumMinor, validMinimum := parseAPIVersion(response.MinAPIVersion)
+		var validMinimum bool
+		minimumMajor, minimumMinor, validMinimum = parseAPIVersion(response.MinAPIVersion)
 		if !validMinimum || lessVersion(maxSupportedAPIMajor, maxSupportedAPIMinor, minimumMajor, minimumMinor) {
-			return "", protocolError{code: "API_VERSION_UNSUPPORTED", unsupported: true}
+			return "", "", protocolError{code: "API_VERSION_UNSUPPORTED", unsupported: true}
 		}
 	}
 	if lessVersion(maxSupportedAPIMajor, maxSupportedAPIMinor, major, minor) {
 		major, minor = maxSupportedAPIMajor, maxSupportedAPIMinor
 	}
-	return "v" + strconv.Itoa(major) + "." + strconv.Itoa(minor), nil
+	if response.MinAPIVersion != "" && lessVersion(major, minor, minimumMajor, minimumMinor) {
+		return "", "", protocolError{code: "API_VERSION_UNSUPPORTED", unsupported: true}
+	}
+	return "v" + strconv.Itoa(major) + "." + strconv.Itoa(minor), strings.ToLower(strings.TrimSpace(response.OS)), nil
 }
 
 func (c *Collector) listContainers(ctx context.Context, version string) ([]engineContainer, error) {
@@ -224,9 +230,12 @@ func (c *Collector) listContainers(ctx context.Context, version string) ([]engin
 	return response, nil
 }
 
-func (c *Collector) observeContainer(ctx context.Context, version string, source engineContainer) Container {
+func (c *Collector) observeContainer(ctx context.Context, version, engineOS string, source engineContainer) Container {
 	if normalizeState(source.State) != StateRunning {
 		return normalizedContainer(source, nil, nil, reasonPointer("NOT_RUNNING"))
+	}
+	if engineOS != "linux" {
+		return normalizedContainer(source, nil, nil, reasonPointer("ENGINE_OS_UNSUPPORTED"))
 	}
 	var stats engineStats
 	path := "/" + version + "/containers/" + url.PathEscape(source.ID) + "/stats?one-shot=true&stream=false"
@@ -455,6 +464,13 @@ func parseAPIVersion(value string) (int, int, bool) {
 	parts := strings.Split(value, ".")
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return 0, 0, false
+	}
+	for _, part := range parts {
+		for _, character := range part {
+			if character < '0' || character > '9' {
+				return 0, 0, false
+			}
+		}
 	}
 	major, errMajor := strconv.Atoi(parts[0])
 	minor, errMinor := strconv.Atoi(parts[1])
