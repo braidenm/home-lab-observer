@@ -2,6 +2,8 @@ package collector
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"time"
 
 	"github.com/shirou/gopsutil/v4/cpu"
@@ -73,31 +75,39 @@ func (GopsutilProvider) Network(ctx context.Context) (NetStat, error) {
 func (GopsutilProvider) Uptime(ctx context.Context) (uint64, error) {
 	return host.UptimeWithContext(ctx)
 }
-func (GopsutilProvider) Processes(ctx context.Context) ([]ProcessStat, int, error) {
+func (GopsutilProvider) Processes(ctx context.Context) (ProcessResult, error) {
 	ps, e := process.ProcessesWithContext(ctx)
 	if e != nil {
-		return nil, 0, e
+		return ProcessResult{}, e
 	}
-	out := make([]ProcessStat, 0, len(ps))
-	skipped := 0
+	result := ProcessResult{Processes: make([]ProcessStat, 0, len(ps)), Discovered: len(ps)}
 	for _, p := range ps {
 		if ctx.Err() != nil {
-			return out, skipped, ctx.Err()
+			return result, ctx.Err()
 		}
+		result.Scanned++
 		name, e1 := p.NameWithContext(ctx)
 		statuses, e2 := p.StatusWithContext(ctx)
 		cpuPct, e3 := p.CPUPercentWithContext(ctx)
 		mi, e4 := p.MemoryInfoWithContext(ctx)
 		ct, e5 := p.CreateTimeWithContext(ctx)
 		if e1 != nil || e2 != nil || e3 != nil || e4 != nil || e5 != nil {
-			skipped++
+			joined := errors.Join(e1, e2, e3, e4, e5)
+			switch {
+			case errors.Is(joined, fs.ErrPermission):
+				result.PermissionDenied++
+			case errors.Is(joined, errors.ErrUnsupported):
+				result.Unsupported++
+			default:
+				result.Failed++
+			}
 			continue
 		}
 		status := "unknown"
 		if len(statuses) > 0 {
 			status = statuses[0]
 		}
-		out = append(out, ProcessStat{PID: p.Pid, Name: name, State: status, CPUPercent: cpuPct, MemoryBytes: mi.RSS, CreateTimeMS: ct})
+		result.Processes = append(result.Processes, ProcessStat{PID: p.Pid, Name: name, State: status, CPUPercent: cpuPct, MemoryBytes: mi.RSS, CreateTimeMS: ct})
 	}
-	return out, skipped, nil
+	return result, nil
 }

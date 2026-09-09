@@ -21,9 +21,17 @@ func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, nil)) }
 type collectFunc func(context.Context) observation.Snapshot
 
 func run(args []string, stdout, stderr io.Writer, collect collectFunc) int {
+	if len(args) > 0 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help") {
+		printUsage(stdout)
+		return 0
+	}
 	if len(args) == 0 || args[0] != "collect-once" {
-		fmt.Fprintln(stderr, "usage: observer collect-once [--max-processes N] [--processes=true|false] [--timeout DURATION]")
+		printUsage(stderr)
 		return 2
+	}
+	if len(args) == 2 && (args[1] == "-h" || args[1] == "--help") {
+		printUsage(stdout)
+		return 0
 	}
 	fs := flag.NewFlagSet("collect-once", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -47,5 +55,12 @@ func run(args []string, stdout, stderr io.Writer, collect collectFunc) int {
 		fmt.Fprintln(stderr, "failed to encode observation")
 		return 1
 	}
+	if current.CollectionState == "FAILED" {
+		return 1
+	}
 	return 0
+}
+
+func printUsage(writer io.Writer) {
+	fmt.Fprintln(writer, "usage: observer collect-once [--max-processes N] [--processes=true|false] [--timeout DURATION]")
 }

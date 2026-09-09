@@ -6,11 +6,14 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/braidenm/home-lab-observer/internal/observation"
 )
 
 const CurrentSnapshotVersion = "observer-current-snapshot/v1"
+const MaxProjectedFilesystems = 16
+const MaxProjectedProcesses = 200
 
 type SystemInfo struct {
 	OS           string
@@ -119,22 +122,23 @@ type CurrentSnapshot struct {
 func Current(raw observation.Snapshot, system SystemInfo) CurrentSnapshot {
 	observedAt := raw.ObservedAt.UTC()
 	unsupported := unsupportedSection("COLLECTOR_NOT_IMPLEMENTED")
+	sections := Sections{
+		Overview: projectOverview(raw, system), Filesystems: projectFilesystems(raw), Processes: projectProcesses(raw),
+		Services: unsupported, Containers: unsupported, Logs: unsupported, Observer: unsupported,
+	}
 	return CurrentSnapshot{
 		SchemaVersion:   CurrentSnapshotVersion,
 		SnapshotID:      "snapshot_" + strconv.FormatInt(observedAt.UnixNano(), 10),
 		Sequence:        0,
 		ObservedAt:      observedAt,
 		DurationMS:      clamp(raw.Quality.DurationMS, 0, 60000),
-		CollectionState: qualityState(raw.Quality.State),
+		CollectionState: projectedCollectionState(sections.Overview.SectionStatus, sections.Filesystems.SectionStatus, sections.Processes.SectionStatus),
 		Privacy: Privacy{
 			Profile: "SAFE_DEFAULT", RemoteProjection: "home-lab-server-snapshot/v1",
 			MessageBodiesUploadEligible: false, RedactionCount: 0, DroppedCount: 0,
 			ExcludedFields: []string{"process_arguments", "environment_variables", "container_commands", "container_mounts", "container_labels", "raw_log_bodies", "credentials", "tokens"},
 		},
-		Sections: Sections{
-			Overview: projectOverview(raw, system), Filesystems: projectFilesystems(raw), Processes: projectProcesses(raw),
-			Services: unsupported, Containers: unsupported, Logs: unsupported, Observer: unsupported,
-		},
+		Sections: sections,
 	}
 }
 
@@ -163,10 +167,16 @@ func projectFilesystems(raw observation.Snapshot) FilesystemSection {
 	if raw.Filesystems.Data == nil || status.SupportState != "SUPPORTED" {
 		return result
 	}
-	for _, item := range *raw.Filesystems.Data {
+	items := *raw.Filesystems.Data
+	total := max(raw.Filesystems.Quality.Total, len(items))
+	if len(items) > MaxProjectedFilesystems {
+		items = items[:MaxProjectedFilesystems]
+	}
+	for _, item := range items {
 		result.Items = append(result.Items, Filesystem{MountAlias: item.ID, FilesystemType: safeToken(item.Type, "unknown", 32), TotalBytes: item.TotalBytes, UsedBytes: item.UsedBytes, AvailableBytes: item.FreeBytes})
 	}
-	result.ReturnedCount = len(result.Items)
+	result.TotalCount, result.ReturnedCount = total, len(result.Items)
+	result.Truncated = raw.Filesystems.Quality.Truncated || total > len(result.Items)
 	return result
 }
 
@@ -176,10 +186,16 @@ func projectProcesses(raw observation.Snapshot) ProcessSection {
 	if raw.Processes.Data == nil || status.SupportState != "SUPPORTED" {
 		return result
 	}
-	for _, item := range *raw.Processes.Data {
-		result.Items = append(result.Items, Process{PID: item.PID, Name: item.Name, State: safeToken(item.State, "unknown", 32), CPUPercent: clampFloat(item.CPUPercent, 0, 100), MemoryBytes: item.MemoryBytes})
+	items := *raw.Processes.Data
+	total := max(raw.Processes.Quality.Total, len(items))
+	if len(items) > MaxProjectedProcesses {
+		items = items[:MaxProjectedProcesses]
 	}
-	result.ReturnedCount = len(result.Items)
+	for _, item := range items {
+		result.Items = append(result.Items, Process{PID: item.PID, Name: safeProcessName(item.Name), State: safeToken(item.State, "unknown", 32), CPUPercent: clampFloat(item.CPUPercent, 0, 100), MemoryBytes: item.MemoryBytes})
+	}
+	result.TotalCount, result.ReturnedCount = total, len(result.Items)
+	result.Truncated = raw.Processes.Quality.Truncated || total > len(result.Items)
 	return result
 }
 
@@ -210,6 +226,8 @@ func statusFor(state observation.SupportState, reason observation.ReasonCode, ob
 		return stateWithReason("PERMISSION_DENIED", reasonString(reason, "PERMISSION_DENIED"))
 	case observation.Unavailable:
 		return stateWithReason("UNAVAILABLE", reasonString(reason, "COLLECTION_FAILED"))
+	case observation.Unsupported:
+		return stateWithReason("UNSUPPORTED", reasonString(reason, "UNSUPPORTED"))
 	default:
 		return stateWithReason("UNSUPPORTED", "UNKNOWN_SUPPORT_STATE")
 	}
@@ -231,20 +249,40 @@ func unavailableStatus(states []observation.SupportState, reasons ...observation
 			return "UNAVAILABLE", reasonString(reasons[index], "COLLECTION_FAILED")
 		}
 	}
+	for index, state := range states {
+		if state == observation.Unsupported {
+			return "UNSUPPORTED", reasonString(reasons[index], "UNSUPPORTED")
+		}
+	}
 	return "UNSUPPORTED", "OVERVIEW_INCOMPLETE"
 }
 
 func stateWithReason(state, reason string) SectionStatus {
 	return SectionStatus{SupportState: state, CollectionState: "NOT_RUN", Freshness: "UNKNOWN", ReasonCode: &reason}
 }
-func qualityState(state observation.QualityState) string {
-	if state == observation.Complete {
-		return "OK"
+func projectedCollectionState(statuses ...SectionStatus) string {
+	successes, failures, partial := 0, 0, false
+	for _, status := range statuses {
+		if status.SupportState == "DISABLED" || status.SupportState == "UNSUPPORTED" {
+			continue
+		}
+		switch status.CollectionState {
+		case "OK":
+			successes++
+		case "PARTIAL":
+			successes++
+			partial = true
+		default:
+			failures++
+		}
 	}
-	if state == observation.Partial {
+	if successes == 0 {
+		return "FAILED"
+	}
+	if partial || failures > 0 {
 		return "PARTIAL"
 	}
-	return "FAILED"
+	return "OK"
 }
 func reasonPtr(reason observation.ReasonCode, fallback string) *string {
 	v := reasonString(reason, fallback)
@@ -278,8 +316,21 @@ func safeToken(value, fallback string, limit int) string {
 	if value == "" {
 		return fallback
 	}
-	if len(value) > limit {
-		value = value[:limit]
+	for len(value) > limit {
+		_, size := utf8.DecodeLastRuneInString(value)
+		value = value[:len(value)-size]
+	}
+	return value
+}
+func safeProcessName(value string) string {
+	value = strings.ReplaceAll(value, "\\", "/")
+	if index := strings.LastIndexByte(value, '/'); index >= 0 {
+		value = value[index+1:]
+	}
+	value = safeToken(value, "process", 128)
+	for len(value) > 128 {
+		_, size := utf8.DecodeLastRuneInString(value)
+		value = value[:len(value)-size]
 	}
 	return value
 }

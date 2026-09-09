@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -68,5 +69,82 @@ func TestProcessCPUIsDefensivelyBounded(t *testing.T) {
 	raw := observation.Snapshot{ObservedAt: time.Unix(0, 0), Quality: observation.Quality{State: observation.Partial}, Processes: observation.Section[[]observation.Process]{State: observation.Available, Quality: observation.SectionQuality{Samples: 1, Total: 1}, Data: &items}}
 	if got := Current(raw, SystemInfo{}).Sections.Processes.Items[0].CPUPercent; got != 100 {
 		t.Fatalf("cpu_percent=%v", got)
+	}
+}
+
+func TestProjectionAppliesContractCapsAndPreservesTotals(t *testing.T) {
+	filesystems := make([]observation.Filesystem, MaxProjectedFilesystems+1)
+	for index := range filesystems {
+		filesystems[index] = observation.Filesystem{ID: "filesystem-001", Type: "ext4"}
+	}
+	processes := make([]observation.Process, MaxProjectedProcesses+1)
+	for index := range processes {
+		processes[index] = observation.Process{PID: int32(index + 1), Name: "worker", State: "running"}
+	}
+	processes[0].Name = `/private/users/example/` + strings.Repeat("x", 200)
+	raw := observation.Snapshot{
+		ObservedAt:  time.Unix(0, 0),
+		Filesystems: observation.Section[[]observation.Filesystem]{State: observation.Available, Quality: observation.SectionQuality{Total: 40}, Data: &filesystems},
+		Processes:   observation.Section[[]observation.Process]{State: observation.Available, Quality: observation.SectionQuality{Total: 500}, Data: &processes},
+	}
+	current := Current(raw, SystemInfo{})
+	if got := current.Sections.Filesystems; len(got.Items) != 16 || got.TotalCount != 40 || !got.Truncated {
+		t.Fatalf("filesystems=%+v", got.ListStatus)
+	}
+	if got := current.Sections.Processes; len(got.Items) != 200 || got.TotalCount != 500 || !got.Truncated {
+		t.Fatalf("processes=%+v", got.ListStatus)
+	}
+	if name := current.Sections.Processes.Items[0].Name; strings.Contains(name, "/") || len(name) > 128 {
+		t.Fatalf("unsafe name %q", name)
+	}
+}
+
+func TestCollectionStateUsesOnlyProjectedSections(t *testing.T) {
+	cpu := observation.CPU{LogicalCPUs: 4}
+	memory := observation.Memory{}
+	uptime := observation.Uptime{}
+	filesystems := []observation.Filesystem{}
+	processes := []observation.Process{}
+	raw := observation.Snapshot{
+		ObservedAt: time.Unix(0, 0), Quality: observation.Quality{State: observation.Partial},
+		CPU:         observation.Section[observation.CPU]{State: observation.Available, Data: &cpu},
+		Memory:      observation.Section[observation.Memory]{State: observation.Available, Data: &memory},
+		Uptime:      observation.Section[observation.Uptime]{State: observation.Available, Data: &uptime},
+		Filesystems: observation.Section[[]observation.Filesystem]{State: observation.Available, Data: &filesystems},
+		Processes:   observation.Section[[]observation.Process]{State: observation.Available, Data: &processes},
+		Network:     observation.Section[observation.Network]{State: observation.Unavailable, ReasonCode: observation.ReasonCollectionFailed},
+	}
+	if got := Current(raw, SystemInfo{}).CollectionState; got != "OK" {
+		t.Fatalf("collection_state=%s", got)
+	}
+}
+
+func TestFailedProjectionMatchesSchemaValidatedFixture(t *testing.T) {
+	at := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
+	raw := observation.Snapshot{
+		ObservedAt:  at,
+		CPU:         observation.Section[observation.CPU]{State: observation.PermissionDenied, ReasonCode: observation.ReasonPermissionDenied},
+		Memory:      observation.Section[observation.Memory]{State: observation.PermissionDenied, ReasonCode: observation.ReasonPermissionDenied},
+		Uptime:      observation.Section[observation.Uptime]{State: observation.PermissionDenied, ReasonCode: observation.ReasonPermissionDenied},
+		Filesystems: observation.Section[[]observation.Filesystem]{State: observation.Unsupported, ReasonCode: observation.ReasonUnsupported},
+		Processes:   observation.Section[[]observation.Process]{State: observation.PermissionDenied, ReasonCode: observation.ReasonPermissionDenied},
+	}
+	actual, err := json.Marshal(Current(raw, SystemInfo{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, err := os.ReadFile("../../schemas/v1/fixtures/valid/current-snapshot-native-failed.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var actualValue, expectedValue any
+	if err := json.Unmarshal(actual, &actualValue); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(expected, &expectedValue); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(actualValue, expectedValue) {
+		t.Fatalf("failed projection differs from fixture\nactual: %s\nexpected: %s", actual, expected)
 	}
 }

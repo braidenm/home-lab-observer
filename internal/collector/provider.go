@@ -33,6 +33,15 @@ type ProcessStat struct {
 	CreateTimeMS int64
 }
 
+type ProcessResult struct {
+	Processes        []ProcessStat
+	Discovered       int
+	Scanned          int
+	PermissionDenied int
+	Unsupported      int
+	Failed           int
+}
+
 type SystemProvider interface {
 	LogicalCPUCount(context.Context) (int, error)
 	CPUPercent(context.Context, time.Duration) (float64, error)
@@ -42,5 +51,5 @@ type SystemProvider interface {
 	Usage(context.Context, string) (UsageStat, error)
 	Network(context.Context) (NetStat, error)
 	Uptime(context.Context) (uint64, error)
-	Processes(context.Context) ([]ProcessStat, int, error)
+	Processes(context.Context) (ProcessResult, error)
 }

@@ -31,6 +31,14 @@ OS and workload adapters
 
 Platform Demo is a separate consumer of the observer contract. It does not iframe the local dashboard or require this repository to know about Platform Demo's UI.
 
+## Native snapshot preview
+
+With Go 1.27 installed, `go run ./cmd/observer --help` prints the command help and
+`go run ./cmd/observer collect-once` writes one `observer-current-snapshot/v1` JSON document to standard output.
+Help exits 0, invalid usage exits 2, and an `OK` or `PARTIAL` snapshot exits 0. If all implemented visible sections
+fail, the command still emits a schema-valid `FAILED` snapshot for diagnostics and exits 1. An encoding failure also
+exits 1 but cannot guarantee a complete JSON document.
+
 ## Documentation
 
 - [Constitution](.specify/memory/constitution.md)
