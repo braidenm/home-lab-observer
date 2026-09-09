@@ -5,7 +5,7 @@ transport-neutral component and normalized view contracts only. Consumers provid
 HTTP adapter and synthetic demo source are explicit subpath imports.
 
 The observer binary can use `LocalHttpObserverDataSource` against its loopback API. It reads only the accepted
-capabilities, current-snapshot, and bounded metric-series `GET` contracts. Platform Demo provides its own authenticated
+capabilities, current-snapshot, bounded metric-series and dedicated container-inventory `GET` contracts. Platform Demo provides its own authenticated
 adapter rather than trying to call or iframe another machine's loopback dashboard.
 
 ## Development
@@ -56,3 +56,9 @@ bearer token only in memory, enforces the contract response ceilings, and parses
 responses. Trends request the six code-owned metric identifiers at `/api/v1/metrics/series`; the adapter preserves null
 gaps, actual sample resolution, support state, and truncation metadata. The optional data-source method lets remote
 consumers omit local history rather than inventing it from snapshots.
+
+`getContainerInventory(signal?)` is also optional on `ObserverDataSource`. The local adapter calls
+`/api/v1/containers?limit=500`, applies the one-MiB ceiling and maps the closed inventory contract independently of
+the host snapshot. Workloads uses that view when supplied; older/synthetic data sources retain the legacy snapshot
+container view. Null CPU/memory, per-row metrics quality, freshness, truncation and local-sensitive/no-upload policy
+are preserved. Docker connection settings remain local startup options, not browser mutation APIs.
