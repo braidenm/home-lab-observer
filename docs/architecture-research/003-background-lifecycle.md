@@ -73,6 +73,14 @@ least-privilege principal separately from assuming that an absent element proves
 This source and the hosted evidence were checked on 2026-09-09. The actual saved-task lifecycle remains the release
 gate; passing only an in-memory template test is insufficient.
 
+The following hosted run isolated a second serialization difference: expected versus saved XML differed at the
+second direct child of `Task`, while COM and the command-line query agreed. Microsoft's
+[taskType definition](https://learn.microsoft.com/en-us/windows/win32/taskschd/taskschedulerschema-tasktype-complextype)
+declares direct children with `xs:all`, so their order is not significant. Normalize only this documented top-level
+order, preserving namespace, cardinality, attributes, values and nested action/trigger ordering. This finding does
+not justify accepting an unknown task or skipping saved-registration verification. Root independently verified the
+schema on 2026-09-09 against the sanitized diagnostic from hosted run `34408746316`.
+
 ## Acceptance and rollback
 
 Fake adapters verify exact arguments and manager states; native CI verifies syntax and isolated registrations when a
