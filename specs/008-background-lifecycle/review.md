@@ -31,8 +31,12 @@ Early integration review identified these cases for explicit regression coverage
 - Enforce age from retained record age, not continuously refreshed file modification time.
 - Show unavailable diagnostic disk usage as unavailable, not a factual zero-byte reading.
 
-These are review requirements, not claims that unfinished tests already pass. Final code hashes, tests, reviewer
-decisions, hosted checks and release verification will be recorded here after integration.
+Core implementation `742cd35` (root integration `6f38498`) passes root's independent full Go tests, static analysis
+and repository policy check. Its focused tests cover oldest-record age with an idle housekeeping tick, injected write
+failure, hard links/ancestor links, stale/wrong/malformed stop requests and instance locking. Linux/macOS test binaries
+cross-compile; hosted native execution and race detection remain pending. UI author checks and root's independent
+rerun pass 35 tests and package builds. This is partial evidence, not a claim that the integrated feature or release
+has passed. Final manager/runtime/browser checks, reviewer decisions and publication evidence are still required.
 
 ## Scope safeguards
 

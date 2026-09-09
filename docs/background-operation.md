@@ -93,7 +93,9 @@ from the program files and are preserved.
 
 Background mode writes only product-owned diagnostic events in the state directory's `diagnostics` folder:
 `observer.jsonl` and four numbered rotations. Each file is capped at 2 MiB, all five at 10 MiB, each record at 8 KiB,
-with a seven-day age limit. These are not copies of your OS, application or container logs.
+with a seven-day age policy. Cleanup runs at startup, before writes and once per minute while the observer runs.
+Age is measured from the oldest record, not a file's refreshed modification time; an expired file is removed as a
+whole. Capacity rotation may remove records sooner. These are not copies of your OS, application or container logs.
 
 Records contain only fixed event/result codes, version, UTC time, counts and durations. They exclude tokens, requests,
 headers, raw errors, filesystem paths and process/container identities. The OS-manager profile discards ordinary output
