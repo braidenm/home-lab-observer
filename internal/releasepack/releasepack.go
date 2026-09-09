@@ -345,6 +345,9 @@ func writePrivateFile(path string, content []byte) error {
 	written, err := file.Write(content)
 	if err != nil || written != len(content) {
 		_ = file.Close()
+		if err == nil {
+			err = io.ErrShortWrite
+		}
 		return err
 	}
 	return file.Close()
@@ -367,15 +370,30 @@ func makePublicFiles(directory string) error {
 }
 
 func hashFile(path string) (string, int64, error) {
+	return hashFileBounded(path, maxArchiveSize)
+}
+
+func hashFileBounded(path string, limit int64) (string, int64, error) {
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() < 0 || info.Size() > limit {
+		return "", 0, errors.New("invalid hash input")
+	}
 	file, err := os.Open(path)
 	if err != nil {
 		return "", 0, err
 	}
 	defer file.Close()
+	openedInfo, err := file.Stat()
+	if err != nil || !os.SameFile(info, openedInfo) || openedInfo.Size() != info.Size() {
+		return "", 0, errors.New("hash input changed")
+	}
 	hash := sha256.New()
-	size, err := io.Copy(hash, file)
+	size, err := io.Copy(hash, io.LimitReader(file, limit+1))
 	if err != nil {
 		return "", 0, err
+	}
+	if size > limit || size != info.Size() {
+		return "", 0, errors.New("hash input changed")
 	}
 	return hex.EncodeToString(hash.Sum(nil)), size, nil
 }

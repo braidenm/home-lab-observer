@@ -46,7 +46,7 @@ func buildArchive(stage string, in inputs, target target) (Asset, error) {
 	if err != nil {
 		return Asset{}, errors.New("ARCHIVE_WRITE_FAILED")
 	}
-	hash, size, err := hashFile(path)
+	hash, size, err := hashFileBounded(path, maxArchiveSize)
 	if err != nil {
 		return Asset{}, errors.New("ARCHIVE_HASH_FAILED")
 	}

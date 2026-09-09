@@ -19,7 +19,8 @@ func Verify(directory string) error {
 	// The manifest supplies the authoritative version below. At this point only reject unsafe entry types;
 	// the exact filename set is checked after decoding that version.
 	for _, entry := range entries {
-		if entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
+		info, err := os.Lstat(filepath.Join(directory, entry.Name()))
+		if err != nil || !info.Mode().IsRegular() || info.Size() < 0 || info.Size() > maxArchiveSize {
 			return errors.New("OUTPUT_SET_INVALID")
 		}
 	}
@@ -71,7 +72,7 @@ func Verify(directory string) error {
 		if len(parts) != 2 || parts[1] != name || !shaPattern(parts[0]) {
 			return errors.New("CHECKSUM_SET_INVALID")
 		}
-		hash, _, err := hashFile(filepath.Join(directory, name))
+		hash, _, err := hashFileBounded(filepath.Join(directory, name), outputFileLimit(name))
 		if err != nil || hash != parts[0] {
 			return errors.New("CHECKSUM_MISMATCH")
 		}
@@ -91,12 +92,23 @@ func validateManifest(manifest Manifest, directory string) error {
 		if asset.OS != target.os || asset.Arch != target.arch || asset.Format != target.format || asset.Filename != filename || asset.DownloadURL != url || !shaPattern(asset.SHA256) || asset.SizeBytes <= 0 || asset.SizeBytes > maxArchiveSize {
 			return errors.New("MANIFEST_INVALID")
 		}
-		hash, size, err := hashFile(filepath.Join(directory, filename))
+		hash, size, err := hashFileBounded(filepath.Join(directory, filename), maxArchiveSize)
 		if err != nil || hash != asset.SHA256 || size != asset.SizeBytes {
 			return errors.New("ASSET_MISMATCH")
 		}
 	}
 	return nil
+}
+
+func outputFileLimit(name string) int64 {
+	switch name {
+	case ManifestName:
+		return 1 << 20
+	case ChecksumsName:
+		return 64 << 10
+	default:
+		return maxArchiveSize
+	}
 }
 
 func shaPattern(value string) bool {
