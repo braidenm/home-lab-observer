@@ -196,6 +196,7 @@ async function nativeSmoke(directory, version, commit, checksums) {
   const archiveName = `home-lab-observer_${version}_${platform}_${arch}.${format}`;
   const archive = path.join(directory, archiveName);
   const temporary = await realpath(await mkdtemp(path.join(os.tmpdir(), "observer native delivery ")));
+  let preserveForManagerFailure = false;
   try {
     execFileSync("tar", ["-xf", archive, "-C", temporary], { stdio: "inherit", timeout: 30_000 });
     const root = path.join(temporary, `home-lab-observer_${version}_${platform}_${arch}`);
@@ -221,10 +222,12 @@ async function nativeSmoke(directory, version, commit, checksums) {
       const launcher = path.join(installRoot, "bin", "observer.cmd");
       verifyVersion(runObserver(launcher, ["version", "--json"]), version, commit, platform, arch);
       if (process.env.OBSERVER_TEST_USER_MANAGER === "1") {
+        preserveForManagerFailure = true;
         execFileSync(process.execPath, [fileURLToPath(new URL("./smoke-windows-manager.mjs", import.meta.url))], {
           env: { ...process.env, OBSERVER_SMOKE_BINARY: executable, OBSERVER_SMOKE_INSTALL_ROOT: installRoot },
           stdio: "inherit", timeout: 150_000, windowsHide: true,
         });
+        preserveForManagerFailure = false;
       }
       execFileSync(powershell, [...common, "-Uninstall", "-InstallRoot", installRoot], { stdio: "inherit", timeout: 30_000 });
     } else {
@@ -236,7 +239,11 @@ async function nativeSmoke(directory, version, commit, checksums) {
     }
     if (await readFile(stateSentinel, "utf8") !== "preserve me") fail("uninstall modified observer state outside its managed root");
   } finally {
-    await rm(temporary, { recursive: true, force: true });
+    if (preserveForManagerFailure) {
+      console.error("Preserving disposable runner files because manager cleanup was not confirmed.");
+    } else {
+      await rm(temporary, { recursive: true, force: true });
+    }
   }
 }
 
