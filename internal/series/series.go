@@ -100,7 +100,7 @@ func Build(ctx context.Context, reader Reader, now time.Time, requestedRange Ran
 	}
 
 	now = now.UTC()
-	windowStart := now.Add(-config.duration)
+	windowStart := now.Truncate(config.resolution).Add(-config.duration)
 	response := Response{
 		SchemaVersion: SchemaVersion, Range: requestedRange, GeneratedAt: now, WindowStart: windowStart, WindowEnd: now,
 		SampleIntervalSeconds: int(config.resolution / time.Second),
@@ -163,7 +163,7 @@ func buildMetric(ctx context.Context, reader Reader, metric history.MetricID, fr
 		return MetricSeries{}, errors.New("series point bound exceeded")
 	}
 	buckets := make([]bucket, bucketCount)
-	add := func(at time.Time, count int64, sum, last float64) {
+	add := func(at, lastAt time.Time, count int64, sum, last float64) {
 		index := int(at.Sub(from) / resolution)
 		if index < 0 || index >= len(buckets) || count < 1 {
 			return
@@ -171,19 +171,19 @@ func buildMetric(ctx context.Context, reader Reader, metric history.MetricID, fr
 		candidate := &buckets[index]
 		candidate.count += count
 		candidate.sum += sum
-		if candidate.at.IsZero() || at.After(candidate.at) {
-			candidate.last, candidate.at = last, at
+		if candidate.at.IsZero() || lastAt.After(candidate.at) {
+			candidate.last, candidate.at = last, lastAt
 		}
 	}
 	latest := time.Time{}
 	for _, sample := range raw {
-		add(sample.At, 1, sample.Value, sample.Value)
+		add(sample.At, sample.At, 1, sample.Value, sample.Value)
 		if sample.At.After(latest) {
 			latest = sample.At
 		}
 	}
 	for _, rollup := range rollups {
-		add(rollup.BucketStart, rollup.Count, rollup.Sum, rollup.Last)
+		add(rollup.BucketStart, rollup.LastAt, rollup.Count, rollup.Sum, rollup.Last)
 		if rollup.LastAt.After(latest) {
 			latest = rollup.LastAt
 		}
@@ -204,8 +204,9 @@ func buildMetric(ctx context.Context, reader Reader, metric history.MetricID, fr
 		result.Points = append(result.Points, point)
 	}
 	result.PointCount = len(result.Points)
+	result.Truncated = len(raw) == 10000 || len(rollups) == 10000
 	result.CollectionState = "OK"
-	if result.GapCount > 0 {
+	if result.GapCount > 0 || result.Truncated {
 		result.CollectionState = "PARTIAL"
 		result.ReasonCode = stringPointer("COLLECTION_GAPS")
 	}
