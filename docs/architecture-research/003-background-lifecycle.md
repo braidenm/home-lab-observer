@@ -89,6 +89,14 @@ the sequence of actions are not included. Independent review caught that the fie
 unordered group; this does not permit changing its command or arguments. This extends the initial top-level finding
 rather than making every XML subtree unordered.
 
+The next hosted diagnostic (`34411366228`) isolated a value difference at `UseUnifiedSchedulingEngine`; it did not
+disclose the saved value. Microsoft's [engine guidance](https://learn.microsoft.com/en-us/windows/win32/taskschd/what-s-new-in-task-scheduler)
+recommends the unified engine but lists unsupported feature combinations. This profile uses an interactive-token
+logon trigger, one executable action, `IgnoreNew`, no network condition and no trigger execution limit, avoiding those
+limitations. Request the unified engine explicitly and continue requiring that exact setting rather than ignoring a
+changed value. Check its effective in-memory COM property and the real saved-task lifecycle; neither inference from
+the diagnostic nor an in-memory test alone proves that registration succeeds. This choice changes no user authority.
+
 ## Acceptance and rollback
 
 Fake adapters verify exact arguments and manager states; native CI verifies syntax and isolated registrations when a
