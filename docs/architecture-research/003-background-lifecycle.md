@@ -61,6 +61,18 @@ mismatched registrations. Serialize lifecycle changes and test interrupted regis
 **How do upgrade and rollback work?** They only change the selected installed version. Explicit restart adopts that
 version; neither operation restarts a running observer. Uninstall requires background disable first and preserves data.
 
+### Native verification finding: Task Scheduler defaults
+
+The disposable Windows registration test showed that persisted task XML omits several explicitly supplied
+default-valued elements even though an in-memory template round trip retains them. Microsoft's
+[Task Scheduler schema](https://learn.microsoft.com/en-us/windows/win32/taskschd/task-scheduler-schema)
+documents optional settings and trigger defaults. Ownership comparison must account for those semantics, not just
+compare serialized tokens. Only documented defaults at exact known paths qualify; changed values, duplicate elements,
+unexpected attributes, additional actions and different principals must still fail closed. Verify the effective
+least-privilege principal separately from assuming that an absent element proves the requested privilege level.
+This source and the hosted evidence were checked on 2026-09-09. The actual saved-task lifecycle remains the release
+gate; passing only an in-memory template test is insufficient.
+
 ## Acceptance and rollback
 
 Fake adapters verify exact arguments and manager states; native CI verifies syntax and isolated registrations when a
