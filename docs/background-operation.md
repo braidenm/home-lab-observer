@@ -48,6 +48,10 @@ are `--state-dir` for a dedicated local data directory, `--listen` for an explic
 `--docker-endpoint` for a [validated local Docker socket/pipe](container-observations.md). Docker remains disabled
 unless you choose it. Stop a foreground instance using that port/state before starting background operation.
 
+Use one managed background installation for this profile. A different installation or account must not overwrite
+its existing registration. On Windows, use the default program path or a simple custom path without shell
+metacharacters (such as `&`, `%` or quotes); foreground operation does not require a background registration.
+
 ## 2. Check it and open the dashboard
 
 Use the same launcher and program root for every lifecycle command:
@@ -124,6 +128,7 @@ only the stable error code, version and OS in a support request—not your token
 | Reported state or code | Next step |
 | --- | --- |
 | `BACKGROUND_MANAGER_UNAVAILABLE` | Run in your normal signed-in session. On headless Linux, confirm a working user manager; the installer does not enable lingering. Foreground mode remains available. |
+| `BACKGROUND_INVALID_SETTINGS` | Use a dedicated local data directory outside the program directory, an explicit `127.0.0.1:port`, and a supported local Docker endpoint if enabled. On Windows, avoid shell metacharacters in the program path. |
 | `BACKGROUND_UNREACHABLE` / `BACKGROUND_NOT_READY` | Allow startup to finish, then check again. Stop any foreground observer using the same port/data directory. Inspect available product diagnostics; do not change firewall settings. |
 | `BACKGROUND_REGISTRATION_MISMATCH` / `BACKGROUND_UNSAFE_MANAGED_STATE` | Keep the files and existing registration intact. Check that you used the original install root/account; do not delete ownership markers or overwrite another task. |
 | `BACKGROUND_OPERATION_ACTIVE` | Wait for another install or lifecycle operation to finish, then retry. Complete abandoned background guards can be recovered automatically; unknown or incomplete installer guards are deliberately preserved. Do not delete a guard while another operation might be running. |
