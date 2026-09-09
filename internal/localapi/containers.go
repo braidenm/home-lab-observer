@@ -30,11 +30,11 @@ func projectContainerInventory(inventory containerobs.Inventory, limit int, now 
 	if items == nil {
 		items = []containerobs.Container{}
 	}
+	total := max(inventory.TotalCount, len(items))
 	if len(items) > containerobs.MaxContainers {
 		items = items[:containerobs.MaxContainers]
 		inventory.Truncated = true
 	}
-	total := max(inventory.TotalCount, len(items))
 	if len(items) > limit {
 		items = items[:limit]
 		inventory.Truncated = true

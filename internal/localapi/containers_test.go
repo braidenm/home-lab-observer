@@ -113,6 +113,14 @@ func TestContainersRejectInvalidQueryAndBoundResponse(t *testing.T) {
 	}
 }
 
+func TestContainerProjectionCountsBeforeEnforcingRowCeiling(t *testing.T) {
+	items := make([]containerobs.Container, containerobs.MaxContainers+1)
+	inventory := projectContainerInventory(containerobs.Inventory{Items: items}, containerobs.MaxContainers, time.Now())
+	if inventory.TotalCount != containerobs.MaxContainers+1 || inventory.ReturnedCount != containerobs.MaxContainers || !inventory.Truncated {
+		t.Fatalf("projection lost known source count: total=%d returned=%d truncated=%v", inventory.TotalCount, inventory.ReturnedCount, inventory.Truncated)
+	}
+}
+
 func newTestHandlerWithContainers(t *testing.T, containers ContainerSource, now time.Time) http.Handler {
 	t.Helper()
 	handler, err := NewHandler(Config{Port: 9847, Token: testToken, Version: "0.1.0", Source: fakeSource{current: snapshotAt(now), ok: true}, History: handlerReader{}, ContainerSource: containers, Now: func() time.Time { return now }})
