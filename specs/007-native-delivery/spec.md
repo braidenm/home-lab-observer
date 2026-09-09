@@ -25,6 +25,8 @@ constrained-proxy Linux container are subsequent focused delivery slices, not hi
   installation without GitHub credentials. Use HTTPS, private staging, SHA-256 verification before extraction/execution,
   fixed archive contents and versioned per-user directories. Reject unsafe versions/paths, link/traversal entries and
   unexpected archive members. Never install dependencies, elevate, change PATH, start Docker or register services silently.
+  Bound compressed archives and total expanded content to 220 MiB, the binary to 200 MiB, and each metadata member to
+  1 MiB. Enforce expanded-content bounds before extraction, and apply bounded HTTPS download sizes and timeouts.
 - D5: Preserve the currently selected version and data until an installation is complete. A managed launcher selects a
   validated installed version; explicit rollback switches to a retained version. Uninstall removes only known managed
   program files, preserves observation/token state by default, and refuses broad/unmanaged roots. No auto-update.
