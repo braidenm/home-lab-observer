@@ -21,6 +21,9 @@ func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, nil)) }
 type collectFunc func(context.Context) observation.Snapshot
 
 func run(args []string, stdout, stderr io.Writer, collect collectFunc) int {
+	if len(args) > 0 && args[0] == "serve" {
+		return runServe(args[1:], stdout, stderr)
+	}
 	if len(args) > 0 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help") {
 		printUsage(stdout)
 		return 0
@@ -63,4 +66,5 @@ func run(args []string, stdout, stderr io.Writer, collect collectFunc) int {
 
 func printUsage(writer io.Writer) {
 	fmt.Fprintln(writer, "usage: observer collect-once [--max-processes N] [--processes=true|false] [--timeout DURATION]")
+	fmt.Fprintln(writer, "       observer serve [--listen 127.0.0.1:9847] [--state-dir PATH]")
 }

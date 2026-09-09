@@ -1,0 +1,44 @@
+{
+  "schema_version": "observer-metric-series/v1",
+  "range": "6h",
+  "generated_at": "2026-09-09T18:00:05Z",
+  "window_start": "2026-09-09T12:00:00Z",
+  "window_end": "2026-09-09T18:00:00Z",
+  "sample_interval_seconds": 900,
+  "limits": { "max_metrics": 6, "max_points_per_series": 2048, "max_response_bytes": 1048576 },
+  "privacy": { "data_classification": "PUBLIC_METADATA", "contains_process_identity": false, "contains_log_bodies": false, "remote_upload_eligible": false },
+  "requested_metrics": [
+    "cpu.utilization.percent",
+    "memory.utilization.percent",
+    "filesystem.aggregate.utilization.percent",
+    "network.receive.bytes_per_second",
+    "network.transmit.bytes_per_second",
+    "process.count"
+  ],
+  "series": [
+    {
+      "metric_id": "cpu.utilization.percent", "unit": "percent", "support_state": "SUPPORTED", "collection_state": "PARTIAL", "freshness": "CURRENT", "reason_code": "SAMPLE_GAP", "point_count": 3, "gap_count": 1, "truncated": false,
+      "points": [{ "at": "2026-09-09T17:30:00Z", "value": 21.4 }, { "at": "2026-09-09T17:45:00Z", "value": null }, { "at": "2026-09-09T18:00:00Z", "value": 18.9 }]
+    },
+    {
+      "metric_id": "memory.utilization.percent", "unit": "percent", "support_state": "SUPPORTED", "collection_state": "OK", "freshness": "CURRENT", "reason_code": null, "point_count": 3, "gap_count": 0, "truncated": false,
+      "points": [{ "at": "2026-09-09T17:30:00Z", "value": 67.2 }, { "at": "2026-09-09T17:45:00Z", "value": 67.8 }, { "at": "2026-09-09T18:00:00Z", "value": 68.1 }]
+    },
+    {
+      "metric_id": "filesystem.aggregate.utilization.percent", "unit": "percent", "support_state": "SUPPORTED", "collection_state": "OK", "freshness": "CURRENT", "reason_code": null, "point_count": 3, "gap_count": 0, "truncated": false,
+      "points": [{ "at": "2026-09-09T17:30:00Z", "value": 74.1 }, { "at": "2026-09-09T17:45:00Z", "value": 74.1 }, { "at": "2026-09-09T18:00:00Z", "value": 74.2 }]
+    },
+    {
+      "metric_id": "network.receive.bytes_per_second", "unit": "bytes_per_second", "support_state": "SUPPORTED", "collection_state": "OK", "freshness": "CURRENT", "reason_code": null, "point_count": 3, "gap_count": 0, "truncated": false,
+      "points": [{ "at": "2026-09-09T17:30:00Z", "value": 98304 }, { "at": "2026-09-09T17:45:00Z", "value": 131072 }, { "at": "2026-09-09T18:00:00Z", "value": 114688 }]
+    },
+    {
+      "metric_id": "network.transmit.bytes_per_second", "unit": "bytes_per_second", "support_state": "SUPPORTED", "collection_state": "OK", "freshness": "CURRENT", "reason_code": null, "point_count": 3, "gap_count": 0, "truncated": false,
+      "points": [{ "at": "2026-09-09T17:30:00Z", "value": 49152 }, { "at": "2026-09-09T17:45:00Z", "value": 65536 }, { "at": "2026-09-09T18:00:00Z", "value": 57344 }]
+    },
+    {
+      "metric_id": "process.count", "unit": "count", "support_state": "SUPPORTED", "collection_state": "OK", "freshness": "CURRENT", "reason_code": null, "point_count": 3, "gap_count": 0, "truncated": false,
+      "points": [{ "at": "2026-09-09T17:30:00Z", "value": 226 }, { "at": "2026-09-09T17:45:00Z", "value": 229 }, { "at": "2026-09-09T18:00:00Z", "value": 231 }]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 export function formatBytes(value: number | null): string {
   if (value === null) return "Unavailable";
-  if (value < 1_024) return `${value} B`;
+  if (value < 1_024) return `${Number(value.toFixed(1))} B`;
   const units = ["KB", "MB", "GB", "TB"];
   let amount = value;
   let unit = "B";
@@ -15,15 +15,19 @@ export function formatBytes(value: number | null): string {
 export function formatValue(value: number | null, unit: string): string {
   if (value === null) return "Unavailable";
   if (unit === "bytes") return formatBytes(value);
+  if (unit === "bytes_per_second") return `${formatBytes(value)}/s`;
   if (unit === "percent" || unit === "%") return `${value.toFixed(1)}%`;
   if (unit === "milliseconds") return `${value.toLocaleString()} ms`;
   return `${value.toLocaleString()}${unit === "count" ? "" : ` ${unit}`}`;
 }
 
 export function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${Math.max(0, Math.round(seconds))}s`;
   const days = Math.floor(seconds / 86_400);
   const hours = Math.floor((seconds % 86_400) / 3_600);
-  return days > 0 ? `${days}d ${hours}h` : `${hours}h`;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h`;
+  return `${Math.max(1, Math.floor(seconds / 60))}m`;
 }
 
 export function formatRelative(iso: string): string {

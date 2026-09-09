@@ -12,6 +12,7 @@ const fail = (message) => { throw new Error(message); };
 const schemaPaths = [
   "schemas/v1/capabilities-v1.schema.json",
   "schemas/v1/current-snapshot-v1.schema.json",
+  "schemas/v1/metric-series-v1.schema.json",
   "schemas/v1/problem-details-v1.schema.json"
 ];
 const schemas = schemaPaths.map(readJson);
@@ -44,8 +45,10 @@ for (const [route, pathItem] of Object.entries(api.paths)) {
 
 const caps = api.paths["/api/v1/capabilities"].get;
 const snapshot = api.paths["/api/v1/snapshots/current"].get;
+const series = api.paths["/api/v1/metrics/series"].get;
 if (caps["x-max-response-bytes"] !== 131072) fail("Capabilities response cap must be 128 KiB");
 if (snapshot["x-max-response-bytes"] !== 1048576) fail("Snapshot response cap must be 1 MiB");
+if (series["x-max-response-bytes"] !== 1048576) fail("Metric series response cap must be 1 MiB");
 const expectedQueries = {
   process_limit: { minimum: 1, maximum: 200, default: 50 },
   container_limit: { minimum: 1, maximum: 500, default: 100 },
@@ -58,6 +61,24 @@ for (const [name, expected] of Object.entries(expectedQueries)) {
   for (const [key, value] of Object.entries(expected)) if (parameter.schema[key] !== value) fail(`${name}.${key} must equal ${value}`);
 }
 
+const metricIds = [
+  "cpu.utilization.percent",
+  "memory.utilization.percent",
+  "filesystem.aggregate.utilization.percent",
+  "network.receive.bytes_per_second",
+  "network.transmit.bytes_per_second",
+  "process.count"
+];
+const rangeParameter = series.parameters.find((item) => item.name === "range");
+if (!rangeParameter?.required || JSON.stringify(rangeParameter.schema.enum) !== JSON.stringify(["1h", "6h", "24h", "7d"])) {
+  fail("Metric series range must be required and limited to 1h, 6h, 24h, or 7d");
+}
+const metricParameter = series.parameters.find((item) => item.name === "metric");
+if (series.parameters.length !== 2 || series.parameters.some((item) => item.in !== "query" || !new Set(["range", "metric"]).has(item.name))) fail("Metric series accepts only range and metric query parameters");
+if (!metricParameter?.required || metricParameter.style !== "form" || metricParameter.explode !== true) fail("Metric must be a required repeatable query parameter");
+if (metricParameter.schema.minItems !== 1 || metricParameter.schema.maxItems !== 6 || metricParameter.schema.uniqueItems !== true) fail("Metric query must contain one to six unique identifiers");
+if (JSON.stringify(metricParameter.schema.items.enum) !== JSON.stringify(metricIds)) fail("Metric query allowlist is not the code-owned v1 set");
+
 const forbiddenKeys = new Set(["authorization", "token", "secret", "environment", "env", "argv", "command_line", "raw_body", "stack_trace", "exception", "private_key", "password"]);
 const riskyString = /(ghp_|github_pat_|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|https?:\/\/[^\s/@:]+:[^\s/@]+@|\b(?:10\.\d{1,3}|192\.168|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b)/i;
 function scan(value, location = "$") {
@@ -67,6 +88,36 @@ function scan(value, location = "$") {
     if (forbiddenKeys.has(key.toLowerCase())) fail(`Forbidden key ${key} in valid fixture at ${location}`);
     scan(item, `${location}.${key}`);
   }
+}
+
+function validateMetricSeriesFixture(fixture, fixturePath) {
+  const requested = fixture.requested_metrics;
+  const returned = fixture.series.map((item) => item.metric_id);
+  if (new Set(returned).size !== returned.length || JSON.stringify([...returned].sort()) !== JSON.stringify([...requested].sort())) {
+    fail(`${fixturePath} must return exactly one series for every requested metric`);
+  }
+  const start = Date.parse(fixture.window_start);
+  const end = Date.parse(fixture.window_end);
+  if (!(start < end) || !fixture.generated_at.endsWith("Z") || !fixture.window_start.endsWith("Z") || !fixture.window_end.endsWith("Z")) fail(`${fixturePath} must have an increasing UTC window`);
+  for (const item of fixture.series) {
+    if (item.point_count !== item.points.length) fail(`${fixturePath} has an incorrect point_count for ${item.metric_id}`);
+    if (item.gap_count !== item.points.filter((point) => point.value === null).length) fail(`${fixturePath} has an incorrect gap_count for ${item.metric_id}`);
+    let previous = Number.NEGATIVE_INFINITY;
+    for (const point of item.points) {
+      const instant = Date.parse(point.at);
+      if (!point.at.endsWith("Z") || instant < start || instant > end || instant <= previous) fail(`${fixturePath} points must be UTC and ordered within the requested window`);
+      previous = instant;
+    }
+  }
+  const prohibited = new Set(["query", "expression", "sql", "labels", "process_name", "pid", "log_body", "raw_log_body"]);
+  const inspect = (value, location = "$") => {
+    if (Array.isArray(value)) return value.forEach((item, index) => inspect(item, `${location}[${index}]`));
+    if (value && typeof value === "object") for (const [key, item] of Object.entries(value)) {
+      if (prohibited.has(key.toLowerCase())) fail(`Forbidden series field ${key} in ${fixturePath} at ${location}`);
+      inspect(item, `${location}.${key}`);
+    }
+  };
+  inspect(fixture);
 }
 
 const manifest = readJson("schemas/v1/fixtures/manifest.json");
@@ -81,8 +132,9 @@ for (const testCase of manifest.cases) {
   if (testCase.valid) {
     validCount += 1;
     scan(fixture);
+    if (testCase.schema.includes("metric-series")) validateMetricSeriesFixture(fixture, testCase.fixture);
     const bytes = fs.statSync(path.join(root, testCase.fixture)).size;
-    const ceiling = testCase.schema.includes("current-snapshot") ? 1048576 : 131072;
+    const ceiling = testCase.schema.includes("current-snapshot") || testCase.schema.includes("metric-series") ? 1048576 : 131072;
     if (bytes > ceiling) fail(`${testCase.fixture} exceeds ${ceiling} bytes`);
   } else invalidCount += 1;
 }
@@ -95,6 +147,11 @@ const trace = fs.readFileSync(path.join(root, "specs/002-cross-platform-observer
 for (let index = 1; index <= 14; index += 1) {
   const id = `R${index}`;
   if (!spec.includes(`**${id} `) || !trace.includes(`| ${id} |`)) fail(`Missing traceability for ${id}`);
+}
+const seriesSpec = fs.readFileSync(path.join(root, "specs/005-local-data-plane/spec.md"), "utf8");
+const seriesTrace = fs.readFileSync(path.join(root, "specs/005-local-data-plane/traceability.md"), "utf8");
+for (const id of ["R4", "R5", "R10", "R12"]) {
+  if (!seriesSpec.includes(`**${id} `) || !seriesTrace.includes(`| ${id} |`)) fail(`Missing Spec 005 traceability for ${id}`);
 }
 
 console.log(`Contract validation passed: OpenAPI 3.1, ${schemas.length} schemas, ${validCount} valid and ${invalidCount} invalid fixtures.`);

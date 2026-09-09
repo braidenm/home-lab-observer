@@ -32,6 +32,8 @@
     "test": "vitest run",
     "build:lib": "vite build --config vite.config.ts && tsc -p tsconfig.build.json",
     "build:demo": "vite build --config vite.demo.config.ts",
+    "build:embedded": "vite build --config vite.embedded.config.ts",
+    "check:embedded": "node ../../scripts/check-embedded-ui.mjs",
     "build": "npm run typecheck && npm run build:lib && npm run build:demo",
     "check": "npm run typecheck && npm run test && npm run build"
   },
@@ -46,6 +48,7 @@
     "@types/react-dom": "19.2.7",
     "@vitejs/plugin-react": "6.1.1",
     "jsdom": "30.0.1",
+    "playwright": "1.63.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "typescript": "7.0.2",

@@ -11,7 +11,7 @@
 
 ## Security and privacy
 
-- Bind the local API to `127.0.0.1` and `::1` by default and validate `Host` and `Origin` headers.
+- Bind the local API to explicit `127.0.0.1` by default and validate `Host` and `Origin` headers. IPv6 is a future separately tested listener extension.
 - Require explicit authentication and TLS configuration before non-loopback binding can be enabled.
 - Use allowlists for log sources, filesystem paths, container operations, remote destinations, and future actions.
 - Normalize and redact before storing or transmitting. Tests must include tokens, URLs with credentials, email addresses, and common secret formats.

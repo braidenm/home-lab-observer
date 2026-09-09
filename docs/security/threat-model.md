@@ -11,6 +11,19 @@
 - Local history, configuration, release metadata, and update state.
 - Docker/native OS read handles and future action credentials.
 
+## Spec 005 implemented boundary
+
+The source preview implements the collector, numeric store, and local API/UI only. Upload, enrollment, native log sources,
+service/container adapters, and signed installers remain future release requirements below. The local bearer token is
+generated with 256 bits of entropy, restricted to the current OS account, and accepted only in the Authorization header.
+The dashboard stores it in tab-scoped session storage only after validation and provides a lock/forget action. This
+protects against unrelated web origins, not malicious software already running as the same OS user or an administrator.
+
+The listener accepts explicit IPv4 loopback only. Static assets are embedded and same-origin; credentials are never
+placed in startup output. Source names are rendered as text. Numeric history excludes process identities and log bodies.
+The database has a single process owner, bounded maintenance, and non-destructive corruption isolation. Preserved
+quarantine files are outside the active-history budget and require deliberate owner cleanup after diagnosis.
+
 ## Trust boundaries
 
 ```text

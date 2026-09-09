@@ -41,7 +41,24 @@ func TestRunFailedSnapshotIsEmittedWithFailureExit(t *testing.T) {
 
 func TestRunRejectsInvalidCommand(t *testing.T) {
 	var out, errOut strings.Builder
-	if code := run([]string{"serve"}, &out, &errOut, nil); code != 2 {
+	if code := run([]string{"unknown"}, &out, &errOut, nil); code != 2 {
 		t.Fatalf("code=%d", code)
+	}
+}
+
+func TestServeHelpAndUnsafeBind(t *testing.T) {
+	for _, test := range []struct {
+		args []string
+		want int
+	}{
+		{[]string{"serve", "--help"}, 0},
+		{[]string{"serve", "--listen", "0.0.0.0:9847"}, 2},
+		{[]string{"serve", "--listen", "localhost:9847"}, 2},
+		{[]string{"serve", "--unknown"}, 2},
+	} {
+		var out, errOut strings.Builder
+		if got := run(test.args, &out, &errOut, nil); got != test.want {
+			t.Fatalf("args=%v exit=%d want=%d", test.args, got, test.want)
+		}
 	}
 }

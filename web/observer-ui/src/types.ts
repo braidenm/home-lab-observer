@@ -4,6 +4,13 @@ export type Freshness = "CURRENT" | "STALE" | "UNKNOWN";
 export type Severity = "TRACE" | "DEBUG" | "INFO" | "WARN" | "ERROR" | "CRITICAL" | "UNKNOWN";
 export type SectionName = "overview" | "filesystems" | "processes" | "services" | "containers" | "logs" | "observer";
 export type TrendRange = "1h" | "6h" | "24h" | "7d";
+export type MetricId =
+  | "cpu.utilization.percent"
+  | "memory.utilization.percent"
+  | "filesystem.aggregate.utilization.percent"
+  | "network.receive.bytes_per_second"
+  | "network.transmit.bytes_per_second"
+  | "process.count";
 
 export interface CollectorCapability {
   name: SectionName;
@@ -135,13 +142,42 @@ export interface CurrentSnapshot {
 }
 
 export interface TrendPoint { at: string; value: number | null }
-export interface TrendSeries { id: string; label: string; unit: "%" | "bytes"; color: "mint" | "cyan" | "amber" | "violet"; points: TrendPoint[] }
-export interface TrendSnapshot { range: TrendRange; sampledEverySeconds: number; series: TrendSeries[] }
+export interface TrendSeries {
+  id: MetricId;
+  label: string;
+  unit: "percent" | "bytes_per_second" | "count";
+  color: "mint" | "cyan" | "amber" | "violet";
+  supportState: Exclude<SupportState, "UNKNOWN">;
+  collectionState: Exclude<CollectionState, "UNKNOWN">;
+  freshness: Freshness;
+  reasonCode: string | null;
+  pointCount: number;
+  gapCount: number;
+  truncated: boolean;
+  points: TrendPoint[];
+}
+export interface TrendSnapshot {
+  schemaVersion: "observer-metric-series/v1";
+  range: TrendRange;
+  generatedAt: string;
+  windowStart: string;
+  windowEnd: string;
+  sampleIntervalSeconds: number;
+  limits: { maxMetrics: 6; maxPointsPerSeries: 2048; maxResponseBytes: 1048576 };
+  privacy: {
+    dataClassification: "PUBLIC_METADATA";
+    containsProcessIdentity: false;
+    containsLogBodies: false;
+    remoteUploadEligible: false;
+  };
+  requestedMetrics: MetricId[];
+  series: TrendSeries[];
+}
 
 export interface ObserverDataSource {
   getCapabilities(signal?: AbortSignal): Promise<ObserverCapabilities>;
   getCurrentSnapshot(signal?: AbortSignal): Promise<CurrentSnapshot>;
-  /** Optional because the accepted v1 local API has no historical-series endpoint. */
+  /** Optional so remote consumers can omit local-only historical series. */
   getTrends?(range: TrendRange, signal?: AbortSignal): Promise<TrendSnapshot>;
 }
 

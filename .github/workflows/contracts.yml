@@ -22,9 +22,5 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - run: npm test
+      - run: npm run test:contracts

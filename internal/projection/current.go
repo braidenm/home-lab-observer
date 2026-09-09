@@ -8,6 +8,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/braidenm/home-lab-observer/internal/history"
 	"github.com/braidenm/home-lab-observer/internal/observation"
 )
 
@@ -98,6 +99,18 @@ type EmptySection struct {
 	Items []any `json:"items"`
 }
 
+type ObserverSignal struct {
+	Name  string  `json:"name"`
+	State string  `json:"state"`
+	Value float64 `json:"value"`
+	Unit  string  `json:"unit"`
+}
+
+type ObserverSection struct {
+	ListStatus
+	Items []ObserverSignal `json:"items"`
+}
+
 type Sections struct {
 	Overview    OverviewSection   `json:"overview"`
 	Filesystems FilesystemSection `json:"filesystems"`
@@ -105,7 +118,7 @@ type Sections struct {
 	Services    EmptySection      `json:"services"`
 	Containers  EmptySection      `json:"containers"`
 	Logs        EmptySection      `json:"logs"`
-	Observer    EmptySection      `json:"observer"`
+	Observer    ObserverSection   `json:"observer"`
 }
 
 type CurrentSnapshot struct {
@@ -124,7 +137,7 @@ func Current(raw observation.Snapshot, system SystemInfo) CurrentSnapshot {
 	unsupported := unsupportedSection("COLLECTOR_NOT_IMPLEMENTED")
 	sections := Sections{
 		Overview: projectOverview(raw, system), Filesystems: projectFilesystems(raw), Processes: projectProcesses(raw),
-		Services: unsupported, Containers: unsupported, Logs: unsupported, Observer: unsupported,
+		Services: unsupported, Containers: unsupported, Logs: unsupported, Observer: unsupportedObserverSection("COLLECTOR_NOT_IMPLEMENTED"),
 	}
 	return CurrentSnapshot{
 		SchemaVersion:   CurrentSnapshotVersion,
@@ -142,9 +155,23 @@ func Current(raw observation.Snapshot, system SystemInfo) CurrentSnapshot {
 	}
 }
 
+func WithObserverSignals(current CurrentSnapshot, observedAt time.Time, signals []ObserverSignal, degradedReason string) CurrentSnapshot {
+	if len(signals) > 32 {
+		signals = signals[:32]
+	}
+	state := SectionStatus{SupportState: "SUPPORTED", CollectionState: "OK", Freshness: "CURRENT", ObservedAt: timePtr(observedAt.UTC())}
+	if degradedReason != "" {
+		state.CollectionState = "PARTIAL"
+		state.ReasonCode = stringPtr(safeToken(degradedReason, "OBSERVER_DEGRADED", 64))
+	}
+	items := append([]ObserverSignal(nil), signals...)
+	current.Sections.Observer = ObserverSection{ListStatus: ListStatus{SectionStatus: state, TotalCount: len(items), ReturnedCount: len(items)}, Items: items}
+	return current
+}
+
 func projectOverview(raw observation.Snapshot, system SystemInfo) OverviewSection {
 	states := []observation.SupportState{raw.CPU.State, raw.Memory.State, raw.Uptime.State}
-	if raw.CPU.Data == nil || raw.Memory.Data == nil || raw.Uptime.Data == nil {
+	if raw.CPU.Data == nil || raw.Memory.Data == nil || raw.Uptime.Data == nil || !observable(raw.CPU.State) || !observable(raw.Memory.State) || !observable(raw.Uptime.State) {
 		state, reason := unavailableStatus(states, raw.CPU.ReasonCode, raw.Memory.ReasonCode, raw.Uptime.ReasonCode)
 		return OverviewSection{SectionStatus: stateWithReason(state, reason), Data: nil}
 	}
@@ -159,6 +186,28 @@ func projectOverview(raw observation.Snapshot, system SystemInfo) OverviewSectio
 	status := statusFor(state, reason, raw.ObservedAt)
 	data := &OverviewData{HostAlias: "local-host", OS: normalizedOS(system.OS), Architecture: safeToken(system.Architecture, "unknown", 32), UptimeSeconds: raw.Uptime.Data.Seconds, CPULogicalCount: raw.CPU.Data.LogicalCPUs, MemoryTotalBytes: raw.Memory.Data.TotalBytes, MemoryUsedBytes: raw.Memory.Data.UsedBytes}
 	return OverviewSection{SectionStatus: status, Data: data}
+}
+
+func observable(state observation.SupportState) bool {
+	return state == observation.Available || state == observation.Degraded
+}
+
+// MetricStatuses keeps independent collector support distinct from the combined overview envelope.
+func MetricStatuses(raw observation.Snapshot) map[history.MetricID]SectionStatus {
+	return map[history.MetricID]SectionStatus{
+		history.CPUUtilization:        statusFor(raw.CPU.State, raw.CPU.ReasonCode, raw.ObservedAt),
+		history.MemoryUtilization:     statusFor(raw.Memory.State, raw.Memory.ReasonCode, raw.ObservedAt),
+		history.FilesystemUtilization: statusFor(raw.Filesystems.State, raw.Filesystems.ReasonCode, raw.ObservedAt),
+		history.NetworkReceiveRate:    statusFor(raw.Network.State, raw.Network.ReasonCode, raw.ObservedAt),
+		history.NetworkTransmitRate:   statusFor(raw.Network.State, raw.Network.ReasonCode, raw.ObservedAt),
+		history.ProcessCount:          statusFor(raw.Processes.State, raw.Processes.ReasonCode, raw.ObservedAt),
+	}
+}
+
+func RecomputeCollectionState(current CurrentSnapshot) CurrentSnapshot {
+	sections := current.Sections
+	current.CollectionState = projectedCollectionState(sections.Overview.SectionStatus, sections.Filesystems.SectionStatus, sections.Processes.SectionStatus, sections.Services.SectionStatus, sections.Containers.SectionStatus, sections.Logs.SectionStatus, sections.Observer.SectionStatus)
+	return current
 }
 
 func projectFilesystems(raw observation.Snapshot) FilesystemSection {
@@ -212,6 +261,10 @@ func listStatus(status SectionStatus, quality observation.SectionQuality) ListSt
 
 func unsupportedSection(reason string) EmptySection {
 	return EmptySection{ListStatus: ListStatus{SectionStatus: stateWithReason("UNSUPPORTED", reason)}, Items: []any{}}
+}
+
+func unsupportedObserverSection(reason string) ObserverSection {
+	return ObserverSection{ListStatus: ListStatus{SectionStatus: stateWithReason("UNSUPPORTED", reason)}, Items: []ObserverSignal{}}
 }
 
 func statusFor(state observation.SupportState, reason observation.ReasonCode, observed time.Time) SectionStatus {
@@ -299,6 +352,7 @@ func reasonString(reason observation.ReasonCode, fallback string) string {
 		return '_'
 	}, string(reason))
 }
+func stringPtr(value string) *string     { return &value }
 func timePtr(value time.Time) *time.Time { return &value }
 func normalizedOS(value string) string {
 	if value == "linux" || value == "windows" || value == "darwin" {

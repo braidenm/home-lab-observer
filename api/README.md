@@ -1,13 +1,16 @@
 # Public local API
 
 [`openapi.v1.json`](openapi.v1.json) is the canonical OpenAPI 3.1 contract for the first local read-only surface. It
-defines authenticated capability and current-snapshot reads plus detail-free health probes. The declared server is
+defines authenticated capability, current-snapshot, and bounded metric-series reads plus detail-free health probes. The declared server is
 explicit loopback; the future runtime must validate Host and Origin, emit no CORS grant, and require a separate
 authenticated TLS design before any non-loopback listener exists.
 
 The first contract intentionally has no configuration, collection, upload, enrollment, action, shell, file, log-source,
 or lifecycle mutation route. `GET /api/v1/snapshots/current` supports only code-owned section names and bounded process,
 container, and log limits. Response ceilings are 128 KiB for capabilities and 1 MiB for a current snapshot.
+`GET /api/v1/metrics/series` requires one of four fixed ranges and one to six repeated, code-owned metric identifiers;
+its response ceiling is 1 MiB. It exposes UTC values with explicit null gaps and the actual sample interval, not an
+arbitrary metric query language.
 
 Schemas live under [`../schemas/v1`](../schemas/v1). Run `npm test` to validate OpenAPI, schemas, fixtures, privacy
 canaries, read-only semantics, bounds, and requirements traceability.

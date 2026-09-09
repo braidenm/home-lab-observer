@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:home-lab-observer:schema:metric-series:v1",
+  "title": "Home Lab Observer metric series v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "range", "generated_at", "window_start", "window_end", "sample_interval_seconds", "limits", "privacy", "requested_metrics", "series"],
+  "properties": {
+    "schema_version": { "const": "observer-metric-series/v1" },
+    "range": { "$ref": "#/$defs/range" },
+    "generated_at": { "type": "string", "format": "date-time", "pattern": "Z$" },
+    "window_start": { "type": "string", "format": "date-time", "pattern": "Z$" },
+    "window_end": { "type": "string", "format": "date-time", "pattern": "Z$" },
+    "sample_interval_seconds": { "type": "integer", "minimum": 1, "maximum": 86400 },
+    "limits": {
+      "type": "object", "additionalProperties": false,
+      "required": ["max_metrics", "max_points_per_series", "max_response_bytes"],
+      "properties": {
+        "max_metrics": { "const": 6 },
+        "max_points_per_series": { "const": 2048 },
+        "max_response_bytes": { "const": 1048576 }
+      }
+    },
+    "privacy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["data_classification", "contains_process_identity", "contains_log_bodies", "remote_upload_eligible"],
+      "properties": {
+        "data_classification": { "const": "PUBLIC_METADATA" },
+        "contains_process_identity": { "const": false },
+        "contains_log_bodies": { "const": false },
+        "remote_upload_eligible": { "const": false }
+      }
+    },
+    "requested_metrics": {
+      "type": "array", "minItems": 1, "maxItems": 6, "uniqueItems": true,
+      "items": { "$ref": "#/$defs/metricId" }
+    },
+    "series": {
+      "type": "array", "minItems": 1, "maxItems": 6, "uniqueItems": true,
+      "items": { "$ref": "#/$defs/series" }
+    }
+  },
+  "$defs": {
+    "range": { "enum": ["1h", "6h", "24h", "7d"] },
+    "metricId": {
+      "enum": [
+        "cpu.utilization.percent",
+        "memory.utilization.percent",
+        "filesystem.aggregate.utilization.percent",
+        "network.receive.bytes_per_second",
+        "network.transmit.bytes_per_second",
+        "process.count"
+      ]
+    },
+    "supportState": { "enum": ["SUPPORTED", "DISABLED", "UNAVAILABLE", "PERMISSION_DENIED", "UNSUPPORTED"] },
+    "collectionState": { "enum": ["OK", "PARTIAL", "FAILED", "NOT_RUN"] },
+    "freshness": { "enum": ["CURRENT", "STALE", "UNKNOWN"] },
+    "reasonCode": { "type": ["string", "null"], "minLength": 1, "maxLength": 64, "pattern": "^[A-Z0-9_]+$" },
+    "point": {
+      "type": "object", "additionalProperties": false,
+      "required": ["at", "value"],
+      "properties": {
+        "at": { "type": "string", "format": "date-time", "pattern": "Z$" },
+        "value": { "oneOf": [{ "type": "number", "minimum": 0 }, { "type": "null" }] }
+      }
+    },
+    "series": {
+      "type": "object", "additionalProperties": false,
+      "required": ["metric_id", "unit", "support_state", "collection_state", "freshness", "reason_code", "point_count", "gap_count", "truncated", "points"],
+      "properties": {
+        "metric_id": { "$ref": "#/$defs/metricId" },
+        "unit": { "enum": ["percent", "bytes_per_second", "count"] },
+        "support_state": { "$ref": "#/$defs/supportState" },
+        "collection_state": { "$ref": "#/$defs/collectionState" },
+        "freshness": { "$ref": "#/$defs/freshness" },
+        "reason_code": { "$ref": "#/$defs/reasonCode" },
+        "point_count": { "type": "integer", "minimum": 0, "maximum": 2048 },
+        "gap_count": { "type": "integer", "minimum": 0, "maximum": 2048 },
+        "truncated": { "type": "boolean" },
+        "points": { "type": "array", "maxItems": 2048, "items": { "$ref": "#/$defs/point" } }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "metric_id": { "enum": ["cpu.utilization.percent", "memory.utilization.percent", "filesystem.aggregate.utilization.percent"] } }, "required": ["metric_id"] },
+          "then": { "properties": { "unit": { "const": "percent" }, "points": { "items": { "properties": { "value": { "oneOf": [{ "type": "number", "minimum": 0, "maximum": 100 }, { "type": "null" }] } } } } } }
+        },
+        {
+          "if": { "properties": { "metric_id": { "enum": ["network.receive.bytes_per_second", "network.transmit.bytes_per_second"] } }, "required": ["metric_id"] },
+          "then": { "properties": { "unit": { "const": "bytes_per_second" } } }
+        },
+        {
+          "if": { "properties": { "metric_id": { "const": "process.count" } }, "required": ["metric_id"] },
+          "then": { "properties": { "unit": { "const": "count" }, "points": { "items": { "properties": { "value": { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] } } } } } }
+        },
+        {
+          "if": { "properties": { "support_state": { "not": { "const": "SUPPORTED" } } }, "required": ["support_state"] },
+          "then": { "properties": { "collection_state": { "const": "NOT_RUN" }, "freshness": { "const": "UNKNOWN" }, "reason_code": { "type": "string" }, "point_count": { "const": 0 }, "gap_count": { "const": 0 }, "truncated": { "const": false }, "points": { "maxItems": 0 } } }
+        }
+      ]
+    }
+  }
+}

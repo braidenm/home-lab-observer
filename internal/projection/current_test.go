@@ -46,12 +46,42 @@ func TestCurrentMatchesSchemaValidatedFixture(t *testing.T) {
 	}
 }
 
+func TestOverviewDoesNotExposeDeniedData(t *testing.T) {
+	raw := observation.Snapshot{
+		CPU:    observation.Section[observation.CPU]{State: observation.Available, Data: &observation.CPU{LogicalCPUs: 4}},
+		Memory: observation.Section[observation.Memory]{State: observation.PermissionDenied, Data: &observation.Memory{TotalBytes: 100}},
+		Uptime: observation.Section[observation.Uptime]{State: observation.Available, Data: &observation.Uptime{}},
+	}
+	result := Current(raw, SystemInfo{})
+	if result.Sections.Overview.Data != nil || result.Sections.Overview.SupportState != "PERMISSION_DENIED" {
+		t.Fatalf("denied data exposed: %+v", result.Sections.Overview)
+	}
+}
+
+func TestRecomputeSelectedCollectionState(t *testing.T) {
+	current := CurrentSnapshot{CollectionState: "PARTIAL"}
+	current.Sections.Overview.SectionStatus = SectionStatus{SupportState: "SUPPORTED", CollectionState: "OK"}
+	current.Sections.Processes.SectionStatus = SectionStatus{SupportState: "DISABLED", CollectionState: "NOT_RUN"}
+	current.Sections.Filesystems.SectionStatus = SectionStatus{SupportState: "DISABLED", CollectionState: "NOT_RUN"}
+	current.Sections.Services.SectionStatus = SectionStatus{SupportState: "UNSUPPORTED", CollectionState: "NOT_RUN"}
+	current.Sections.Containers.SectionStatus = current.Sections.Services.SectionStatus
+	current.Sections.Logs.SectionStatus = current.Sections.Services.SectionStatus
+	current.Sections.Observer.SectionStatus = current.Sections.Filesystems.SectionStatus
+	if got := RecomputeCollectionState(current).CollectionState; got != "OK" {
+		t.Fatalf("selected healthy state=%s", got)
+	}
+}
+
 func TestUnsupportedSectionsAreEmptyAndHonest(t *testing.T) {
 	snapshot := Current(observation.Snapshot{ObservedAt: time.Unix(0, 0), Quality: observation.Quality{State: observation.Failed}}, SystemInfo{})
-	for name, section := range map[string]EmptySection{"services": snapshot.Sections.Services, "containers": snapshot.Sections.Containers, "logs": snapshot.Sections.Logs, "observer": snapshot.Sections.Observer} {
+	for name, section := range map[string]EmptySection{"services": snapshot.Sections.Services, "containers": snapshot.Sections.Containers, "logs": snapshot.Sections.Logs} {
 		if section.SupportState != "UNSUPPORTED" || section.CollectionState != "NOT_RUN" || section.Items == nil || len(section.Items) != 0 {
 			t.Fatalf("%s=%+v", name, section)
 		}
+	}
+	observer := snapshot.Sections.Observer
+	if observer.SupportState != "UNSUPPORTED" || observer.CollectionState != "NOT_RUN" || observer.Items == nil || len(observer.Items) != 0 {
+		t.Fatalf("observer=%+v", observer)
 	}
 }
 

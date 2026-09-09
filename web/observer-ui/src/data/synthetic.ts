@@ -99,17 +99,33 @@ export const syntheticSnapshot: CurrentSnapshot = {
   }
 };
 
-const trendPoints = (values: number[]) => values.map((value, index) => ({ at: before((values.length - index - 1) * 30), value }));
+const trendPoints = (values: Array<number | null>) => values.map((value, index) => ({ at: before((values.length - index - 1) * 30), value }));
 export const syntheticTrends: TrendSnapshot = {
-  range: "6h", sampledEverySeconds: 1_800,
+  schemaVersion: "observer-metric-series/v1",
+  range: "6h",
+  generatedAt: observedAt,
+  windowStart: before(360),
+  windowEnd: observedAt,
+  sampleIntervalSeconds: 1_800,
+  limits: { maxMetrics: 6, maxPointsPerSeries: 2048, maxResponseBytes: 1048576 },
+  privacy: { dataClassification: "PUBLIC_METADATA", containsProcessIdentity: false, containsLogBodies: false, remoteUploadEligible: false },
+  requestedMetrics: ["memory.utilization.percent", "filesystem.aggregate.utilization.percent"],
   series: [
-    { id: "memory", label: "Memory utilization", unit: "%", color: "cyan", points: trendPoints([59, 60, 61, 61, 62, 63, 65, 65, 66, 67, 68, 68]) },
-    { id: "storage", label: "Storage utilization", unit: "%", color: "amber", points: trendPoints([70, 70.4, 70.9, 71.2, 71.7, 72.1, 72.8, 73, 73.5, 74, 74.3, 74.6]) }
+    { id: "memory.utilization.percent", label: "Memory utilization", unit: "percent", color: "cyan", supportState: "SUPPORTED", collectionState: "PARTIAL", freshness: "CURRENT", reasonCode: "SAMPLE_GAP", pointCount: 12, gapCount: 1, truncated: false, points: trendPoints([59, 60, 61, null, 62, 63, 65, 65, 66, 67, 68, 68]) },
+    { id: "filesystem.aggregate.utilization.percent", label: "Aggregate filesystem utilization", unit: "percent", color: "amber", supportState: "SUPPORTED", collectionState: "OK", freshness: "CURRENT", reasonCode: null, pointCount: 12, gapCount: 0, truncated: false, points: trendPoints([70, 70.4, 70.9, 71.2, 71.7, 72.1, 72.8, 73, 73.5, 74, 74.3, 74.6]) }
   ]
 };
 
 export class SyntheticObserverDataSource implements ObserverDataSource {
   async getCapabilities(): Promise<ObserverCapabilities> { return structuredClone(syntheticCapabilities); }
   async getCurrentSnapshot(): Promise<CurrentSnapshot> { return structuredClone(syntheticSnapshot); }
-  async getTrends(range: TrendRange): Promise<TrendSnapshot> { return { ...structuredClone(syntheticTrends), range }; }
+  async getTrends(range: TrendRange): Promise<TrendSnapshot> {
+    const seconds = { "1h": 3600, "6h": 21600, "24h": 86400, "7d": 604800 }[range];
+    const windowStart = new Date(Date.parse(observedAt) - seconds * 1000).toISOString();
+    const series = structuredClone(syntheticTrends.series).map((item) => {
+      const points = item.points.filter((point) => Date.parse(point.at) >= Date.parse(windowStart));
+      return { ...item, points, pointCount: points.length, gapCount: points.filter((point) => point.value === null).length };
+    });
+    return { ...structuredClone(syntheticTrends), range, windowStart, series };
+  }
 }

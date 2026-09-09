@@ -6,5 +6,6 @@
 | [002](002-api-first-local-dashboard.md) | Accepted | Same-origin loopback dashboard and API-driven Platform Demo integration |
 | [003](003-bounded-observations-and-logs.md) | Accepted | Bounded SQLite observations with privacy-preserving log defaults |
 | [004](004-independent-release-supply-chain.md) | Accepted | New package identity, native artifacts, attestations, and safe migration |
+| [005](005-local-service-and-history.md) | Accepted | Authenticated foreground service with bounded history and embedded assets |
 
 Accepted ADRs are immutable except for status and supersession links. Material changes require a new ADR.

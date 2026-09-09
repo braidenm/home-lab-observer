@@ -154,6 +154,11 @@
 .observer-table tbody th small { display: block; max-width: 260px; overflow: hidden; margin-top: 4px; color: var(--observer-muted); font: 500 9px ui-monospace, SFMono-Regular, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .observer-table tbody tr:hover { background: rgb(99 230 180 / 3%); }
 .observer-table-note { margin: 0; padding: 12px 20px 15px; }
+.observer-chart__point { stroke-linecap: round; stroke-width: 5px; }
+.observer-table-scroll[aria-label="Observer signals table"] .observer-table { min-width: 0; table-layout: fixed; }
+.observer-table-scroll[aria-label="Observer signals table"] .observer-table th,
+.observer-table-scroll[aria-label="Observer signals table"] .observer-table td { padding: 14px 12px; overflow-wrap: anywhere; }
+.observer-table-scroll[aria-label="Observer signals table"] .observer-table th:first-child { width: 52%; }
 .observer-empty { margin: 0; padding: 28px 20px; text-align: center; }
 
 .observer-privacy-callout { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 16px; padding: 18px 20px; border: 1px solid rgb(242 180 95 / 30%); border-radius: 14px; background: rgb(242 180 95 / 6%); }

@@ -1,6 +1,7 @@
 import { useId } from "react";
 import type { TrendSeries } from "../types";
 import { formatValue } from "./format";
+import { StateBadge } from "./StateBadge";
 
 export function TrendChart({ series }: { series: TrendSeries }) {
   const id = useId();
@@ -9,6 +10,7 @@ export function TrendChart({ series }: { series: TrendSeries }) {
   const max = values.length > 0 ? Math.max(...values) : 1;
   const span = Math.max(max - min, 1);
   const paths: string[] = [];
+  const isolated: Array<{ x: number; y: number }> = [];
   let currentPath = "";
   series.points.forEach((point, index) => {
     if (point.value === null) {
@@ -16,8 +18,9 @@ export function TrendChart({ series }: { series: TrendSeries }) {
       currentPath = "";
       return;
     }
-    const x = series.points.length === 1 ? 50 : (index / (series.points.length - 1)) * 100;
+    const x = series.points.length === 1 ? 50 : 2 + (index / (series.points.length - 1)) * 96;
     const y = 92 - ((point.value - min) / span) * 74;
+    if (series.points[index - 1]?.value == null && series.points[index + 1]?.value == null) isolated.push({ x, y });
     currentPath += `${currentPath ? " L" : "M"}${x.toFixed(2)},${y.toFixed(2)}`;
   });
   if (currentPath) paths.push(currentPath);
@@ -30,7 +33,7 @@ export function TrendChart({ series }: { series: TrendSeries }) {
           <p className="observer-eyebrow">{series.label}</p>
           <strong>{formatValue(current, series.unit)}</strong>
         </div>
-        <StateKey color={series.color} />
+        <div><StateBadge state={series.supportState} /><StateKey color={series.color} /></div>
       </div>
       <svg
         className={`observer-chart observer-chart--${series.color}`}
@@ -47,11 +50,13 @@ export function TrendChart({ series }: { series: TrendSeries }) {
         <line x1="0" y1="58" x2="100" y2="58" className="observer-chart__grid" />
         <line x1="0" y1="92" x2="100" y2="92" className="observer-chart__grid" />
         {paths.map((path, index) => <path key={index} d={path} className="observer-chart__line" />)}
+        {isolated.map((point, index) => <path key={`point-${index}`} d={`M${point.x},${point.y} l0.01,0`} className="observer-chart__line observer-chart__point" />)}
       </svg>
       <div className="observer-chart-card__range" aria-hidden="true">
         <span>Earlier</span>
         <span>Now</span>
       </div>
+      <p className="observer-muted">{values.length} observed {values.length === 1 ? "point" : "points"} · {series.gapCount} gaps{series.truncated ? " · response truncated" : ""}{series.reasonCode ? ` · ${series.reasonCode.replaceAll("_", " ").toLowerCase()}` : ""}</p>
     </article>
   );
 }
