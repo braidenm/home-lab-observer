@@ -58,6 +58,7 @@ exits 1 but cannot guarantee a complete JSON document.
 - [Run and manage the local preview](docs/local-service.md)
 - [Enable and understand Docker observations](docs/container-observations.md)
 - [Download, verify, install and manage native previews](docs/install.md)
+- [How native releases are built and verified](docs/releasing.md)
 
 ## Supported delivery targets
 
