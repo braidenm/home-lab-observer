@@ -104,11 +104,22 @@ function Test-NormalizedElement($Node,[string]$LogicalPath) {
   return (Get-DirectText $Node) -ceq $expected
 }
 function Get-ComparableChildren($Node,[string]$LogicalPath) {
+  $children=@()
   foreach ($child in @($Node.ChildNodes)) {
     if ($child.NodeType -ne [Xml.XmlNodeType]::Element) { continue }
     $childPath=$LogicalPath+'/'+[string]$child.LocalName
-    if (-not (Test-NormalizedElement $child $childPath)) { Write-Output $child }
+    if (-not (Test-NormalizedElement $child $childPath)) { $children += $child }
   }
+  if ($LogicalPath -ceq 'Task') {
+    $allowed=@('RegistrationInfo','Triggers','Settings','Data','Principals','Actions')
+    $seen=@{}
+    foreach ($child in $children) {
+      if ([string]$child.NamespaceURI -cne 'http://schemas.microsoft.com/windows/2004/02/mit/task' -or $allowed -cnotcontains [string]$child.LocalName -or $seen.ContainsKey([string]$child.LocalName)) { return $children }
+      $seen[[string]$child.LocalName]=$true
+    }
+    if ($seen.ContainsKey('Actions')) { return @($children | Sort-Object @{Expression={[string]$_.LocalName}}) }
+  }
+  return $children
 }
 function Get-SafeName([string]$Name) {
   if ($Name -cmatch '^[A-Za-z][A-Za-z0-9._-]{0,63}$') { return $Name }

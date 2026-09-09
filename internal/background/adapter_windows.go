@@ -26,6 +26,11 @@ type windowsAdapter struct {
 	root   string
 }
 
+type taskChildSpan struct {
+	name       string
+	start, end int
+}
+
 func launcherName() string { return "observer.cmd" }
 
 func newPlatformAdapter(runner commandRunner, root string) (platformAdapter, error) {
@@ -109,16 +114,41 @@ func canonicalTaskXML(value []byte) ([]string, error) {
 	var elements []xml.Name
 	registrationURISeen := false
 	defaultFieldsSeen := make(map[string]bool)
+	rootTask := false
+	directChildCounts := make(map[string]int)
+	var directChildren []taskChildSpan
+	openDirectChild := taskChildSpan{start: -1}
 	for {
 		token, err := decoder.Token()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
+				if len(elements) != 0 {
+					return nil, errors.New("task XML element nesting is incomplete")
+				}
+				if rootTask {
+					return canonicalizeDirectTaskChildren(tokens, directChildren, directChildCounts)
+				}
 				return tokens, nil
 			}
 			return nil, err
 		}
 		switch typed := token.(type) {
 		case xml.StartElement:
+			if len(elements) == 0 {
+				if len(tokens) != 0 {
+					return nil, errors.New("task XML contains multiple roots")
+				}
+				rootTask = typed.Name.Space == taskXMLNamespace && typed.Name.Local == "Task"
+			} else if rootTask && len(elements) == 1 {
+				if typed.Name.Space != taskXMLNamespace || !allowedDirectTaskChild(typed.Name.Local) {
+					return nil, errors.New("task XML contains an unknown direct task child")
+				}
+				directChildCounts[typed.Name.Local]++
+				if directChildCounts[typed.Name.Local] != 1 {
+					return nil, errors.New("task XML contains a duplicate direct task child")
+				}
+				openDirectChild = taskChildSpan{name: typed.Name.Local, start: len(tokens)}
+			}
 			if isTaskRegistrationURI(elements, typed.Name) {
 				if registrationURISeen {
 					return nil, errors.New("task XML contains duplicate registration URI metadata")
@@ -151,13 +181,57 @@ func canonicalTaskXML(value []byte) ([]string, error) {
 				return nil, errors.New("task XML element nesting is invalid")
 			}
 			tokens = append(tokens, "</"+typed.Name.Space+"|"+typed.Name.Local+">")
+			if rootTask && len(elements) == 2 {
+				openDirectChild.end = len(tokens)
+				directChildren = append(directChildren, openDirectChild)
+				openDirectChild = taskChildSpan{start: -1}
+			}
 			elements = elements[:len(elements)-1]
 		case xml.CharData:
 			if text := strings.TrimSpace(string(typed)); text != "" {
+				if rootTask && len(elements) == 1 {
+					return nil, errors.New("task XML contains direct task text")
+				}
 				tokens = append(tokens, "="+text)
 			}
 		}
 	}
+}
+
+func allowedDirectTaskChild(name string) bool {
+	switch name {
+	case "RegistrationInfo", "Triggers", "Settings", "Data", "Principals", "Actions":
+		return true
+	default:
+		return false
+	}
+}
+
+// taskType uses xs:all, so Task Scheduler may persist the direct children in
+// any order. Normalize that one confirmed schema boundary while keeping each
+// entire child subtree, including its order, values and attributes, exact.
+func canonicalizeDirectTaskChildren(tokens []string, children []taskChildSpan, counts map[string]int) ([]string, error) {
+	if len(tokens) < 2 || counts["Actions"] != 1 || len(children) == 0 {
+		return nil, errors.New("task XML is missing its required action")
+	}
+	cursor := 1
+	for _, child := range children {
+		if child.start != cursor || child.end <= child.start || child.end > len(tokens)-1 {
+			return nil, errors.New("task XML direct child boundaries are invalid")
+		}
+		cursor = child.end
+	}
+	if cursor != len(tokens)-1 {
+		return nil, errors.New("task XML contains content outside direct task children")
+	}
+	sort.Slice(children, func(left, right int) bool { return children[left].name < children[right].name })
+	canonical := make([]string, 0, len(tokens))
+	canonical = append(canonical, tokens[0])
+	for _, child := range children {
+		canonical = append(canonical, tokens[child.start:child.end]...)
+	}
+	canonical = append(canonical, tokens[len(tokens)-1])
+	return canonical, nil
 }
 
 // Task Scheduler omits these exact default-valued fields when it persists a

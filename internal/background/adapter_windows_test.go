@@ -155,6 +155,68 @@ func TestWindowsSavedTaskMayOmitOnlyExactKnownDefaults(t *testing.T) {
 	}
 }
 
+func TestWindowsSavedTaskMayReorderOnlyDirectTaskChildren(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "Home Lab Observer")
+	adapter, err := newPlatformAdapter(nil, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition, err := adapter.registration(Settings{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := string(definition.content)
+	reordered := swapXMLSections(t, original, "Triggers", "Principals")
+	if !validTaskXML(reordered, definition.content) {
+		t.Fatal("schema-valid direct Task child reordering was rejected")
+	}
+
+	actions := xmlSection(t, original, "Actions")
+	for name, changed := range map[string]string{
+		"duplicate known child": strings.Replace(original, "</Task>", xmlSection(t, original, "Triggers")+"\n</Task>", 1),
+		"unknown child":         strings.Replace(original, "</Task>", "<Unknown/>\n</Task>", 1),
+		"missing actions":       strings.Replace(original, actions, "", 1),
+		"duplicate actions":     strings.Replace(original, "</Task>", actions+"\n</Task>", 1),
+		"nested reorder":        swapXMLSections(t, original, "StopOnIdleEnd", "RestartOnIdle"),
+		"changed namespace":     strings.Replace(original, taskXMLNamespace, "urn:unexpected-task", 1),
+		"direct task text":      strings.Replace(original, "<RegistrationInfo>", "unexpected<RegistrationInfo>", 1),
+		"multiple roots":        original + strings.Replace(original, `<?xml version="1.0"?>`, "", 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if validTaskXML(changed, definition.content) {
+				t.Fatal("non-owned task structure was accepted")
+			}
+		})
+	}
+}
+
+func xmlSection(t *testing.T, value, name string) string {
+	t.Helper()
+	start := strings.Index(value, "<"+name)
+	if start < 0 {
+		t.Fatalf("opening %s element is missing", name)
+	}
+	endMarker := "</" + name + ">"
+	endOffset := strings.Index(value[start:], endMarker)
+	if endOffset < 0 {
+		t.Fatalf("closing %s element is missing", name)
+	}
+	return value[start : start+endOffset+len(endMarker)]
+}
+
+func swapXMLSections(t *testing.T, value, firstName, secondName string) string {
+	t.Helper()
+	first := xmlSection(t, value, firstName)
+	second := xmlSection(t, value, secondName)
+	firstStart := strings.Index(value, first)
+	secondStart := strings.Index(value, second)
+	if firstStart < 0 || secondStart < 0 || firstStart >= secondStart {
+		t.Fatalf("fixture elements %s and %s are not in the expected order", firstName, secondName)
+	}
+	between := value[firstStart+len(first) : secondStart]
+	return value[:firstStart] + second + between + first + value[secondStart+len(second):]
+}
+
 func replaceOccurrence(t *testing.T, value, old string, occurrence int, replacement string) string {
 	t.Helper()
 	start := 0
