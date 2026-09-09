@@ -46,7 +46,8 @@ try {
   cleanupConfirmed = verifyDisabled();
   assert(cleanupConfirmed, "normal disable did not remove the managed registration");
 } catch (error) {
-  primaryFailure = error;
+  const shape = queryFixedTaskXMLShape();
+  primaryFailure = new Error(`${error instanceof Error ? error.message : "Windows manager smoke failed"}; task_xml_shape=${JSON.stringify(shape)}`);
 } finally {
   if (enableAttempted && !cleanupConfirmed) {
     try {
@@ -66,6 +67,88 @@ try {
 assert(cleanupConfirmed, `Windows manager cleanup could not be verified; isolated evidence was preserved at ${temporary}`);
 if (primaryFailure) throw primaryFailure;
 console.log("Windows user-manager smoke passed enable, status, graceful stop, restart, and verified disable.");
+
+function fixedTaskXMLShapeScript() {
+  return String.raw`
+$ErrorActionPreference='Stop'
+try {
+  $service=New-Object -ComObject 'Schedule.Service'
+  $service.Connect()
+  $task=$service.GetFolder('\').GetTask('\Home Lab Observer')
+  $raw=[string]$task.Xml
+  $hasDeclaration=$raw.TrimStart().StartsWith('<?xml')
+  [xml]$document=$raw
+  $elementCounts=@{}
+  $attributeCounts=@{}
+  $nodes=@($document.SelectNodes('//*'))
+  foreach ($node in $nodes) {
+    $elementName=[string]$node.LocalName
+    if ($elementName -notmatch '^[A-Za-z][A-Za-z0-9._-]{0,63}$') { throw 'unsafe element name' }
+    if ($elementCounts.ContainsKey($elementName)) { $elementCounts[$elementName]++ } else { $elementCounts[$elementName]=1 }
+    foreach ($attribute in @($node.Attributes)) {
+      $attributeName=[string]$attribute.LocalName
+      if ($attributeName -notmatch '^[A-Za-z][A-Za-z0-9._-]{0,63}$') { throw 'unsafe attribute name' }
+      $key=$elementName+'|'+$attributeName
+      if ($attributeCounts.ContainsKey($key)) { $attributeCounts[$key]++ } else { $attributeCounts[$key]=1 }
+    }
+  }
+  $elements=@($elementCounts.GetEnumerator() | Sort-Object Name | ForEach-Object { [ordered]@{name=[string]$_.Name; count=[int]$_.Value} })
+  $attributes=@($attributeCounts.GetEnumerator() | Sort-Object Name | ForEach-Object {
+    $parts=([string]$_.Name).Split('|',2)
+    [ordered]@{element=$parts[0]; name=$parts[1]; count=[int]$_.Value}
+  })
+  [ordered]@{code='TASK_XML_SHAPE_AVAILABLE'; xml_declaration=[bool]$hasDeclaration; element_count=[int]$nodes.Count; elements=$elements; attributes=$attributes} | ConvertTo-Json -Compress -Depth 4
+} catch {
+  $code=if (($_.Exception.HResult -band 0xffff) -eq 2) {'TASK_XML_TASK_MISSING'} else {'TASK_XML_QUERY_FAILED'}
+  [ordered]@{code=$code} | ConvertTo-Json -Compress
+}
+`;
+}
+
+function queryFixedTaskXMLShape() {
+  try {
+    const output = execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", fixedTaskXMLShapeScript()], {
+      encoding: "utf8",
+      maxBuffer: 16_384,
+      timeout: 15_000,
+      windowsHide: true,
+    });
+    assert(Buffer.byteLength(output, "utf8") <= 16_384, "task XML shape output exceeded its fixed bound");
+    return validateTaskXMLShape(JSON.parse(output));
+  } catch {
+    return { code: "TASK_XML_QUERY_FAILED" };
+  }
+}
+
+function validateTaskXMLShape(value) {
+  assert(value && typeof value === "object" && !Array.isArray(value), "task XML shape must be an object");
+  const allowedCodes = new Set(["TASK_XML_SHAPE_AVAILABLE", "TASK_XML_TASK_MISSING", "TASK_XML_QUERY_FAILED"]);
+  assert(allowedCodes.has(value.code), "task XML shape returned an unknown code");
+  if (value.code !== "TASK_XML_SHAPE_AVAILABLE") {
+    assert.deepEqual(Object.keys(value), ["code"], "unavailable task XML shape returned extra data");
+    return { code: value.code };
+  }
+  assert.deepEqual(Object.keys(value).sort(), ["attributes", "code", "element_count", "elements", "xml_declaration"], "task XML shape changed");
+  assert.equal(typeof value.xml_declaration, "boolean", "task XML declaration flag must be boolean");
+  assert(Number.isInteger(value.element_count) && value.element_count >= 1 && value.element_count <= 4096, "task XML element count is out of bounds");
+  assert(Array.isArray(value.elements) && value.elements.length <= 128, "task XML element summary is out of bounds");
+  assert(Array.isArray(value.attributes) && value.attributes.length <= 128, "task XML attribute summary is out of bounds");
+  const namePattern = /^[A-Za-z][A-Za-z0-9._-]{0,63}$/;
+  const summarize = (entry, keys) => {
+    assert(entry && typeof entry === "object" && !Array.isArray(entry), "task XML summary entry must be an object");
+    assert.deepEqual(Object.keys(entry).sort(), [...keys].sort(), "task XML summary entry changed");
+    for (const key of keys.filter((key) => key !== "count")) assert(namePattern.test(entry[key]), "task XML summary name is unsafe");
+    assert(Number.isInteger(entry.count) && entry.count >= 1 && entry.count <= 4096, "task XML summary count is out of bounds");
+    return Object.fromEntries(keys.map((key) => [key, entry[key]]));
+  };
+  return {
+    code: value.code,
+    xml_declaration: value.xml_declaration,
+    element_count: value.element_count,
+    elements: value.elements.map((entry) => summarize(entry, ["name", "count"])),
+    attributes: value.attributes.map((entry) => summarize(entry, ["element", "name", "count"])),
+  };
+}
 
 function requiredPath(name) {
   const value = process.env[name];
