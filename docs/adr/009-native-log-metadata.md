@@ -17,17 +17,24 @@ Linux system logs use journalctl 242+ selected-field output. macOS remains expli
 Bodies are never acquired or exposed by this slice. Native source authority is unchanged: no elevation, new group
 membership, user-selected path/channel/query, shell, remote host or arbitrary command API.
 
+Log work starts immediately and then every 60 seconds in a separate scheduler-owned single-flight lane. It cannot
+block, delay or reschedule the existing 15-second host snapshot cycle. API requests consume cache/store views only.
+
 Windows reads use a bounded hidden helper invocation of the same verified binary. The child pins its query to its
 creating thread, returns a closed metadata batch and cannot write history. The parent enforces the deadline and reaps
-the child. Linux checkpoints travel through private per-attempt cursor files, not visible process arguments. Neither
-helper output nor journalctl's temporary cursor file is durable progress.
+the child. Linux checkpoint values travel through private per-attempt cursor files rather than argv; only the fixed,
+code-owned temporary path is visible there. Neither helper output nor journalctl's temporary cursor file is durable progress.
 
-The store atomically commits fixed source/severity rollups, attempt coverage and a checkpoint revision. Revision
+The store atomically commits compact minute source/severity rollups, coalesced attempt coverage, latest attempt state
+and a checkpoint revision. It does not persist one row per poll. Revision
 compare-and-swap prevents replayed batches from incrementing counts twice; an uncertain commit is resolved by rereading
-the revision. Stale checkpoint reset establishes a new tail without recounting its reset window. Coverage uses caught-up
-query-start time and remains separate from event-time histogram counts. Unknown loss is a gap, never an invented number.
+the revision. A stale checkpoint discloses a gap and stays unchanged unless a documented native metadata-only operation
+can prove a new tail cursor without acquiring or counting reset-window records. Coverage uses caught-up query-start time
+and remains separate from event-time histogram counts. Unknown loss is a gap, never an invented number.
 
-Recent event codes live only in a bounded memory ring. Persist no raw messages, provider names, paths, identities,
+Recent event codes live only in one 200-record process-memory/session ring. Current counts describe that ring, not
+persisted history; a restart can therefore retain summary history while the current list is empty. Persist no raw
+messages, provider names, paths, identities,
 message hashes or unbounded facets. Retain rollups within the existing seven-day/250 MiB store budget. API requests read
 cached/store views; they never trigger native acquisition. An optional summary source lets other clients reuse the UI.
 The current log contract remains compatible, with bodies OMITTED and remote upload ineligible.
@@ -50,8 +57,11 @@ Synthetic native fixtures and secret canaries verify selected-field acquisition,
 cursor-file cleanup and no disabled calls. Tests cover atomic retries, reset gaps, retention, contract compatibility,
 current limits and responsive zero/unavailable presentation. Native CI must not print machine log contents.
 
-Disable sources to stop new acquisition. Ordinary retention removes old rollups. Document database migration and
-rollback compatibility before publication; never run two versions against the same live state directory.
+Keep the core database at SQLite `user_version=2`; add backward-compatible log tables and store a dedicated log metadata
+schema version in `store_metadata`. This lets the previous preview ignore additional tables instead of quarantining the
+database, but the old preview will not prune log rows. To roll back, disable native sources with the new binary, stop it,
+then start the old binary; never run both versions against the same live state directory. Ordinary shared retention
+removes old rollups while the new version is active.
 
 See [Spec 009](../../specs/009-native-log-metadata/spec.md), its
 [contract checkpoint](../../specs/009-native-log-metadata/review-decisions.md), and the

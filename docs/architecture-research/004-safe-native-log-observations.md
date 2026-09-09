@@ -44,7 +44,9 @@ addressing fields and the normalized model drops unrelated automatic fields. Nev
 unit/executable names or user/host identity. A controlled environment, output byte/line limits and a total deadline
 are required even with bounded row count. Reject binary/array/malformed fields. Missing manager, version, approved
 binary or access is explicit unavailable/unsupported; non-systemd and custom layouts are an initial gap. Require 242+
-for `--cursor-file`: pass the opaque cursor through a private per-attempt file rather than visible command arguments.
+for `--cursor-file`: pass the opaque cursor value through a private per-attempt file rather than placing the value in
+command arguments. The fixed option still exposes the code-owned temporary path in argv; that path contains no observed
+data and grants no arbitrary-file selection.
 That file is temporary, not the durable checkpoint; only our atomic database transaction advances durable progress.
 The [journal export format](https://systemd.io/JOURNAL_EXPORT_FORMATS/) explains why fields are not necessarily simple
 UTF-8 strings. One research fetch of the v255 page succeeded during independent review; a later root fetch failed.
@@ -62,16 +64,25 @@ implementation from a search snippet. Native test evidence is required before cl
 
 ## Meaningful presentation and data policy
 
-Use explicit source presets, default none. Current records contain UTC time, fixed source alias, normalized severity,
-bounded validated event code and an OMITTED body. Store only low-cardinality source/severity counts, collection coverage
-and a private continuation checkpoint; recent event codes remain a bounded in-memory ring. Do not persist identities,
-raw event XML/JSON, message hashes, bodies or high-cardinality provider/event-code dimensions.
+Use explicit source presets, default none. Run their immediate/60-second schedule in a single-flight lane independent
+of the 15-second host snapshot. Current records contain UTC time, exact source alias (`system` or Windows-only
+`application`), normalized severity,
+event code restricted to `WIN_<uint32>`, `WIN_<32-lowercase-hex-provider-guid>_<uint32>`,
+`SYSTEMD_<32-lowercase-hex-message-id>` or `SYSTEMD_PRIORITY_<0..7>`, and an OMITTED body. Store only low-cardinality
+source/severity counts, collection coverage
+and a private continuation checkpoint; recent event codes remain one bounded 200-record process-memory/session ring.
+Persist compact minute rollups, coalesced coverage and latest attempt state rather than every poll. Do not persist
+identities, raw event XML/JSON, message hashes, bodies or high-cardinality provider/event-code dimensions.
 
 The useful pattern from [Netdata's logs view](https://github.com/netdata/netdata/blob/master/integrations/logs/metadata.yaml)
 is a time histogram with source/severity facets. [Loki cardinality guidance](https://grafana.com/docs/loki/latest/get-started/labels/cardinality/)
 reinforces keeping stored dimensions small. Adopt those interpretation patterns, not unrestricted raw-log search.
 
-Show captured counts, disclosed drops, source status and gaps. A successful empty poll is a real captured zero;
+Show captured counts, disclosed drops, source status and gaps. Coverage and counts are independent: backlog events
+remain attributed to event time even when covered seconds are zero, and known counts survive GAP/UNKNOWN coverage.
+FULL/PARTIAL with positive coverage always has numeric counts, including proven zero. GAP/UNKNOWN counts are positive-
+known or null, never invented zero; null requires no known records and no coverage evidence. Invalid-timestamp discards
+belong to the attempt-time bucket. A successful empty poll is a real captured zero;
 unsupported, permission denied, storage failure or missed coverage is not zero. A latest failure must not erase useful
 historical counts or pretend the retained current ring is fresh. Each UI resource fails independently.
 
@@ -80,7 +91,8 @@ historical counts or pretend the retained current ring is fresh. Each UI resourc
 - **Can a UI parameter enable logs?** No. Only explicit local startup configuration enables fixed source presets;
   requests never add sources, execute queries, select files or acquire bodies.
 - **Can retries double-count?** Commit rollup and checkpoint atomically. Storage failure does not advance the cursor;
-  restart resumes the last committed cursor. Detect stale bookmarks and disclose a bounded reset window.
+  restart resumes the last committed cursor. An invalid/stale checkpoint discloses a gap and stays unchanged unless a
+  native, documented metadata-only mechanism can prove a new tail cursor; a bounded time window is not such proof.
 - **What if the OS produces too much?** Cap source work, accepted rows, bytes, time and in-memory records; expose drops
   and partial coverage, not a claim of total machine events. Native cancellation must reap processes/close handles.
 - **What is retained?** Seven days within the shared store budget. Bodies never enter this slice. Apply the same
@@ -88,9 +100,10 @@ historical counts or pretend the retained current ring is fresh. Each UI resourc
 - **How is this tested safely?** Synthetic native adapters with secret canaries prove only allowlisted fields can cross
   the boundary. Do not dump the developer's real host logs. Native CI checks supported/permission/unavailable outcomes
   without printing raw content. Test malformed rows, timeouts, overflow, checkpoint replay, transactional failure,
-  deep-cloned cache, nullable coverage and responsive histogram/filter behavior.
-- **How do I roll back?** Disable the source to stop new reads; ordinary retention removes stored rollups. Keep schema
-  migration backward compatibility explicit and never open a live SQLite file with another version independently.
+  deep-cloned cache, fixed coverage states, nullable count objects and responsive histogram/filter behavior.
+- **How do I roll back?** Keep core SQLite `user_version=2` and version additive log tables through `store_metadata`.
+  Disable sources with the new binary and stop it before starting the previous preview. The previous preview ignores
+  additive tables but does not prune them, so do not use it indefinitely or open the live file concurrently.
 
 ## Owner decisions and later scope
 

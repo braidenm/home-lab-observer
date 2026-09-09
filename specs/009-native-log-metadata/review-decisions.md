@@ -1,6 +1,6 @@
 # Contract checkpoint decisions from independent review
 
-Prepared on 2026-09-09 after a read-only review by `runtime_architecture`. These conservative defaults refine the
+Proposed on 2026-09-09 after a read-only review by `runtime_architecture`. These conservative defaults refine the
 metadata-only slice; they do not enable sources or expand authority. Incorporate them into the accepted ADR and
 executable contract before implementation begins, after Spec 008 merges.
 
@@ -10,17 +10,20 @@ executable contract before implementation begins, after Spec 008 merges.
    kills/waits on timeout; incomplete responses never commit. The child pins the query to its creating OS thread and
    orders cancellation, native-call completion and handle closure correctly. It has no SQLite write role or generic
    command/argument surface. This avoids pretending an in-process context instantly cancels WEVTAPI.
-2. **Linux baseline:** require journalctl 242+ and a fixed private per-attempt cursor file, not an opaque cursor in
-   process arguments. Never use that temporary file as durable progress: ignore its final cursor, remove it after the
-   attempt and atomically persist only the last accepted/fully examined record cursor in our database.
+2. **Linux baseline:** require journalctl 242+ and a fixed private per-attempt cursor file, not the opaque cursor value
+   in process arguments. The fixed `--cursor-file=<code-owned-path>` option necessarily exposes that non-observed
+   temporary path in argv. Never use that temporary file as durable progress: ignore its final cursor, remove it after
+   the attempt and atomically persist only the last accepted/fully examined record cursor in our database.
 3. **Atomic progress:** the batch carries expected checkpoint revision, start/finish times, normalized events, next
    checkpoint, examined/discarded counts, deferred/caught-up flags and stable state/reason. Commit event-time rollups,
    attempt coverage, checkpoint and incremented revision in one compare-and-swap transaction. An ambiguous outcome
    requires rereading the revision; no blind repeat increment.
-4. **Reset without duplicate counts:** an initial empty checkpoint may capture the last five minutes. An invalid/stale
-   checkpoint seeks a bounded last-five-minute window only to establish a new tail cursor, does not count reset-window
-   events, and records `CHECKPOINT_RESET` plus an unknown-size coverage gap. Reconstructing lost counts needs a later
-   deduplication/rebuild design. This is intentionally conservative and visible in the UI.
+4. **Reset without invented semantics:** an initial empty checkpoint may capture the last five minutes and may remain
+   cursorless when it returns no rows. An invalid/stale checkpoint records `CHECKPOINT_RESET` plus an unknown-size gap.
+   It must not guess that a bounded time-window query can establish a tail cursor without counting rows. Until a native
+   mechanism is documented and proved to return a trustworthy cursor without acquiring/counting reset-window records,
+   retain the last durable checkpoint and retry/recover without advancing it. Rebuilding lost counts needs a later
+   deduplication design.
 5. **Coverage is not a count:** store each attempt and covered-through time separately. Only a successful caught-up
    read advances coverage through its query start time. Histogram events use event timestamps. Backlog, timeout,
    permission/storage failure and absent polls remain partial/gaps; a successful caught-up empty read can be zero.
@@ -37,6 +40,25 @@ executable contract before implementation begins, after Spec 008 merges.
    remains separate from historical data. Do not force a current generic status to encode every summary fact.
 9. **Preset validation:** application is Windows-only and rejected on Linux. macOS never runs a log reader; any displayed
    source request is explicitly unsupported. No automatic aliasing, source substitution or environment enablement.
+10. **Independent cadence and compact persistence:** collect immediately and every 60 seconds in a separate single-flight
+    lane that cannot block the 15-second host snapshot. Persist minute source/severity rollups, coalesced coverage and
+    latest attempt/checkpoint state, not one row per poll. All use the existing writer, retention and WAL budget.
+11. **Current versus history:** one 200-record ring is recent process-memory/session state. Current `total_count` is
+    exactly the ring length, `returned_count=min(log_limit,total_count)`, and truncation means the limit is below that
+    length. It is valid for a restarted process to show persisted summary history and an empty current ring.
+12. **Wire truthfulness:** grids are UTC-epoch aligned and include every configured source. FULL/PARTIAL buckets with
+    positive coverage always have numeric counts, including proven zero. GAP/UNKNOWN counts are positive-known or null,
+    never invented zero; null requires no known records and no coverage evidence. Attribute invalid-timestamp discards
+    to attempt time. Latest failure cannot erase history; a mixed-source aggregate with any known coverage is PARTIAL;
+    `coverage_through` is only a caught-up watermark. Reject values above 9,007,199,254,740,991 atomically.
+13. **Additive storage and rollback:** keep SQLite `user_version=2`, add backward-compatible log tables, and record a
+    dedicated log-metadata schema version in `store_metadata`. Before rolling back, disable sources with the new binary,
+    stop it, and never let old/new processes share the state directory. The previous preview ignores additive tables;
+    it does not prune them, so rollback is a temporary compatibility path rather than an indefinite operating mode.
+14. **Closed native vocabulary:** source is exactly `system` or Windows-only `application`; normalized event code is
+    exactly `WIN_<uint32>`, `WIN_<32-lowercase-hex-provider-guid>_<uint32>`,
+    `SYSTEMD_<32-lowercase-hex-message-id>`, or `SYSTEMD_PRIORITY_<0..7>`, at most 64 bytes. Provider names and all
+    unrecognized fields are rejected rather than projected.
 
 These decisions intentionally prefer disclosed gaps over duplicate/invented counts. Tests must cover actual child
 timeout/reaping and protocol limits, journal cursor-file cleanup/argv privacy, source/native field allowlists, storage
