@@ -14,7 +14,15 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/observer-ui.js"
+      "import": "./dist/index.js"
+    },
+    "./local": {
+      "types": "./dist/local.d.ts",
+      "import": "./dist/local.js"
+    },
+    "./demo": {
+      "types": "./dist/demo.d.ts",
+      "import": "./dist/demo.js"
     },
     "./styles.css": "./dist/observer-ui.css"
   },

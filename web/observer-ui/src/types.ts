@@ -1,220 +1,157 @@
-export type Availability = "supported" | "disabled" | "unavailable" | "permission-denied";
-export type HealthState = "healthy" | "attention" | "degraded" | "offline";
-export type Severity = "debug" | "info" | "warning" | "error" | "critical";
-export type WorkloadKind = "process" | "service" | "container";
+export type SupportState = "SUPPORTED" | "DISABLED" | "UNAVAILABLE" | "PERMISSION_DENIED" | "UNSUPPORTED" | "UNKNOWN";
+export type CollectionState = "OK" | "PARTIAL" | "FAILED" | "NOT_RUN" | "UNKNOWN";
+export type Freshness = "CURRENT" | "STALE" | "UNKNOWN";
+export type Severity = "TRACE" | "DEBUG" | "INFO" | "WARN" | "ERROR" | "CRITICAL" | "UNKNOWN";
+export type SectionName = "overview" | "filesystems" | "processes" | "services" | "containers" | "logs" | "observer";
 export type TrendRange = "1h" | "6h" | "24h" | "7d";
 
-export interface Measurement {
-  value: number | null;
-  unit: "%" | "bytes" | "celsius" | "count" | "bytes-per-second";
-  availability: Availability;
-  reason?: string;
+export interface CollectorCapability {
+  name: SectionName;
+  supportState: SupportState;
+  reasonCode: string | null;
+  dataClassification: "PUBLIC_METADATA" | "LOCAL_SENSITIVE" | "UNKNOWN";
+  uploadEligible: boolean;
 }
 
-export interface HostIdentity {
-  displayName: string;
-  operatingSystem: string;
+export interface ObserverCapabilities {
+  schemaVersion: "observer-capabilities/v1";
+  apiVersion: "v1";
+  generatedAt: string;
+  observer: { version: string; mode: "HEADLESS" | "LOCAL_DASHBOARD" | "UNKNOWN" };
+  platform: { os: "linux" | "windows" | "darwin" | "other"; architecture: string };
+  policy: {
+    readOnly: true;
+    defaultBind: "127.0.0.1";
+    corsEnabled: false;
+    retentionDays: number;
+    retentionBytes: number;
+    logBodies: { defaultState: "OMITTED"; maximumBodyBytes: 2048; uploadEligible: false };
+    responseLimitsBytes: { capabilities: 131072; currentSnapshot: 1048576 };
+  };
+  collectors: CollectorCapability[];
+}
+
+export interface SectionQuality {
+  supportState: SupportState;
+  collectionState: CollectionState;
+  freshness: Freshness;
+  observedAt: string | null;
+  reasonCode: string | null;
+}
+
+export interface ListSection<T> extends SectionQuality {
+  totalCount: number;
+  returnedCount: number;
+  truncated: boolean;
+  items: T[];
+}
+
+export interface OverviewObservation {
+  hostAlias: string;
+  os: "linux" | "windows" | "darwin" | "other";
   architecture: string;
-  kernel: string;
   uptimeSeconds: number;
+  cpuLogicalCount: number;
+  memoryTotalBytes: number;
+  memoryUsedBytes: number;
 }
 
-export interface OverviewMetric {
-  id: string;
-  label: string;
-  measurement: Measurement;
-  detail: string;
-  trend: "rising" | "steady" | "falling";
+export interface OverviewSection extends SectionQuality {
+  data: OverviewObservation | null;
 }
 
-export interface StatusNotice {
-  id: string;
-  state: HealthState;
-  title: string;
-  detail: string;
-  occurredAt: string;
+export interface FilesystemObservation {
+  mountAlias: string;
+  filesystemType: string;
+  totalBytes: number;
+  usedBytes: number;
+  availableBytes: number;
 }
 
-export interface OverviewSnapshot {
-  schemaVersion: "observer-overview/v1";
-  observedAt: string;
-  freshnessSeconds: number;
-  status: HealthState;
-  host: HostIdentity;
-  metrics: OverviewMetric[];
-  notices: StatusNotice[];
-}
-
-export interface TrendPoint {
-  at: string;
-  value: number | null;
-}
-
-export interface TrendAnnotation {
-  id: string;
-  at: string;
-  severity: Severity;
-  label: string;
-  source: string;
-}
-
-export interface TrendSeries {
-  id: string;
-  label: string;
-  unit: Measurement["unit"];
-  availability: Availability;
-  color: "mint" | "cyan" | "amber" | "violet";
-  points: TrendPoint[];
-}
-
-export interface TrendSnapshot {
-  schemaVersion: "observer-trends/v1";
-  range: TrendRange;
-  sampledEverySeconds: number;
-  series: TrendSeries[];
-  annotations: TrendAnnotation[];
-}
-
-interface WorkloadBase {
-  id: string;
+export interface ProcessObservation {
+  pid: number;
   name: string;
   state: string;
-  cpuPercent: number | null;
-  memoryBytes: number | null;
-  startedAt: string | null;
+  cpuPercent: number;
+  memoryBytes: number;
 }
 
-export interface ProcessWorkload extends WorkloadBase {
-  kind: "process";
-  processId: number;
-}
+export interface ServiceObservation { name: string; state: string; startMode: string }
 
-export interface ServiceWorkload extends WorkloadBase {
-  kind: "service";
-  manager: "systemd" | "launchd" | "windows-service";
-  startup: string;
-  restartCount: number | null;
-}
-
-export interface ContainerWorkload extends WorkloadBase {
-  kind: "container";
+export interface ContainerObservation {
+  idAlias: string;
+  name: string;
   image: string;
-  health: string | null;
-  restartCount: number;
+  state: string;
+  cpuPercent: number;
+  memoryBytes: number;
 }
 
-export type Workload = ProcessWorkload | ServiceWorkload | ContainerWorkload;
-
-export interface WorkloadSnapshot {
-  schemaVersion: "observer-workloads/v1";
+export interface LogMetadata {
   observedAt: string;
-  limits: {
-    processes: number;
-    services: number;
-    containers: number;
-  };
-  items: Workload[];
-}
-
-export interface LogSourcePolicy {
-  id: string;
-  label: string;
-  availability: Availability;
-  bodyStorage: "off" | "redacted";
-  reason?: string;
-}
-
-export interface LogEvent {
-  id: string;
-  at: string;
+  source: string;
   severity: Severity;
-  sourceId: string;
-  sourceLabel: string;
-  unit: string;
-  code: string;
-  /** Code-owned, sanitized metadata; never text copied from a raw log or message body. */
-  summary: string;
-  structuredFields: Record<string, string | number | boolean | null>;
-  body?: string;
+  eventCode: string;
 }
 
-export interface LogSnapshot {
-  schemaVersion: "observer-logs/v1";
-  bodyStorageDefault: "off";
-  sources: LogSourcePolicy[];
-  events: LogEvent[];
-  redactedFieldCount: number;
-  droppedEventCount: number;
+export type LogBody =
+  | { state: "OMITTED" }
+  | { state: "REDACTED_LOCAL_ONLY"; redactedText: string; redactionCount: number; uploadEligible: false };
+
+/** Exact v1 projection: no arbitrary structured fields, summary, or raw-body property. */
+export interface LogRecord { metadata: LogMetadata; body: LogBody }
+
+export interface ObserverSignal {
+  name: string;
+  state: "OK" | "WARN" | "ERROR";
+  value: number;
+  unit: "count" | "bytes" | "milliseconds" | "percent";
 }
 
-export interface CollectorHealth {
-  id: string;
-  label: string;
-  availability: Availability;
-  lastSuccessAt: string | null;
-  durationMilliseconds: number | null;
-  reason?: string;
-}
-
-export interface ObserverHealthSnapshot {
-  schemaVersion: "observer-health/v1";
-  status: HealthState;
-  version: string;
-  buildCommit: string;
-  startedAt: string;
-  collectors: CollectorHealth[];
-  storage: {
-    usedBytes: number;
-    limitBytes: number;
-    oldestRecordAt: string;
-    retentionHours: number;
-  };
-  counters: {
-    collectionFailures: number;
-    redactedFields: number;
-    droppedRecords: number;
-    queuedUploads: number;
-  };
-  remoteUpload: {
-    enabled: boolean;
-    state: "disabled" | "connected" | "pending" | "rejected";
-    destination?: string;
-    policySummary: string;
-  };
+export interface CurrentSnapshot {
+  schemaVersion: "observer-current-snapshot/v1";
+  snapshotId: string;
+  sequence: number;
+  observedAt: string;
+  durationMilliseconds: number;
+  collectionState: CollectionState;
   privacy: {
-    localOnly: boolean;
-    processArgumentsCollected: false;
-    environmentCollected: false;
-    logBodiesEnabledSources: string[];
-    publicListener: false;
+    profile: "SAFE_DEFAULT" | "LOCAL_LOG_BODIES";
+    remoteProjection: "home-lab-server-snapshot/v1";
+    messageBodiesUploadEligible: false;
+    redactionCount: number;
+    droppedCount: number;
+    excludedFields: Array<"process_arguments" | "environment_variables" | "container_commands" | "container_mounts" | "container_labels" | "raw_log_bodies" | "credentials" | "tokens">;
+  };
+  sections: {
+    overview: OverviewSection;
+    filesystems: ListSection<FilesystemObservation>;
+    processes: ListSection<ProcessObservation>;
+    services: ListSection<ServiceObservation>;
+    containers: ListSection<ContainerObservation>;
+    logs: ListSection<LogRecord>;
+    observer: ListSection<ObserverSignal>;
   };
 }
 
-export interface WorkloadQuery {
-  kind?: WorkloadKind;
-  search?: string;
-}
-
-export interface LogQuery {
-  source?: string;
-  severities?: Severity[];
-  search?: string;
-  before?: string;
-  limit?: number;
-}
+export interface TrendPoint { at: string; value: number | null }
+export interface TrendSeries { id: string; label: string; unit: "%" | "bytes"; color: "mint" | "cyan" | "amber" | "violet"; points: TrendPoint[] }
+export interface TrendSnapshot { range: TrendRange; sampledEverySeconds: number; series: TrendSeries[] }
 
 export interface ObserverDataSource {
-  getOverview(signal?: AbortSignal): Promise<OverviewSnapshot>;
-  getTrends(range: TrendRange, signal?: AbortSignal): Promise<TrendSnapshot>;
-  getWorkloads(query?: WorkloadQuery, signal?: AbortSignal): Promise<WorkloadSnapshot>;
-  getLogs(query?: LogQuery, signal?: AbortSignal): Promise<LogSnapshot>;
-  getObserverHealth(signal?: AbortSignal): Promise<ObserverHealthSnapshot>;
+  getCapabilities(signal?: AbortSignal): Promise<ObserverCapabilities>;
+  getCurrentSnapshot(signal?: AbortSignal): Promise<CurrentSnapshot>;
+  /** Optional because the accepted v1 local API has no historical-series endpoint. */
+  getTrends?(range: TrendRange, signal?: AbortSignal): Promise<TrendSnapshot>;
 }
 
-export interface DashboardData {
-  overview: OverviewSnapshot;
-  trends: TrendSnapshot;
-  workloads: WorkloadSnapshot;
-  logs: LogSnapshot;
-  health: ObserverHealthSnapshot;
+export interface ObserverProblemDetails {
+  type: string;
+  title: string;
+  status: number;
+  detail?: string;
+  instance?: string;
+  code: string;
+  requestId: string;
+  fields?: Array<{ field: string; message: string; code: string }>;
 }

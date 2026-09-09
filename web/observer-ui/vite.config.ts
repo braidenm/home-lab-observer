@@ -8,10 +8,14 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: true,
     lib: {
-      entry: "src/index.ts",
+      entry: {
+        index: "src/index.ts",
+        local: "src/local.ts",
+        demo: "src/demo.ts"
+      },
       name: "HomeLabObserverUI",
       formats: ["es"],
-      fileName: "observer-ui",
+      fileName: (_format, entryName) => `${entryName}.js`,
       cssFileName: "observer-ui"
     },
     rollupOptions: {

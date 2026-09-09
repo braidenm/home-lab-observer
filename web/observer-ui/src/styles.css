@@ -1,4 +1,4 @@
-:root {
+.observer-shell {
   color-scheme: dark;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
@@ -16,14 +16,13 @@
   --observer-violet: #b69af8;
   --observer-red: #ff847c;
   --observer-radius: 16px;
-  background: var(--observer-bg);
+  background: radial-gradient(circle at 85% -20%, #153d30 0, transparent 35rem), var(--observer-bg);
   color: var(--observer-text);
 }
 
-* { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; background: radial-gradient(circle at 85% -20%, #153d30 0, transparent 35rem), var(--observer-bg); }
-button, input, select { font: inherit; }
-button { color: inherit; }
+.observer-shell, .observer-shell * { box-sizing: border-box; }
+.observer-shell button, .observer-shell input, .observer-shell select { font: inherit; }
+.observer-shell button { color: inherit; }
 
 .observer-shell { width: min(1460px, 100%); min-height: 100vh; margin: 0 auto; padding: 0 28px; }
 .observer-skip-link { position: fixed; z-index: 20; top: 8px; left: 8px; transform: translateY(-150%); padding: 10px 14px; border-radius: 8px; background: var(--observer-mint); color: #052018; font-weight: 800; }
@@ -92,9 +91,17 @@ button { color: inherit; }
 .observer-state { display: inline-flex; align-items: center; width: fit-content; gap: 7px; color: var(--observer-muted); font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
 .observer-state__dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .observer-state--healthy, .observer-state--supported, .observer-state--running, .observer-state--active, .observer-state--info { color: var(--observer-mint); }
-.observer-state--attention, .observer-state--warning, .observer-state--inactive, .observer-state--disabled { color: var(--observer-amber); }
+.observer-state--healthy, .observer-state--ok, .observer-state--current { color: var(--observer-mint); }
+.observer-state--attention, .observer-state--warning, .observer-state--warn, .observer-state--partial, .observer-state--stale, .observer-state--inactive, .observer-state--disabled { color: var(--observer-amber); }
 .observer-state--degraded, .observer-state--error, .observer-state--critical, .observer-state--offline, .observer-state--denied { color: var(--observer-red); }
-.observer-state--unavailable, .observer-state--permission-denied, .observer-state--debug, .observer-state--exited { color: var(--observer-violet); }
+.observer-state--unavailable, .observer-state--unsupported, .observer-state--unknown, .observer-state--not-run, .observer-state--permission-denied, .observer-state--debug, .observer-state--trace, .observer-state--exited { color: var(--observer-violet); }
+
+.observer-section-status { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 18px 0 0; }
+.observer-section-status--compact { margin: 0; padding: 14px 20px; border-bottom: 1px solid var(--observer-line); }
+.observer-section-status div { min-width: 0; }
+.observer-section-status dt { margin-bottom: 4px; color: var(--observer-muted); font-size: 9px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.observer-section-status dd { margin: 0; overflow-wrap: anywhere; font-size: 11px; }
+.observer-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; padding: 0; border: 0; clip: rect(0 0 0 0); white-space: nowrap; }
 
 .observer-view-heading { align-items: flex-start; }
 .observer-view-heading .observer-state { margin-top: 12px; }
@@ -196,7 +203,7 @@ button { color: inherit; }
 .observer-counter-list dt { color: var(--observer-muted); font-size: 11px; }
 .observer-counter-list dd { margin: 0; font: 750 14px ui-monospace, SFMono-Regular, Consolas, monospace; }
 
-.observer-error { max-width: 680px; padding: 22px; border: 1px solid rgb(255 132 124 / 40%); border-radius: 14px; background: rgb(255 132 124 / 7%); }
+.observer-error { max-width: 680px; margin-bottom: 16px; padding: 22px; border: 1px solid rgb(255 132 124 / 40%); border-radius: 14px; background: rgb(255 132 124 / 7%); }
 .observer-error p { color: var(--observer-muted); }
 .observer-error button { padding: 8px 11px; border: 1px solid var(--observer-red); border-radius: 8px; background: transparent; cursor: pointer; }
 .observer-skeleton { display: grid; grid-template-columns: repeat(4, 1fr); gap: 13px; }
@@ -204,7 +211,7 @@ button { color: inherit; }
 .observer-skeleton span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
 .observer-footer { display: flex; justify-content: space-between; gap: 15px; padding: 19px 0 24px; border-top: 1px solid var(--observer-line); color: #71877f; font-size: 10px; }
 
-button:focus-visible, a:focus-visible { outline: 2px solid var(--observer-mint); outline-offset: 3px; }
+.observer-shell button:focus-visible, .observer-shell a:focus-visible { outline: 2px solid var(--observer-mint); outline-offset: 3px; }
 @keyframes observer-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
 
 @media (max-width: 940px) {
@@ -240,6 +247,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--observer-mint);
   .observer-privacy-card ul { grid-template-columns: 1fr; }
   .observer-footer { flex-direction: column; }
   .observer-skeleton { grid-template-columns: repeat(2, 1fr); }
+  .observer-section-status { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 430px) {
@@ -268,5 +276,5 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--observer-mint);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  .observer-shell, .observer-shell *, .observer-shell *::before, .observer-shell *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }

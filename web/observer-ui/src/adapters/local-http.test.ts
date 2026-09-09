@@ -1,39 +1,61 @@
 import { describe, expect, it, vi } from "vitest";
-import { LocalHttpObserverDataSource } from "./local-http";
+import linuxCapabilities from "../../../../schemas/v1/fixtures/valid/capabilities-linux.json";
+import windowsCapabilities from "../../../../schemas/v1/fixtures/valid/capabilities-windows.json";
+import linuxSnapshot from "../../../../schemas/v1/fixtures/valid/current-snapshot-linux.json";
+import logOptInSnapshot from "../../../../schemas/v1/fixtures/valid/current-snapshot-log-opt-in.json";
+import invalidQueryProblem from "../../../../schemas/v1/fixtures/valid/problem-invalid-query.json";
+import { LocalHttpObserverDataSource, ObserverTransportError, mapCapabilities, mapCurrentSnapshot } from "./local-http";
 
-const jsonResponse = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+const jsonResponse = (body: unknown, status = 200, contentType = "application/json; charset=utf-8") =>
+  new Response(JSON.stringify(body), { status, headers: { "content-type": contentType } });
 
 describe("LocalHttpObserverDataSource", () => {
-  it("allows loopback endpoints and sends a token only in the authorization header", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ schemaVersion: "observer-logs/v1" }));
-    const source = new LocalHttpObserverDataSource({
-      baseUrl: "http://127.0.0.1:9780",
-      bearerToken: "local-test-token",
-      fetcher
-    });
+  it("uses only canonical endpoints on the documented default port", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (input) => String(input).endsWith("/capabilities") ? jsonResponse(linuxCapabilities) : jsonResponse(linuxSnapshot));
+    const source = new LocalHttpObserverDataSource({ bearerToken: "local-test-token", fetcher });
 
-    await source.getLogs({ source: "observer", severities: ["error", "warning"], limit: 20 });
+    const capabilities = await source.getCapabilities();
+    const snapshot = await source.getCurrentSnapshot();
 
-    const [url, init] = fetcher.mock.calls[0];
-    expect(url).toBe("http://127.0.0.1:9780/api/v1/logs?source=observer&severities=error%2Cwarning&limit=20");
-    expect(String(url)).not.toContain("local-test-token");
-    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer local-test-token");
-    expect(init).toMatchObject({ credentials: "omit", cache: "no-store", redirect: "error" });
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+      "http://127.0.0.1:9847/api/v1/capabilities",
+      "http://127.0.0.1:9847/api/v1/snapshots/current"
+    ]);
+    for (const [url, init] of fetcher.mock.calls) {
+      expect(String(url)).not.toContain("local-test-token");
+      expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer local-test-token");
+      expect(init).toMatchObject({ method: "GET", credentials: "omit", cache: "no-store", redirect: "error" });
+    }
+    expect(capabilities.collectors.find((item) => item.name === "logs")?.supportState).toBe("DISABLED");
+    expect(snapshot.sections.processes).toMatchObject({ totalCount: 231, returnedCount: 1, truncated: true });
+    expect(snapshot.sections.services).toMatchObject({ supportState: "UNAVAILABLE", collectionState: "NOT_RUN", freshness: "UNKNOWN", observedAt: null });
+    expect(snapshot.sections.logs.items[0]).toEqual({ metadata: { observedAt: "2026-09-09T11:59:58Z", source: "sample-api", severity: "INFO", eventCode: "READY" }, body: { state: "OMITTED" } });
   });
 
-  it("rejects non-loopback and credential-bearing absolute URLs", () => {
+  it("maps the real Windows capability and local-redacted-body fixtures", () => {
+    const capabilities = mapCapabilities(windowsCapabilities);
+    const snapshot = mapCurrentSnapshot(logOptInSnapshot);
+    expect(capabilities.collectors.find((item) => item.name === "processes")?.supportState).toBe("PERMISSION_DENIED");
+    expect(capabilities.collectors.find((item) => item.name === "containers")?.reasonCode).toBe("ENGINE_NOT_RUNNING");
+    expect(snapshot.sections.services.supportState).toBe("UNSUPPORTED");
+    expect(snapshot.sections.logs.items[0].body).toEqual({ state: "REDACTED_LOCAL_ONLY", redactedText: "retry for user [REDACTED]", redactionCount: 2, uploadEligible: false });
+    expect("summary" in snapshot.sections.logs.items[0]).toBe(false);
+    expect("structuredFields" in snapshot.sections.logs.items[0]).toBe(false);
+  });
+
+  it("parses bounded Problem Details into a typed safe error", async () => {
+    const source = new LocalHttpObserverDataSource({ fetcher: vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(invalidQueryProblem, 400, "application/problem+json")) });
+    const rejection = source.getCurrentSnapshot();
+    await expect(rejection).rejects.toBeInstanceOf(ObserverTransportError);
+    await expect(rejection).rejects.toMatchObject({ status: 400, problem: { code: "INVALID_QUERY", requestId: "request_sample_001", fields: [{ field: "process_limit", code: "OUT_OF_RANGE" }] } });
+  });
+
+  it("rejects non-loopback URLs, URL credentials, bad media types, and oversized payloads", async () => {
     expect(() => new LocalHttpObserverDataSource({ baseUrl: "https://observer.example.test" })).toThrow(/loopback/);
-    expect(() => new LocalHttpObserverDataSource({ baseUrl: "http://user:secret@127.0.0.1:9780" })).toThrow(/credentials/);
-  });
-
-  it("rejects unsuccessful and non-JSON responses", async () => {
-    const failed = new LocalHttpObserverDataSource({ fetcher: vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({}, 503)) });
-    await expect(failed.getOverview()).rejects.toMatchObject({ status: 503 });
-
-    const html = new LocalHttpObserverDataSource({
-      fetcher: vi.fn<typeof fetch>().mockResolvedValue(new Response("no", { headers: { "content-type": "text/plain" } }))
-    });
-    await expect(html.getOverview()).rejects.toThrow(/non-JSON/);
+    expect(() => new LocalHttpObserverDataSource({ baseUrl: "http://name:secret@127.0.0.1:9847" })).toThrow(/credentials/);
+    const html = new LocalHttpObserverDataSource({ fetcher: vi.fn<typeof fetch>().mockResolvedValue(new Response("no", { headers: { "content-type": "text/plain" } })) });
+    await expect(html.getCapabilities()).rejects.toThrow(/non-JSON/);
+    const oversized = new LocalHttpObserverDataSource({ fetcher: vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ padding: "x".repeat(132_000) })) });
+    await expect(oversized.getCapabilities()).rejects.toThrow(/size limit/);
   });
 });

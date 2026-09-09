@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { ObserverDashboard, SyntheticObserverDataSource } from "../src";
+import { ObserverDashboard } from "../src";
+import { SyntheticObserverDataSource } from "../src/demo";
 
 const root = document.getElementById("root");
 

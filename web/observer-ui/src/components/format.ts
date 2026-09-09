@@ -1,5 +1,3 @@
-import type { Measurement } from "../types";
-
 export function formatBytes(value: number | null): string {
   if (value === null) return "Unavailable";
   if (value < 1_024) return `${value} B`;
@@ -14,13 +12,12 @@ export function formatBytes(value: number | null): string {
   return `${amount >= 10 ? amount.toFixed(0) : amount.toFixed(1)} ${unit}`;
 }
 
-export function formatMeasurement(measurement: Measurement): string {
-  if (measurement.value === null) return titleCase(measurement.availability);
-  if (measurement.unit === "bytes") return formatBytes(measurement.value);
-  if (measurement.unit === "celsius") return `${measurement.value.toFixed(0)} °C`;
-  if (measurement.unit === "bytes-per-second") return `${formatBytes(measurement.value)}/s`;
-  if (measurement.unit === "%") return `${measurement.value.toFixed(1)}%`;
-  return measurement.value.toLocaleString();
+export function formatValue(value: number | null, unit: string): string {
+  if (value === null) return "Unavailable";
+  if (unit === "bytes") return formatBytes(value);
+  if (unit === "percent" || unit === "%") return `${value.toFixed(1)}%`;
+  if (unit === "milliseconds") return `${value.toLocaleString()} ms`;
+  return `${value.toLocaleString()}${unit === "count" ? "" : ` ${unit}`}`;
 }
 
 export function formatDuration(seconds: number): string {
@@ -30,13 +27,12 @@ export function formatDuration(seconds: number): string {
 }
 
 export function formatRelative(iso: string): string {
-  const date = new Date(iso);
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "numeric",
-    minute: "2-digit"
-  }).format(date);
+  return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(iso));
 }
 
 export function titleCase(value: string): string {
-  return value.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return value.toLowerCase().replaceAll("_", " ").replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
+
+/** A code-owned presentation label; it never reads a log body. */
+export function formatEventCode(value: string): string { return titleCase(value); }
