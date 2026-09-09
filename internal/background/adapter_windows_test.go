@@ -29,20 +29,25 @@ func TestWindowsTaskTemplateIsAcceptedInMemoryWithoutRegistration(t *testing.T) 
 	}
 	path := filepath.Join(t.TempDir(), "task.xml")
 	roundTrip := filepath.Join(t.TempDir(), "roundtrip.xml")
+	expectedArgumentsPath := filepath.Join(t.TempDir(), "expected-arguments.txt")
+	expectedArguments := windowsPowerShellArguments(filepath.Join(root, "bin", launcherName()), root)
 	withoutRunLevel := []byte(strings.Replace(string(definition.content), `<RunLevel>LeastPrivilege</RunLevel>`, "", 1))
 	if err := os.WriteFile(path, withoutRunLevel, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(expectedArgumentsPath, []byte(expectedArguments), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	powershell, err := trustedManagerExecutable("powershell.exe")
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := `$xml=[IO.File]::ReadAllText($args[0]); $service=New-Object -ComObject 'Schedule.Service'; $service.Connect(); $task=$service.NewTask(0); $task.XmlText=$xml; $task.RegistrationInfo.URI='\Home Lab Observer'; if ($task.Principal.LogonType -ne 3 -or $task.Principal.RunLevel -ne 0 -or $task.Settings.ExecutionTimeLimit -ne 'PT0S') { exit 9 }; [IO.File]::WriteAllText($args[1],$task.XmlText,(New-Object Text.UTF8Encoding($false)))`
+	script := `$xml=[IO.File]::ReadAllText($args[0]); $expectedArguments=[IO.File]::ReadAllText($args[2]); $service=New-Object -ComObject 'Schedule.Service'; $service.Connect(); $task=$service.NewTask(0); $task.XmlText=$xml; $task.RegistrationInfo.URI='\Home Lab Observer'; $actualArguments=[string]$task.Actions.Item(1).Arguments; if ($task.Principal.LogonType -ne 3 -or $task.Principal.RunLevel -ne 0 -or $task.Settings.ExecutionTimeLimit -ne 'PT0S') { exit 9 }; if ($actualArguments -cne $expectedArguments) { exit 10 }; if ($actualArguments -match '&(?:amp|apos|quot|lt|gt);') { exit 11 }; [IO.File]::WriteAllText($args[1],$task.XmlText,(New-Object Text.UTF8Encoding($false)))`
 	scriptPath := filepath.Join(t.TempDir(), "verify-task.ps1")
 	if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	command := exec.Command(powershell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath, path, roundTrip)
+	command := exec.Command(powershell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath, path, roundTrip, expectedArgumentsPath)
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("Task Scheduler rejected generated XML: %v: %s", err, output)
 	}

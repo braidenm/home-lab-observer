@@ -47,7 +47,7 @@ func (a *windowsAdapter) registration(Settings) (registration, error) {
 		return registration{}, err
 	}
 	powershell := filepath.Join(systemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe")
-	argument := fmt.Sprintf(`-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command "&amp; &apos;%s&apos; background run --install-root &apos;%s&apos;"`, xmlEscape(launcher), xmlEscape(a.root))
+	argument := windowsPowerShellArguments(launcher, a.root)
 	content := fmt.Sprintf(`<?xml version="1.0"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo><Description>Home Lab Observer per-user session profile</Description></RegistrationInfo>
@@ -56,8 +56,12 @@ func (a *windowsAdapter) registration(Settings) (registration, error) {
   <Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries><StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><AllowHardTerminate>true</AllowHardTerminate><StartWhenAvailable>true</StartWhenAvailable><RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable><IdleSettings><StopOnIdleEnd>false</StopOnIdleEnd><RestartOnIdle>false</RestartOnIdle></IdleSettings><AllowStartOnDemand>true</AllowStartOnDemand><Enabled>true</Enabled><Hidden>false</Hidden><RunOnlyIfIdle>false</RunOnlyIfIdle><DisallowStartOnRemoteAppSession>false</DisallowStartOnRemoteAppSession><UseUnifiedSchedulingEngine>false</UseUnifiedSchedulingEngine><WakeToRun>false</WakeToRun><ExecutionTimeLimit>PT0S</ExecutionTimeLimit><Priority>7</Priority><RestartOnFailure><Interval>PT1M</Interval><Count>3</Count></RestartOnFailure></Settings>
   <Actions Context="Owner"><Exec><Command>%s</Command><Arguments>%s</Arguments></Exec></Actions>
 </Task>
-`, sid, sid, xmlEscape(powershell), argument)
+`, sid, sid, xmlEscape(powershell), xmlEscape(argument))
 	return registration{fileName: "task.xml", content: []byte(content)}, nil
+}
+
+func windowsPowerShellArguments(launcher, root string) string {
+	return fmt.Sprintf(`-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command "& '%s' background run --install-root '%s'"`, launcher, root)
 }
 
 func (a *windowsAdapter) available(ctx context.Context) bool {
