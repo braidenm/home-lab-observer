@@ -5,6 +5,6 @@
 - [x] Implement bounded local Docker collector and immutable cache.
 - [x] Add protected cached API and opt-in CLI wiring.
 - [x] Connect the Workloads container view and configuration guidance.
-- [ ] Add fake-engine, native transport, contract and real Linux engine smoke tests.
+- [x] Add fake-engine, native transport, contract and real Linux engine smoke tests.
 - [x] Update README/operator docs/ADR and verify mobile UI.
 - [ ] Complete independent review, required CI and auto-merge.

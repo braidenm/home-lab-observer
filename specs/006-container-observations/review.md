@@ -9,18 +9,27 @@ not author; the integration owner verifies the packaged service and browser. Req
 
 | Finding | Correction / regression evidence |
 | --- | --- |
-| Docker's per-core CPU convention would conflict with the host-capacity contract | Collector review requires valid counter deltas divided by system deltas, bounded to 0–100; missing/reset counters remain null |
-| One-shot stats and engine minimum-version negotiation needed explicit handling | Fixed request/version boundary and fake-engine regressions are required before acceptance |
+| Docker's per-core CPU convention would conflict with the host-capacity contract | Valid counter deltas divided by system deltas, bounded to 0–100; missing/reset counters remain null, and absent/zero precpu uses bounded prior samples |
+| One-shot stats and engine minimum-version negotiation needed explicit handling | Fixed GET query, minimum/maximum intersection and fake-engine regressions |
+| Native Windows/unknown engine stats were not certified | Retain inventory, but omit running stats with ENGINE_OS_UNSUPPORTED unless the engine reports Linux |
+| Null engine inventory could appear as healthy empty | Reject null with INVALID_RESPONSE; valid empty arrays remain healthy zero |
 | Privacy table implied container history/upload despite the preview policy | Container row now explicitly says current memory only and no upload; further projections require a reviewed spec |
 | Live Docker smoke could pass with permanently unavailable CPU | Wait for a valid bounded CPU reading and memory with AVAILABLE quality after warmup |
 | Container metric interpretation and phone scrolling were implicit | Visible host-capacity CPU/engine-memory explanation, unavailable stopped metrics and horizontal-scroll guidance |
+| Workload filters and legacy capabilities could confuse navigation | Reset filters on every tab-change path and explain the dedicated model in Observer & privacy |
+| Client rejected known truncation when the larger total was unknown | Accept truncated=true with equal counts; keep legacy metric labels unqualified |
+| API row cap could lose a source's known count | Compute total before the cap; regression covers the defensive alternate-source case |
+| Native fixture paths could exceed macOS socket limits | Short private temporary socket directory, real named-pipe/Unix HTTP roundtrip, redirect rejection and cancellation tests |
+
+The API consumes the collector's normalized typed cache, not arbitrary plug-in data. Alternate future sources must honor
+that contract; adding a generic source/plugin boundary requires a separate validation/threat-model decision.
 
 ## Local evidence
 
 - Repository policy check passes.
 - OpenAPI/JSON Schema validation: five schemas, 12 valid and 10 invalid fixtures.
 - Eleven synthetic handler responses validate, including dedicated container, limited and disabled views.
-- Integrated UI typecheck, 29 component/adapter tests, library/demo builds and deterministic embedded build pass.
+- Integrated UI typecheck, 31 component/adapter tests, library/demo builds and deterministic embedded build pass.
 - Full Go suite, vet and real native snapshot schema validation pass on Windows.
 - Packaged Edge smoke passes at 390/768/1440 pixels: protected real service/history, disabled container guidance,
   keyboard tabs, synthetic running/stopped/partial table, filtering, no page overflow and token lock/forget.
@@ -30,7 +39,11 @@ not author; the integration owner verifies the packaged service and browser. Req
 
 ## Hosted evidence
 
-Pending the reviewed head of [PR 9](https://github.com/braidenm/home-lab-observer/pull/9). Linux CI additionally creates isolated synthetic running/stopped Docker workloads,
+The first [PR 9](https://github.com/braidenm/home-lab-observer/pull/9) runtime run passed on Linux (2m54s), Windows
+(2m7s), macOS (1m41s) and all six cross-build targets (2m32s). The final reviewed head must pass required checks again.
+The initial policy failure was a synthetic token/pattern literal, corrected without weakening the scanner. An unrelated
+Google apt repository checksum mismatch interrupted the browser dependency install; no integrity checks were bypassed.
+Linux CI additionally creates isolated synthetic running/stopped Docker workloads,
 checks inventory and real CPU/memory, verifies privacy/authentication/limits and checks workloads remain unchanged.
 Windows/macOS native tests and cross-builds do not imply certification against live Desktop engines.
 
