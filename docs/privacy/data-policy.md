@@ -14,7 +14,7 @@ or upload projections need their own reviewed specifications before becoming act
 | Filesystem capacity | Yes | Current + aggregate trends | Yes | Sanitized display label; no arbitrary paths remotely |
 | Process identity/resource use | Bounded top-N | Current only | Bounded current snapshot | No argv, environment, executable path, user identity |
 | Service identity/state | Platform capability | Current + transitions | Bounded current snapshot | Names treated as sensitive metadata |
-| Container identity/state/resource use | When local Docker enabled | Current + aggregate trends | Bounded current snapshot | No environment, labels, mounts, command, raw socket |
+| Container identity/state/resource use | When local Docker enabled | Current memory only | No in this preview | No environment, labels, mounts, command, raw socket; history/upload need a new reviewed spec |
 | Log timestamps/severity/source/fingerprint/count | Enabled safe sources | Bounded rollups | Future bounded metadata contract | No body in the current snapshot |
 | Log message body | No | Local-only opt-in | No in first release | Per-source allowlist, redaction, 2 KiB record ceiling |
 | Observer health and upload status | Yes | Current + bounded events | Yes | No credentials or raw exception text |

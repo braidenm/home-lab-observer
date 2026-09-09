@@ -57,7 +57,7 @@ try {
     if (!response.ok) return false;
     inventory = await response.json();
     return inventory.support_state === 'SUPPORTED' && names.every(name => inventory.items.some(item => item.name === name))
-      && inventory.items.some(item => item.name === names[0] && item.memory_bytes !== null);
+      && inventory.items.some(item => item.name === names[0] && item.memory_bytes !== null && item.cpu_percent !== null && item.metrics_state === 'AVAILABLE');
   });
   assert(validate(inventory), ajv.errorsText(validate.errors));
   const running = inventory.items.find(item => item.name === names[0]);
@@ -68,6 +68,8 @@ try {
   assert.equal(stopped.cpu_percent, null);
   assert.equal(stopped.memory_bytes, null);
   assert(running.memory_bytes !== null && running.memory_bytes >= 0, 'real Linux engine returned no memory reading');
+  assert(running.cpu_percent !== null && running.cpu_percent >= 0 && running.cpu_percent <= 100, 'real Linux engine returned no bounded host-capacity CPU reading after warmup');
+  assert.equal(running.metrics_state, 'AVAILABLE');
   const encoded = JSON.stringify(inventory);
   assert(!encoded.includes(canary) && !processOutput.includes(canary), 'source secret escaped normalization');
   assert(!encoded.includes(token) && !processOutput.includes(token), 'local token escaped');
