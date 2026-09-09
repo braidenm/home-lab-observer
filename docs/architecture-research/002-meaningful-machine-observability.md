@@ -17,6 +17,11 @@ The Docker daemon is a privileged boundary, not merely another metrics endpoint.
 [path traversal advisory](https://github.com/henrygd/beszel/security/advisories/GHSA-phwh-4f42-gwf3) reinforce using
 fixed, validated reads through a constrained adapter rather than forwarding arbitrary Docker paths or identifiers.
 
+SQLite's [WAL guidance](https://sqlite.org/wal.html) requires a local filesystem, bounded reader lifetimes, and regular
+checkpoints to prevent WAL growth. It also documents a WAL-reset race fixed in SQLite 3.51.3 and selected backports.
+The observer therefore verifies its embedded SQLite version, uses one write/checkpoint owner, keeps transactions short,
+and will not ship a WAL build containing the affected SQLite versions.
+
 ## Adopted information architecture
 
 1. **Overview:** present health, freshness, collection gaps, capacity pressure, and important changes first.
