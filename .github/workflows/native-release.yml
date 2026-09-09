@@ -39,10 +39,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
+          RELEASE_OWNER: ${{ github.repository_owner }}
+          RELEASE_ACTOR: ${{ github.actor }}
+          RELEASE_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
         shell: bash
         run: |
           set -euo pipefail
           [[ "$GITHUB_REPOSITORY" == "braidenm/home-lab-observer" ]] || { echo "Publication is limited to the canonical repository" >&2; exit 1; }
+          [[ "$RELEASE_ACTOR" == "$RELEASE_OWNER" && "$RELEASE_TRIGGERING_ACTOR" == "$RELEASE_OWNER" ]] || { echo "Only the repository owner may dispatch or rerun publication" >&2; exit 1; }
           [[ "${{ inputs.immutability_confirmed }}" == "true" ]] || { echo "Owner confirmation of release immutability is required" >&2; exit 1; }
           git fetch --no-tags origin main
           [[ "$GITHUB_SHA" == "$(git rev-parse origin/main)" ]] || { echo "Dispatch SHA is not current main" >&2; exit 1; }
@@ -108,6 +112,7 @@ jobs:
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
           path: .
+          syft-version: v1.51.1
           format: spdx-json
           output-file: dist/release/observer.spdx.json
           upload-artifact: false
@@ -247,9 +252,18 @@ jobs:
             echo "Release identity appeared after authorization; refusing to overwrite it" >&2
             exit 1
           fi
-          gh release create "$tag" --target "$COMMIT" --title "Home Lab Observer ${VERSION}" \
+          created_commit="$(gh api --method POST /repos/${GITHUB_REPOSITORY}/git/refs -f ref="refs/tags/${tag}" -f sha="$COMMIT" --jq .object.sha)"
+          [[ "$created_commit" == "$COMMIT" ]] || { echo "Tag creation did not select the verified commit" >&2; exit 1; }
+          verify_tag() {
+            [[ "$(gh api /repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag} --jq '.object.type + ":" + .object.sha')" == "commit:${COMMIT}" ]] || {
+              echo "Release tag no longer selects the verified commit" >&2
+              exit 1
+            }
+          }
+          gh release create "$tag" --verify-tag --title "Home Lab Observer ${VERSION}" \
             --notes "Unsigned native preview. Verify SHA256SUMS and GitHub provenance before running. No production signing certificate is used in this preview." \
             --draft --prerelease
+          verify_tag
           gh release upload "$tag" dist/release/*
           expected="$(find dist/release -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)"
           actual="$(gh release view "$tag" --json assets --jq '.assets[].name' | LC_ALL=C sort)"
@@ -259,7 +273,9 @@ jobs:
           mkdir dist/draft-download
           gh release download "$tag" --dir dist/draft-download
           node scripts/smoke-native-delivery.mjs --mode bundle --version "$VERSION" --directory dist/draft-download
+          verify_tag
           gh release edit "$tag" --draft=false --prerelease
+          verify_tag
           [[ "$(gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2026-03-10' /repos/${GITHUB_REPOSITORY}/releases/tags/${tag} --jq .immutable)" == "true" ]] || {
             echo "Published release is not marked immutable by GitHub" >&2
             exit 1

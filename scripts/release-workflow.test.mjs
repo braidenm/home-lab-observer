@@ -124,6 +124,12 @@ test("workflows keep publication manual, permission-scoped and fully pinned", as
   assert.match(release, /^on:\n  workflow_dispatch:/mu);
   assert.doesNotMatch(release, /^  (push|pull_request|schedule):/mu);
   assert.match(release, /release-validate-input\.mjs.+--ref "\$GITHUB_REF"/u);
+  assert.match(release, /RELEASE_ACTOR: \$\{\{ github.actor \}\}/u);
+  assert.match(release, /RELEASE_TRIGGERING_ACTOR: \$\{\{ github.triggering_actor \}\}/u);
+  assert.match(release, /"\$RELEASE_ACTOR" == "\$RELEASE_OWNER" && "\$RELEASE_TRIGGERING_ACTOR" == "\$RELEASE_OWNER"/u);
+  assert.match(release, /gh api --method POST .+\/git\/refs -f ref="refs\/tags\/\$\{tag\}" -f sha="\$COMMIT"/u);
+  assert.match(release, /gh release create "\$tag" --verify-tag/u);
+  assert.match(release, /verify_tag\n\s+gh release edit "\$tag" --draft=false --prerelease\n\s+verify_tag/u);
   assert.match(release, /inputs\.immutability_confirmed/u);
   assert.match(release, /releases\/tags\/\$\{tag\} --jq \.immutable/u);
   assert.match(release, /id-token: write/u);
@@ -132,6 +138,7 @@ test("workflows keep publication manual, permission-scoped and fully pinned", as
   assert.doesNotMatch(delivery, /(id-token|attestations): write/u);
   assert.doesNotMatch(delivery, /contents: write/u);
   for (const workflow of [delivery, release]) {
+    assert.match(workflow, /syft-version: v1\.51\.1/u);
     for (const line of workflow.match(/^\s*- uses: .+$/gmu) ?? []) {
       assert.match(line, /@[a-f0-9]{40}(?:\s+#|$)/u, `action is not full-SHA pinned: ${line}`);
     }

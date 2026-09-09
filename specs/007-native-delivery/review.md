@@ -26,6 +26,9 @@
   bytes before publishing, and require the public release API to report `immutable: true` before reporting success.
 - Reuse the native delivery cross-build as the existing required `cross-build` check instead of compiling six targets
   twice in two workflows.
+- Require both the original dispatcher and rerun actor to be the repository owner. Create the release tag atomically
+  against the tested commit and recheck its exact target before and after immutable publication.
+- Pin the SBOM generator version as well as its enclosing action; an action SHA alone does not pin downloaded tools.
 
 ## Evidence recorded so far
 
@@ -37,6 +40,10 @@
 - The actual Windows archive binary passes authenticated API, history, JSON Schema and packaged browser tests at
   390, 768 and 1440 CSS pixels. `OBSERVER_SMOKE_BINARY` lets the existing smoke suite test an extracted artifact without
   rebuilding it; production startup behavior is unaffected.
+- Independent reviewer `api_local_ui` approved the releasepack, CLI/version, install documentation and packaged UI
+  boundary after targeted Go tests, AJV tests, actual six-archive manifest inspection and mobile screenshot review.
+  Review confirmed fixed archive members, private/non-overlapping staging, bounded regular reads, truthful trust
+  disclosures and no unexpected startup/privilege/Docker changes. Installer review is recorded separately.
 - Hosted installer results, independent final reviews and first-release download verification are recorded below
   when those checks complete. These pending checks are not represented as passed evidence.
 
