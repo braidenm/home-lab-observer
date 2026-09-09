@@ -47,6 +47,7 @@ func (s Sample) validate() error {
 type Rollup struct {
 	Metric            MetricID
 	BucketStart       time.Time
+	LastAt            time.Time
 	ResolutionSeconds int64
 	Count             int64
 	Minimum           float64

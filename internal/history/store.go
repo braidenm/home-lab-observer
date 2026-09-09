@@ -311,7 +311,7 @@ func (s *Store) Rollups(ctx context.Context, metric MetricID, from, to time.Time
 	if limit < 1 || limit > 10000 {
 		return nil, errors.New("invalid rollup limit")
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT bucket_start_ns,resolution_seconds,sample_count,minimum,maximum,total,last_value FROM rollups WHERE metric=? AND bucket_start_ns>=? AND bucket_start_ns<=? ORDER BY bucket_start_ns LIMIT ?`, metric, from.UTC().UnixNano(), to.UTC().UnixNano(), limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT bucket_start_ns,resolution_seconds,sample_count,minimum,maximum,total,last_value,last_at_ns FROM rollups WHERE metric=? AND bucket_start_ns>=? AND bucket_start_ns<=? ORDER BY bucket_start_ns LIMIT ?`, metric, from.UTC().UnixNano(), to.UTC().UnixNano(), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -319,12 +319,13 @@ func (s *Store) Rollups(ctx context.Context, metric MetricID, from, to time.Time
 	result := []Rollup{}
 	for rows.Next() {
 		var r Rollup
-		var at int64
+		var at, lastAt int64
 		r.Metric = metric
-		if err := rows.Scan(&at, &r.ResolutionSeconds, &r.Count, &r.Minimum, &r.Maximum, &r.Sum, &r.Last); err != nil {
+		if err := rows.Scan(&at, &r.ResolutionSeconds, &r.Count, &r.Minimum, &r.Maximum, &r.Sum, &r.Last, &lastAt); err != nil {
 			return nil, err
 		}
 		r.BucketStart = time.Unix(0, at).UTC()
+		r.LastAt = time.Unix(0, lastAt).UTC()
 		result = append(result, r)
 	}
 	return result, rows.Err()
