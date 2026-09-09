@@ -10,7 +10,9 @@ The source preview includes the [Spec 005](specs/005-local-data-plane/spec.md) l
 real trends, and embedded local dashboard, plus [Spec 006](specs/006-container-observations/spec.md)
 opt-in container inventory and resource readings. See [build and run instructions](docs/local-service.md)
 and [connect a local Docker engine](docs/container-observations.md).
-The project remains pre-release and does not yet publish an installable agent.
+The project remains pre-release. [Native delivery instructions](docs/install.md) describe the verified preview archives
+and per-user helpers; [GitHub Releases](https://github.com/braidenm/home-lab-observer/releases) lists published versions.
+Windows/macOS previews are explicitly not publisher-signed/notarized. Background services and remote sync remain separate milestones.
 
 ## Target product shape
 
@@ -25,12 +27,10 @@ The project remains pre-release and does not yet publish an installable agent.
 ## Architecture at a glance
 
 ```text
-OS and workload adapters
-  -> normalized observations
-  -> bounded local history
-  -> versioned local API + optional embedded dashboard
-  -> optional authenticated snapshot uploader
-  -> Platform Demo or another compatible client
+Native host/process adapters -> current reads + bounded numeric host history --+
+Optional local Docker adapter -> current in-memory container inventory --------+-> authenticated local API + embedded UI
+
+Future: an explicitly enrolled outbound uploader -> Platform Demo or another compatible client
 ```
 
 Platform Demo is a separate consumer of the observer contract. It does not iframe the local dashboard or require this repository to know about Platform Demo's UI.
@@ -57,6 +57,7 @@ exits 1 but cannot guarantee a complete JSON document.
 - [Reusable observer dashboard](web/observer-ui/README.md)
 - [Run and manage the local preview](docs/local-service.md)
 - [Enable and understand Docker observations](docs/container-observations.md)
+- [Download, verify, install and manage native previews](docs/install.md)
 
 ## Supported delivery targets
 
