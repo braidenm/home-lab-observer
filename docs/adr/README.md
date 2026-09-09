@@ -9,5 +9,6 @@
 | [005](005-local-service-and-history.md) | Accepted | Authenticated foreground service with bounded history and embedded assets |
 | [006](006-specialized-container-read-model.md) | Accepted | Dedicated container read model preserves legacy contracts and unknown metrics |
 | [007](007-native-preview-installation.md) | Accepted | Versioned per-user previews without implicit service authority |
+| [008](008-local-background-convenience-profile.md) | Accepted | Explicit user-session background lifecycle and bounded self-diagnostics |
 
 Accepted ADRs are immutable except for status and supersession links. Material changes require a new ADR.

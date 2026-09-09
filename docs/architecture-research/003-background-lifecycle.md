@@ -1,0 +1,66 @@
+# Background lifecycle: authority, shutdown and bounded diagnostics
+
+Research date: 2026-09-09. Scope: Spec 008's local, unsigned native preview; Go 1.27, Task Scheduler 2.0,
+systemd user managers and macOS LaunchAgents. This is not the isolated remote collector/uploader profile.
+
+## Current evidence and decision
+
+Spec 007 delivers six immutable native archives with a stable per-user launcher and explicit upgrade/rollback.
+`cmd/observer/serve.go` already drains HTTP and the scheduler on cancellation. Its stderr logger uses code-owned
+messages, but has no retained, bounded background sink. Installers deliberately do not register startup jobs.
+
+Keep foreground as the default. An explicit `background enable` registers only the current user's session manager
+and starts the observer. Use typed settings and fixed identities, not arbitrary command strings. The owner can
+inspect, stop, restart and disable the registration. Disable preserves observation state.
+
+| Option | Fit | Decision |
+| --- | --- | --- |
+| Foreground only | Portable and no startup mutation; terminal must remain open | Retain as default/fallback |
+| User-session manager | No saved password or elevation; visible login/logout limitations | Preview profile |
+| Machine-wide service | Boot-before-login, but requires privileged installation and account/credential design | Separate future spec |
+
+## Primary evidence
+
+- [Microsoft task security](https://learn.microsoft.com/en-us/windows/win32/taskschd/security-contexts-for-running-tasks)
+  documents current-user interactive-token tasks and least-privilege registration. We use neither password nor S4U.
+- [Microsoft task settings](https://learn.microsoft.com/en-us/windows/win32/taskschd/tasks) documents the default
+  72-hour execution limit. A long-running observer needs an explicit unlimited execution time, bounded restart policy
+  and single-instance behavior. Interactive-token operation does not promise service-before-login coverage.
+- [Apple launch jobs](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html)
+  distinguishes user agents from system daemons. Use a ProgramArguments array, throttled failure restart and a user
+  registration; do not request sudo, install a LaunchDaemon or bypass Background Items approval.
+- [systemd login control](https://www.freedesktop.org/software/systemd/man/252/loginctl.html) documents lingering as
+  a separate user-manager lifetime choice. Do not enable it automatically. Missing user manager/session bus is an
+  actionable unavailable state. The primary page was independently checked during design; a later root fetch failed.
+
+Sources were checked against the existing foreground implementation and independently reviewed across runtime and
+packaging responsibilities. Native tests, not documentation alone, must establish executable behavior.
+
+## Failure-mode FAQ
+
+**Does closing a terminal stop it?** Not after explicit enable. Logout/reboot coverage depends on the user session;
+the preview makes no before-login guarantee. The owner was offered a separate Windows Service design and the
+no-elevation default remains in effect unless changed.
+
+**Can scheduled-task stop lose history?** Its termination is not a graceful signal. First send an owner-only,
+instance-nonce-bound fixed stop request and wait for listener/history shutdown. Never kill by PID alone or silently
+force after a timeout. An explicit force operation has a documented data-loss risk.
+
+**Can logs fill a disk?** Product-owned diagnostics have five fixed files, each at most 2 MiB, seven-day age and 8 KiB
+record limits. Managers discard stdout/stderr. No raw observation fields, paths, errors, credentials or request data
+are diagnostic inputs. A failed diagnostic write increments a counter without blocking collection or logging itself.
+
+**What if an existing task has the same name?** Validate ownership, exact configuration and marker. Refuse unknown or
+mismatched registrations. Serialize lifecycle changes and test interrupted registration/removal recovery.
+
+**How do upgrade and rollback work?** They only change the selected installed version. Explicit restart adopts that
+version; neither operation restarts a running observer. Uninstall requires background disable first and preserves data.
+
+## Acceptance and rollback
+
+Fake adapters verify exact arguments and manager states; native CI verifies syntax and isolated registrations when a
+real user manager exists. Do not register startup on the developer's machine merely to run tests. Verify stale nonce,
+timeout, malicious paths/registrations, retention, secret canaries and shutdown/store reuse. API/UI distinguish absent
+diagnostics, healthy zero counts and failures. Disable returns to foreground operation without schema/data migration.
+
+See [Spec 008](../../specs/008-background-lifecycle/spec.md) and [ADR 008](../adr/008-local-background-convenience-profile.md).
