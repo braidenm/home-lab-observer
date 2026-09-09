@@ -7,11 +7,25 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/braidenm/home-lab-observer/internal/history"
 )
+
+func TestHTTPInternalLogsDoNotEchoSourceDetails(t *testing.T) {
+	var output strings.Builder
+	writer := safeHTTPLog{slog.New(slog.NewJSONHandler(&output, nil))}
+	message := []byte("panic: synthetic-private-token and source payload")
+	count, err := writer.Write(message)
+	if err != nil || count != len(message) {
+		t.Fatalf("write count=%d err=%v", count, err)
+	}
+	if strings.Contains(output.String(), "synthetic-private-token") || !strings.Contains(output.String(), "HTTP_INTERNAL_ERROR") {
+		t.Fatal("server log did not preserve safe code-only boundary")
+	}
+}
 
 func TestServeDrainsAndReleasesHistory(t *testing.T) {
 	reservation, err := net.Listen("tcp4", "127.0.0.1:0")
