@@ -8,6 +8,7 @@ import { createServer } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { waitForProcessExit as waitForExit } from "./wait-for-process-exit.mjs";
 
 const PLATFORMS = [
   ["linux", "amd64", "tar.gz"], ["linux", "arm64", "tar.gz"],
@@ -180,14 +181,6 @@ async function smokeAuthenticatedService(executable, temporary) {
       }
     }
   }
-}
-
-async function waitForExit(processHandle, timeoutMilliseconds) {
-  if (processHandle.exitCode !== null) return true;
-  return Promise.race([
-    new Promise((resolve) => processHandle.once("exit", () => resolve(true))),
-    delay(timeoutMilliseconds).then(() => false),
-  ]);
 }
 
 async function nativeSmoke(directory, version, commit, checksums) {

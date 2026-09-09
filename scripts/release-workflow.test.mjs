@@ -6,6 +6,21 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { EventEmitter } from "node:events";
+import { waitForProcessExit } from "./wait-for-process-exit.mjs";
+
+test("process exit waits release listeners and recognize signal termination", async () => {
+  const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
+  const stopped = waitForProcessExit(child, 1000);
+  child.emit("exit", 0);
+  assert.equal(await stopped, true);
+  assert.equal(child.listenerCount("exit"), 0);
+  assert.equal(await waitForProcessExit(child, 1), false);
+  assert.equal(child.listenerCount("exit"), 0);
+  child.signalCode = "SIGTERM";
+  assert.equal(await waitForProcessExit(child, 1000), true);
+  assert.equal(child.listenerCount("exit"), 0);
+});
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const version = "0.1.0-preview.7";

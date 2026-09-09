@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import Ajv from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
+import { waitForProcessExit as waitForExit } from "./wait-for-process-exit.mjs";
 
 const root = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const createdTemporary = await mkdtemp(path.join(os.tmpdir(), "observer-background-smoke-"));
@@ -172,14 +173,6 @@ async function freePort() {
   assert(address && typeof address !== "string", "could not reserve a smoke port");
   await new Promise((resolve) => server.close(resolve));
   return address.port;
-}
-
-async function waitForExit(processHandle, timeoutMilliseconds) {
-  if (processHandle.exitCode !== null || processHandle.signalCode !== null) return true;
-  return Promise.race([
-    new Promise((resolve) => processHandle.once("exit", () => resolve(true))),
-    delay(timeoutMilliseconds).then(() => false),
-  ]);
 }
 
 async function terminateAndWait(processHandle) {
