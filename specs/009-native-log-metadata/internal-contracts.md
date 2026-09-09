@@ -166,10 +166,11 @@ no trustworthy batch escaped; the collector creates a fixed `FAILED/READER_FAILE
 never exposes the error text.
 
 Adapter construction receives one validated observer-owned state root, not a request-selected path. Linux cursor
-staging and Windows helper exchange use fixed bounded owner-only files beneath one dedicated staging directory,
-remove stale known filenames before an attempt, and clean them after success, failure, cancellation, and restart.
-They never create arbitrary/random cursor filenames that can accumulate after a crash, expose cursor contents in argv,
-or return a staging path through these ports.
+staging uses fixed per-source bounded owner-only files beneath one dedicated staging directory, removes stale known
+filenames before an attempt, and cleans them after success, failure, cancellation, and restart. It never creates
+arbitrary/random cursor filenames that can accumulate after a crash, exposes cursor contents in argv, or returns a
+staging path through these ports. The Windows fixed helper continues to use bounded stdin/stdout pipes and discarded
+stderr, not staging files.
 
 For a normal batch, `len(Events) <= 512`, `DiscardedCount == sum(Discards.Count)`, and `ExaminedCount` equals accepted
 plus discarded plus one only when a lookahead was examined and `Deferred` is true. The deferred sentinel is absent
