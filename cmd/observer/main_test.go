@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -43,6 +44,22 @@ func TestRunRejectsInvalidCommand(t *testing.T) {
 	var out, errOut strings.Builder
 	if code := run([]string{"unknown"}, &out, &errOut, nil); code != 2 {
 		t.Fatalf("code=%d", code)
+	}
+}
+
+func TestRunRoutesBackgroundWithoutChangingForegroundDefault(t *testing.T) {
+	backgroundCalled := false
+	serveCalled := false
+	backgroundCommand := func(args []string, _, _ io.Writer) int {
+		backgroundCalled = len(args) == 1 && args[0] == "status"
+		return 7
+	}
+	serveCommand := func([]string, io.Writer, io.Writer) int { serveCalled = true; return 0 }
+	if code := runCommandWithBackground([]string{"background", "status"}, io.Discard, io.Discard, nil, serveCommand, backgroundCommand); code != 7 || !backgroundCalled || serveCalled {
+		t.Fatalf("background code=%d called=%v serve=%v", code, backgroundCalled, serveCalled)
+	}
+	if code := runCommandWithBackground(nil, io.Discard, io.Discard, nil, serveCommand, backgroundCommand); code != 0 || !serveCalled {
+		t.Fatalf("foreground default code=%d called=%v", code, serveCalled)
 	}
 }
 

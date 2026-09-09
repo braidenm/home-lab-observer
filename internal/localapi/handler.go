@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/braidenm/home-lab-observer/internal/containerobs"
+	"github.com/braidenm/home-lab-observer/internal/diagnostics"
 	"github.com/braidenm/home-lab-observer/internal/history"
 	"github.com/braidenm/home-lab-observer/internal/projection"
 	"github.com/braidenm/home-lab-observer/internal/scheduler"
@@ -20,6 +21,8 @@ import (
 
 const requestTimeout = 5 * time.Second
 const snapshotStaleAfter = 45 * time.Second
+
+type DiagnosticsSource interface{ Health() diagnostics.Health }
 
 type Source interface {
 	Current() (projection.CurrentSnapshot, bool)
@@ -36,6 +39,7 @@ type Config struct {
 	Source          Source
 	History         series.Reader
 	ContainerSource ContainerSource
+	Diagnostics     DiagnosticsSource
 	Now             func() time.Time
 }
 
@@ -102,6 +106,8 @@ func (h *handler) api(w http.ResponseWriter, r *http.Request) {
 		h.containers(w, r)
 	case "/api/v1/metrics/series":
 		h.series(w, r)
+	case "/api/v1/diagnostics/health":
+		h.diagnosticsHealth(w, r)
 	default:
 		writeProblem(w, http.StatusNotFound, "ENDPOINT_NOT_FOUND", "Endpoint not found")
 	}

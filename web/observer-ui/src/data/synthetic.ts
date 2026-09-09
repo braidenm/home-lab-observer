@@ -1,4 +1,4 @@
-import type { CurrentSnapshot, ObserverCapabilities, ObserverDataSource, TrendRange, TrendSnapshot } from "../types";
+import type { CurrentSnapshot, DiagnosticsHealth, ObserverCapabilities, ObserverDataSource, TrendRange, TrendSnapshot } from "../types";
 
 const observedAt = "2026-09-09T18:42:00.000Z";
 const before = (minutes: number) => new Date(Date.parse(observedAt) - minutes * 60_000).toISOString();
@@ -116,6 +116,19 @@ export const syntheticTrends: TrendSnapshot = {
   ]
 };
 
+export const syntheticDiagnosticsHealth: DiagnosticsHealth = {
+  schemaVersion: "observer-diagnostics-health/v1",
+  generatedAt: observedAt,
+  enabled: true,
+  available: true,
+  state: "AVAILABLE",
+  reasonCode: null,
+  limits: { maxFiles: 5, maxFileBytes: 2_097_152, maxTotalBytes: 10_485_760, maxRecordBytes: 8_192, maxAgeSeconds: 604_800 },
+  usage: { totalBytes: 32_768, fileCount: 1 },
+  counters: { droppedRecords: 2, writeFailures: 0 },
+  policy: { dataClassification: "PUBLIC_METADATA", containsLogContents: false, containsPaths: false, remoteUploadEligible: false }
+};
+
 export class SyntheticObserverDataSource implements ObserverDataSource {
   async getCapabilities(): Promise<ObserverCapabilities> { return structuredClone(syntheticCapabilities); }
   async getCurrentSnapshot(): Promise<CurrentSnapshot> { return structuredClone(syntheticSnapshot); }
@@ -128,4 +141,5 @@ export class SyntheticObserverDataSource implements ObserverDataSource {
     });
     return { ...structuredClone(syntheticTrends), range, windowStart, series };
   }
+  async getDiagnosticsHealth(): Promise<DiagnosticsHealth> { return structuredClone(syntheticDiagnosticsHealth); }
 }

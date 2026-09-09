@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/braidenm/home-lab-observer/internal/diagnostics"
 	"github.com/braidenm/home-lab-observer/internal/history"
 	"github.com/braidenm/home-lab-observer/internal/projection"
 	"github.com/braidenm/home-lab-observer/internal/scheduler"
@@ -32,6 +33,10 @@ type fakeMetricSource struct {
 	fakeSource
 	statuses map[history.MetricID]projection.SectionStatus
 }
+
+type fakeDiagnosticsSource struct{ health diagnostics.Health }
+
+func (source fakeDiagnosticsSource) Health() diagnostics.Health { return source.health }
 
 func (s fakeMetricSource) MetricStatuses() map[history.MetricID]projection.SectionStatus {
 	return s.statuses
@@ -161,6 +166,49 @@ func TestProtectedRoutesCapabilitiesAndJSONNotFound(t *testing.T) {
 	ui := serve(handler, http.MethodGet, "/workloads", "", "")
 	if ui.Code != http.StatusOK || !strings.Contains(ui.Body.String(), `<div id="root"></div>`) {
 		t.Fatalf("static fallback=%d", ui.Code)
+	}
+}
+
+func TestDiagnosticsHealthIsAuthenticatedBoundedAndContentFree(t *testing.T) {
+	now := time.Date(2026, 9, 9, 19, 0, 0, 0, time.UTC)
+	health := diagnostics.Health{
+		Enabled: true, Available: true, State: "AVAILABLE", MaxFiles: 5,
+		MaxFileBytes: 2 * 1024 * 1024, MaxTotalBytes: 10 * 1024 * 1024,
+		MaxRecordBytes: 8 * 1024, MaxAgeSeconds: 7 * 24 * 60 * 60,
+		TotalBytes: 4096, FileCount: 1, DroppedRecords: 2, WriteFailures: 1,
+	}
+	handler, err := NewHandler(Config{Port: 9847, Token: testToken, Version: "0.1.0", Source: fakeSource{}, History: handlerReader{}, Diagnostics: fakeDiagnosticsSource{health}, Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	unauthorized := serve(handler, http.MethodGet, "/api/v1/diagnostics/health", "", "")
+	if unauthorized.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthorized=%d", unauthorized.Code)
+	}
+	response := serve(handler, http.MethodGet, "/api/v1/diagnostics/health", testToken, "")
+	if response.Code != http.StatusOK || response.Body.Len() > diagnosticsResponseLimit {
+		t.Fatalf("diagnostics=%d/%d %s", response.Code, response.Body.Len(), response.Body.String())
+	}
+	body := response.Body.String()
+	for _, forbidden := range []string{"synthetic-secret", `"records":`, `"log_contents":[`, `"path":`} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("diagnostics leaked forbidden content %q: %s", forbidden, body)
+		}
+	}
+	if !strings.Contains(body, `"state":"AVAILABLE"`) || !strings.Contains(body, `"dropped_records":2`) || !strings.Contains(body, `"contains_log_contents":false`) {
+		t.Fatalf("diagnostics response missing contract fields: %s", body)
+	}
+	invalid := serve(handler, http.MethodGet, "/api/v1/diagnostics/health?records=true", testToken, "")
+	if invalid.Code != http.StatusBadRequest {
+		t.Fatalf("diagnostics accepted query=%d", invalid.Code)
+	}
+}
+
+func TestDiagnosticsHealthDefaultsToExplicitDisabled(t *testing.T) {
+	now := time.Date(2026, 9, 9, 19, 0, 0, 0, time.UTC)
+	response := serve(newTestHandler(t, fakeSource{}, handlerReader{}, now), http.MethodGet, "/api/v1/diagnostics/health", testToken, "")
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"state":"DISABLED"`) || !strings.Contains(response.Body.String(), `"reason_code":"DIAGNOSTICS_DISABLED"`) {
+		t.Fatalf("disabled diagnostics=%d %s", response.Code, response.Body.String())
 	}
 }
 

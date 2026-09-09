@@ -9,7 +9,8 @@ import metricSeries from "../../../../schemas/v1/fixtures/valid/metric-series-6h
 import unsupportedMetricSeries from "../../../../schemas/v1/fixtures/valid/metric-series-unsupported.json";
 import arbitraryMetricSeries from "../../../../schemas/v1/fixtures/invalid/metric-series-arbitrary-query.json";
 import invalidQueryProblem from "../../../../schemas/v1/fixtures/valid/problem-invalid-query.json";
-import { LocalHttpObserverDataSource, ObserverTransportError, mapCapabilities, mapContainerInventory, mapCurrentSnapshot, mapMetricSeries } from "./local-http";
+import diagnosticsHealth from "../../../../schemas/v1/fixtures/valid/diagnostics-health-available.json";
+import { LocalHttpObserverDataSource, ObserverTransportError, mapCapabilities, mapContainerInventory, mapCurrentSnapshot, mapDiagnosticsHealth, mapMetricSeries } from "./local-http";
 
 const jsonResponse = (body: unknown, status = 200, contentType = "application/json; charset=utf-8") =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": contentType } });
@@ -91,6 +92,24 @@ describe("LocalHttpObserverDataSource", () => {
     expect(inventory).toMatchObject({ schemaVersion: "observer-container-inventory/v1", totalCount: 2, returnedCount: 2, policy: { readOnly: true, dataClassification: "LOCAL_SENSITIVE", remoteUploadEligible: false } });
     expect(inventory.items[0]).toMatchObject({ name: "observer-smoke-running", cpuPercent: 0, metricsState: "AVAILABLE" });
     expect(inventory.items[1]).toMatchObject({ state: "exited", cpuPercent: null, memoryBytes: null, metricsState: "NOT_RUNNING" });
+  });
+
+  it("loads bounded diagnostics health and discards additive fields without reflecting them", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(diagnosticsHealth));
+    const source = new LocalHttpObserverDataSource({ bearerToken: "local-test-token", fetcher });
+    const health = await source.getDiagnosticsHealth();
+    expect(String(fetcher.mock.calls[0][0])).toBe("http://127.0.0.1:9847/api/v1/diagnostics/health");
+    expect(new Headers(fetcher.mock.calls[0][1]?.headers).get("Authorization")).toBe("Bearer local-test-token");
+    expect(health).toMatchObject({ state: "AVAILABLE", usage: { totalBytes: 4096, fileCount: 1 }, counters: { droppedRecords: 0, writeFailures: 0 }, policy: { containsLogContents: false, containsPaths: false, remoteUploadEligible: false } });
+
+    const unsafe = cloneFixture(diagnosticsHealth);
+    unsafe.log_contents = ["synthetic-secret"];
+    unsafe.limits.future_metadata = "synthetic-secret";
+    const projected = mapDiagnosticsHealth(unsafe);
+    expect(JSON.stringify(projected)).not.toContain("synthetic-secret");
+    const inconsistent = cloneFixture(diagnosticsHealth);
+    inconsistent.available = false;
+    expect(() => mapDiagnosticsHealth(inconsistent)).toThrow(/inconsistent/);
   });
 
   it("strictly rejects invalid or secret-bearing container inventory fields", () => {
@@ -229,5 +248,7 @@ describe("LocalHttpObserverDataSource", () => {
     await expect(oversizedSeries.getTrends("1h")).rejects.toThrow(/size limit/);
     const oversizedContainers = new LocalHttpObserverDataSource({ fetcher: vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ padding: "x".repeat(1_048_600) })) });
     await expect(oversizedContainers.getContainerInventory()).rejects.toThrow(/size limit/);
+    const oversizedDiagnostics = new LocalHttpObserverDataSource({ fetcher: vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ padding: "x".repeat(32_800) })) });
+    await expect(oversizedDiagnostics.getDiagnosticsHealth()).rejects.toThrow(/size limit/);
   });
 });

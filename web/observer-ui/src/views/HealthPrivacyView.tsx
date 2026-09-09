@@ -1,10 +1,11 @@
-import type { CurrentSnapshot, ObserverCapabilities, SectionName } from "../types";
+import type { ResourceState } from "../hooks/useObserverData";
+import type { CurrentSnapshot, DiagnosticsHealth, ObserverCapabilities, SectionName } from "../types";
 import { formatBytes, formatRelative, formatValue, titleCase } from "../components/format";
 import { StateBadge } from "../components/StateBadge";
 
 const sectionNames: SectionName[] = ["overview", "filesystems", "processes", "services", "containers", "logs", "observer"];
 
-export function HealthPrivacyView({ capabilities, snapshot, mode, hasContainerInventory = false }: { capabilities: ObserverCapabilities | null; snapshot: CurrentSnapshot | null; mode: "local" | "demo" | "embedded"; hasContainerInventory?: boolean }) {
+export function HealthPrivacyView({ capabilities, snapshot, diagnosticsHealth, mode, hasContainerInventory = false }: { capabilities: ObserverCapabilities | null; snapshot: CurrentSnapshot | null; diagnosticsHealth: ResourceState<DiagnosticsHealth>; mode: "local" | "demo" | "embedded"; hasContainerInventory?: boolean }) {
   const transport = mode === "demo" ? "Synthetic demo transport" : mode === "embedded" ? "Transport supplied by the embedding application" : capabilities ? `Default API bind ${capabilities.policy.defaultBind}` : "Local transport policy unavailable";
   const uploadEligible = capabilities?.collectors.filter((item) => item.uploadEligible).length;
   return (
@@ -44,9 +45,38 @@ export function HealthPrivacyView({ capabilities, snapshot, mode, hasContainerIn
         <article className="observer-privacy-card"><p className="observer-kicker">Snapshot privacy</p><dl className="observer-counter-list"><div><dt>Profile</dt><dd>{snapshot?.privacy.profile ?? "Unavailable"}</dd></div><div><dt>Redactions</dt><dd>{snapshot?.privacy.redactionCount ?? "Unavailable"}</dd></div><div><dt>Dropped</dt><dd>{snapshot?.privacy.droppedCount ?? "Unavailable"}</dd></div></dl>{snapshot && <p>Excluded: {snapshot.privacy.excludedFields.map(titleCase).join(", ") || "none reported"}</p>}</article>
       </section>
 
+      <DiagnosticsPanel resource={diagnosticsHealth} />
+
       {snapshot && <section className="observer-panel observer-panel--flush" aria-labelledby="signals-title"><div className="observer-section-heading observer-section-heading--inside"><div><p className="observer-kicker">Observer section</p><h3 id="signals-title">Self-observation signals</h3></div></div><div className="observer-table-scroll" role="region" aria-label="Observer signals table" tabIndex={0}><table className="observer-table"><caption className="observer-visually-hidden">Observer signal name, state, and exact value</caption><thead><tr><th scope="col">Signal</th><th scope="col">State</th><th scope="col">Value</th></tr></thead><tbody>{snapshot.sections.observer.items.map((item) => <tr key={item.name}><th scope="row">{titleCase(item.name)}</th><td><StateBadge state={item.state} /></td><td>{formatValue(item.value, item.unit)}</td></tr>)}</tbody></table></div></section>}
     </div>
   );
 }
 
 function Fact({ title, value, detail }: { title: string; value: string; detail: string }) { return <article className="observer-panel observer-panel--padded"><p className="observer-kicker">{title}</p><strong className="observer-large-value">{value}</strong><p>{detail}</p></article>; }
+
+function DiagnosticsPanel({ resource }: { resource: ResourceState<DiagnosticsHealth> }) {
+  if (resource.status === "loading") {
+    return <section className="observer-panel observer-panel--padded" aria-labelledby="diagnostics-title" aria-busy="true"><p className="observer-kicker">Bounded local records</p><h3 id="diagnostics-title">Self-diagnostics</h3><p role="status">Loading diagnostics health…</p></section>;
+  }
+  if (resource.status === "unsupported") {
+    return <section className="observer-panel observer-panel--padded" aria-labelledby="diagnostics-title"><p className="observer-kicker">Optional data source capability</p><h3 id="diagnostics-title">Self-diagnostics unavailable</h3><p>This data source does not provide the local diagnostics-health endpoint. No zero values are inferred.</p></section>;
+  }
+  if (resource.status === "error" || !resource.value) {
+    return <section className="observer-inline-error" role="alert" aria-labelledby="diagnostics-title"><h3 id="diagnostics-title">Self-diagnostics health unavailable</h3><p>{resource.error ?? "The diagnostics-health response was unavailable."} Observation continues independently.</p></section>;
+  }
+  const health = resource.value;
+  const retentionDays = Math.floor(health.limits.maxAgeSeconds / 86_400);
+  return (
+    <section className="observer-panel observer-panel--flush" aria-labelledby="diagnostics-title">
+      <div className="observer-section-heading observer-section-heading--inside"><div><p className="observer-kicker">Bounded local records</p><h3 id="diagnostics-title">Self-diagnostics</h3></div><StateBadge state={health.state} /></div>
+      <p className="observer-table-note">Health and counters only. Diagnostic records, paths, request data, observed log contents, and credentials are never returned by this endpoint.</p>
+      <div className="observer-diagnostics-grid">
+        <Fact title="Storage used" value={health.available ? formatBytes(health.usage.totalBytes) : health.enabled ? "Unavailable" : "Disabled"} detail={health.available ? `${health.usage.fileCount} of ${health.limits.maxFiles} files · ${formatBytes(health.limits.maxTotalBytes)} total ceiling` : health.enabled ? "Storage usage could not be measured; zero is not inferred" : "Retained diagnostics are not enabled in this runtime mode"} />
+        <Fact title="Retention" value={`${retentionDays} days`} detail={`${formatBytes(health.limits.maxFileBytes)} per file · ${formatBytes(health.limits.maxRecordBytes)} per record`} />
+        <Fact title="Dropped records" value={String(health.counters.droppedRecords)} detail="Code-owned records rejected before persistence" />
+        <Fact title="Write failures" value={String(health.counters.writeFailures)} detail="Failures are counted without stopping observation" />
+      </div>
+      <p className="observer-table-note">State: {health.state}. {health.reasonCode ? `Reason: ${titleCase(health.reasonCode)}.` : "No active diagnostics fault."} Classification: {health.policy.dataClassification}; remote upload not eligible.</p>
+    </section>
+  );
+}

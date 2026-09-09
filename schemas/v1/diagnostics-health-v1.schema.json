@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:home-lab-observer:schema:diagnostics-health:v1",
+  "title": "Home Lab Observer diagnostics health v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generated_at", "enabled", "available", "state", "reason_code", "limits", "usage", "counters", "policy"],
+  "properties": {
+    "schema_version": { "const": "observer-diagnostics-health/v1" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "enabled": { "type": "boolean" },
+    "available": { "type": "boolean" },
+    "state": { "enum": ["AVAILABLE", "UNAVAILABLE", "DISABLED"] },
+    "reason_code": {
+      "oneOf": [
+        { "type": "null" },
+        { "enum": ["DIAGNOSTICS_DISABLED", "DIAGNOSTICS_UNAVAILABLE", "UNSAFE_DIAGNOSTICS_PATH"] }
+      ]
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_files", "max_file_bytes", "max_total_bytes", "max_record_bytes", "max_age_seconds"],
+      "properties": {
+        "max_files": { "const": 5 },
+        "max_file_bytes": { "const": 2097152 },
+        "max_total_bytes": { "const": 10485760 },
+        "max_record_bytes": { "const": 8192 },
+        "max_age_seconds": { "const": 604800 }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total_bytes", "file_count"],
+      "properties": {
+        "total_bytes": { "type": "integer", "minimum": 0, "maximum": 10485760 },
+        "file_count": { "type": "integer", "minimum": 0, "maximum": 5 }
+      }
+    },
+    "counters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dropped_records", "write_failures"],
+      "properties": {
+        "dropped_records": { "type": "integer", "minimum": 0 },
+        "write_failures": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["data_classification", "contains_log_contents", "contains_paths", "remote_upload_eligible"],
+      "properties": {
+        "data_classification": { "const": "PUBLIC_METADATA" },
+        "contains_log_contents": { "const": false },
+        "contains_paths": { "const": false },
+        "remote_upload_eligible": { "const": false }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "state": { "const": "AVAILABLE" } }, "required": ["state"] },
+      "then": { "properties": { "enabled": { "const": true }, "available": { "const": true }, "reason_code": { "type": "null" } } }
+    },
+    {
+      "if": { "properties": { "state": { "const": "UNAVAILABLE" } }, "required": ["state"] },
+      "then": { "properties": { "enabled": { "const": true }, "available": { "const": false }, "reason_code": { "enum": ["DIAGNOSTICS_UNAVAILABLE", "UNSAFE_DIAGNOSTICS_PATH"] } } }
+    },
+    {
+      "if": { "properties": { "state": { "const": "DISABLED" } }, "required": ["state"] },
+      "then": { "properties": { "enabled": { "const": false }, "available": { "const": false }, "reason_code": { "const": "DIAGNOSTICS_DISABLED" }, "usage": { "properties": { "total_bytes": { "const": 0 }, "file_count": { "const": 0 } } } } }
+    }
+  ]
+}

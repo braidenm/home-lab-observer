@@ -13,6 +13,16 @@ import (
 
 var ErrUnsafePath = errors.New("unsafe owner-only path")
 
+// ValidateDedicatedDirectory verifies an existing dedicated directory and all
+// of its ancestors without changing permissions or creating entries.
+func ValidateDedicatedDirectory(path string) error {
+	resolved, err := resolveStateDir(path, "validation-only")
+	if err != nil {
+		return err
+	}
+	return validateDirectoryPath(resolved)
+}
+
 // EnsurePrivateSubdir creates and restricts a fixed child of a dedicated state
 // directory. Callers must supply a code-owned child name, not user input.
 func EnsurePrivateSubdir(stateDir, child string) (string, error) {

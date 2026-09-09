@@ -14,6 +14,7 @@ const schemaPaths = [
   "schemas/v1/current-snapshot-v1.schema.json",
   "schemas/v1/metric-series-v1.schema.json",
   "schemas/v1/container-inventory-v1.schema.json",
+  "schemas/v1/diagnostics-health-v1.schema.json",
   "schemas/v1/problem-details-v1.schema.json"
 ];
 const schemas = schemaPaths.map(readJson);
@@ -48,10 +49,12 @@ const caps = api.paths["/api/v1/capabilities"].get;
 const snapshot = api.paths["/api/v1/snapshots/current"].get;
 const series = api.paths["/api/v1/metrics/series"].get;
 const containers = api.paths["/api/v1/containers"].get;
+const diagnostics = api.paths["/api/v1/diagnostics/health"].get;
 if (caps["x-max-response-bytes"] !== 131072) fail("Capabilities response cap must be 128 KiB");
 if (snapshot["x-max-response-bytes"] !== 1048576) fail("Snapshot response cap must be 1 MiB");
 if (series["x-max-response-bytes"] !== 1048576) fail("Metric series response cap must be 1 MiB");
 if (containers["x-max-response-bytes"] !== 1048576) fail("Container inventory response cap must be 1 MiB");
+if (diagnostics["x-max-response-bytes"] !== 32768) fail("Diagnostics health response cap must be 32 KiB");
 if (containers.parameters.length !== 1 || containers.parameters[0].name !== "limit" || containers.parameters[0].in !== "query") fail("Container inventory accepts only the limit query parameter");
 for (const [key, value] of Object.entries({ minimum: 1, maximum: 500, default: 100 })) {
   if (containers.parameters[0].schema[key] !== value) fail(`Container inventory limit.${key} must equal ${value}`);

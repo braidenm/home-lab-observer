@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/braidenm/home-lab-observer/internal/containerobs"
+	"github.com/braidenm/home-lab-observer/internal/diagnostics"
 	"github.com/braidenm/home-lab-observer/internal/history"
 	"github.com/braidenm/home-lab-observer/internal/projection"
 )
@@ -71,6 +72,25 @@ func TestContainerSchemaScenarioContract(t *testing.T) {
 		t.Fatalf("container status=%d body=%s", response.Code, response.Body.String())
 	}
 	t.Logf("SCHEMA_SCENARIO container-inventory %s", strings.TrimSpace(response.Body.String()))
+}
+
+func TestDiagnosticsSchemaScenarioContract(t *testing.T) {
+	now := time.Date(2026, 9, 9, 19, 0, 0, 0, time.UTC)
+	health := diagnostics.Health{
+		Enabled: true, Available: true, State: "AVAILABLE", MaxFiles: 5,
+		MaxFileBytes: 2 * 1024 * 1024, MaxTotalBytes: 10 * 1024 * 1024,
+		MaxRecordBytes: 8 * 1024, MaxAgeSeconds: 7 * 24 * 60 * 60,
+		TotalBytes: 4096, FileCount: 1,
+	}
+	handler, err := NewHandler(Config{Port: 9847, Token: testToken, Version: "0.1.0", Source: fakeSource{}, History: handlerReader{}, Diagnostics: fakeDiagnosticsSource{health}, Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := serve(handler, http.MethodGet, "/api/v1/diagnostics/health", testToken, "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("diagnostics status=%d body=%s", response.Code, response.Body.String())
+	}
+	t.Logf("SCHEMA_SCENARIO diagnostics-health %s", strings.TrimSpace(response.Body.String()))
 }
 
 type schemaMetricSource struct {

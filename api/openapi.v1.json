@@ -128,6 +128,22 @@
           "500": { "$ref": "#\/components\/responses\/Problem" }
         }
       }
+    },
+    "/api/v1/diagnostics/health": {
+      "get": {
+        "operationId": "getDiagnosticsHealth",
+        "summary": "Report bounded self-diagnostics health and retention counters",
+        "description": "Returns code-owned health, limits, storage usage and failure counters only. It never returns diagnostic records, log contents, paths, request data or credentials.",
+        "x-max-response-bytes": 32768,
+        "responses": {
+          "200": {
+            "description": "Diagnostics availability, fixed retention limits and bounded counters",
+            "content": { "application/json": { "schema": { "$ref": "..\/schemas\/v1\/diagnostics-health-v1.schema.json" } } }
+          },
+          "401": { "$ref": "#\/components\/responses\/Problem" },
+          "500": { "$ref": "#\/components\/responses\/Problem" }
+        }
+      }
     }
   },
   "components": {

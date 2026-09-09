@@ -26,6 +26,10 @@ func run(args []string, stdout, stderr io.Writer, collect collectFunc) int {
 }
 
 func runCommand(args []string, stdout, stderr io.Writer, collect collectFunc, serveCommand func([]string, io.Writer, io.Writer) int) int {
+	return runCommandWithBackground(args, stdout, stderr, collect, serveCommand, runBackground)
+}
+
+func runCommandWithBackground(args []string, stdout, stderr io.Writer, collect collectFunc, serveCommand, backgroundCommand func([]string, io.Writer, io.Writer) int) int {
 	if len(args) == 0 {
 		return serveCommand(nil, stdout, stderr)
 	}
@@ -34,6 +38,9 @@ func runCommand(args []string, stdout, stderr io.Writer, collect collectFunc, se
 	}
 	if len(args) > 0 && args[0] == "serve" {
 		return serveCommand(args[1:], stdout, stderr)
+	}
+	if len(args) > 0 && args[0] == "background" {
+		return backgroundCommand(args[1:], stdout, stderr)
 	}
 	if len(args) > 0 && (args[0] == "help" || args[0] == "-h" || args[0] == "--help") {
 		printUsage(stdout)
@@ -78,6 +85,7 @@ func runCommand(args []string, stdout, stderr io.Writer, collect collectFunc, se
 func printUsage(writer io.Writer) {
 	fmt.Fprintln(writer, "usage: observer collect-once [--max-processes N] [--processes=true|false] [--timeout DURATION]")
 	fmt.Fprintln(writer, "       observer serve [--listen 127.0.0.1:9847] [--state-dir PATH] [--docker-endpoint LOCAL_SOCKET]")
+	fmt.Fprintln(writer, "       observer background <enable|start|status|stop|restart|disable> --install-root PATH")
 	fmt.Fprintln(writer, "       observer version [--json]")
 	fmt.Fprintln(writer, "Running observer without arguments starts the foreground local server. No background service is installed.")
 }

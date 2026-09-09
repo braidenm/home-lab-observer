@@ -16,7 +16,7 @@ import (
 
 func TestHTTPInternalLogsDoNotEchoSourceDetails(t *testing.T) {
 	var output strings.Builder
-	writer := safeHTTPLog{slog.New(slog.NewJSONHandler(&output, nil))}
+	writer := safeHTTPLog{logger: slog.New(slog.NewJSONHandler(&output, nil))}
 	message := []byte("panic: synthetic-private-token and source payload")
 	count, err := writer.Write(message)
 	if err != nil || count != len(message) {
