@@ -3,6 +3,8 @@ import linuxCapabilities from "../../../../schemas/v1/fixtures/valid/capabilitie
 import windowsCapabilities from "../../../../schemas/v1/fixtures/valid/capabilities-windows.json";
 import linuxSnapshot from "../../../../schemas/v1/fixtures/valid/current-snapshot-linux.json";
 import logOptInSnapshot from "../../../../schemas/v1/fixtures/valid/current-snapshot-log-opt-in.json";
+import nativeFailedSnapshot from "../../../../schemas/v1/fixtures/valid/current-snapshot-native-failed.json";
+import nativePreviewSnapshot from "../../../../schemas/v1/fixtures/valid/current-snapshot-native-preview.json";
 import metricSeries from "../../../../schemas/v1/fixtures/valid/metric-series-6h.json";
 import unsupportedMetricSeries from "../../../../schemas/v1/fixtures/valid/metric-series-unsupported.json";
 import arbitraryMetricSeries from "../../../../schemas/v1/fixtures/invalid/metric-series-arbitrary-query.json";
@@ -11,6 +13,7 @@ import { LocalHttpObserverDataSource, ObserverTransportError, mapCapabilities, m
 
 const jsonResponse = (body: unknown, status = 200, contentType = "application/json; charset=utf-8") =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": contentType } });
+const cloneFixture = <T>(value: T): any => JSON.parse(JSON.stringify(value));
 
 describe("LocalHttpObserverDataSource", () => {
   it("cancels an oversized stream before consuming an unbounded response", async () => {
@@ -81,6 +84,75 @@ describe("LocalHttpObserverDataSource", () => {
     expect(snapshot.sections.logs.items[0].body).toEqual({ state: "REDACTED_LOCAL_ONLY", redactedText: "retry for user [REDACTED]", redactionCount: 2, uploadEligible: false });
     expect("summary" in snapshot.sections.logs.items[0]).toBe(false);
     expect("structuredFields" in snapshot.sections.logs.items[0]).toBe(false);
+  });
+
+  it("accepts every current-snapshot fixture covered by the closed v1 schema", () => {
+    for (const fixture of [linuxSnapshot, logOptInSnapshot, nativeFailedSnapshot, nativePreviewSnapshot]) {
+      expect(() => mapCurrentSnapshot(fixture)).not.toThrow();
+    }
+  });
+
+  it("rejects capability enum, integer, and nested closure violations", () => {
+    const badState = cloneFixture(linuxCapabilities);
+    badState.collectors[0].support_state = "MYSTERY";
+    expect(() => mapCapabilities(badState)).toThrow(/support state/);
+
+    const fractionalRetention = cloneFixture(linuxCapabilities);
+    fractionalRetention.policy.retention_days = 1.5;
+    expect(() => mapCapabilities(fractionalRetention)).toThrow(/integer/);
+
+    const unsafeExtra = cloneFixture(linuxCapabilities);
+    unsafeExtra.collectors[0].environment_variables = ["TOKEN=secret"];
+    expect(() => mapCapabilities(unsafeExtra)).toThrow(/contract field/);
+  });
+
+  it("rejects invalid current states, inconsistent counts, and data on non-supported sections", () => {
+    const badState = cloneFixture(linuxSnapshot);
+    badState.sections.processes.collection_state = "HEALTHY";
+    expect(() => mapCurrentSnapshot(badState)).toThrow(/collection state/);
+
+    const badCounts = cloneFixture(linuxSnapshot);
+    badCounts.sections.processes.returned_count = 2;
+    expect(() => mapCurrentSnapshot(badCounts)).toThrow(/counts/);
+
+    const oversizedFilesystems = cloneFixture(linuxSnapshot);
+    oversizedFilesystems.sections.filesystems.items = Array.from({ length: 17 }, () => cloneFixture(linuxSnapshot.sections.filesystems.items[0]));
+    oversizedFilesystems.sections.filesystems.total_count = 17;
+    oversizedFilesystems.sections.filesystems.returned_count = 17;
+    oversizedFilesystems.sections.filesystems.truncated = false;
+    expect(() => mapCurrentSnapshot(oversizedFilesystems)).toThrow(/array/);
+
+    const invalidTimestamp = cloneFixture(linuxSnapshot);
+    invalidTimestamp.observed_at = "2026-02-30T12:00:00Z";
+    expect(() => mapCurrentSnapshot(invalidTimestamp)).toThrow(/date-time/);
+
+    const fractionalPID = cloneFixture(linuxSnapshot);
+    fractionalPID.sections.processes.items[0].pid = 1.5;
+    expect(() => mapCurrentSnapshot(fractionalPID)).toThrow(/integer/);
+
+    const unavailableWithData = cloneFixture(linuxSnapshot);
+    unavailableWithData.sections.services.total_count = 1;
+    unavailableWithData.sections.services.returned_count = 1;
+    unavailableWithData.sections.services.items = [{ name: "hidden-service", state: "running", start_mode: "auto" }];
+    expect(() => mapCurrentSnapshot(unavailableWithData)).toThrow(/non-supported section/);
+
+    const processWithArguments = cloneFixture(linuxSnapshot);
+    processWithArguments.sections.processes.items[0].arguments = "--token=secret";
+    expect(() => mapCurrentSnapshot(processWithArguments)).toThrow(/contract field/);
+  });
+
+  it("enforces the closed log metadata and message-body union", () => {
+    const omittedWithBody = cloneFixture(linuxSnapshot);
+    omittedWithBody.sections.logs.items[0].body.redacted_text = "must not be accepted";
+    expect(() => mapCurrentSnapshot(omittedWithBody)).toThrow(/contract field/);
+
+    const metadataWithRawMessage = cloneFixture(linuxSnapshot);
+    metadataWithRawMessage.sections.logs.items[0].metadata.raw_message = "secret";
+    expect(() => mapCurrentSnapshot(metadataWithRawMessage)).toThrow(/contract field/);
+
+    const invalidRedactionCount = cloneFixture(logOptInSnapshot);
+    invalidRedactionCount.sections.logs.items[0].body.redaction_count = -1;
+    expect(() => mapCurrentSnapshot(invalidRedactionCount)).toThrow(/integer/);
   });
 
   it("parses bounded Problem Details into a typed safe error", async () => {
