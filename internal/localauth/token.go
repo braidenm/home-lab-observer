@@ -39,7 +39,7 @@ func Ensure(path string) (token string, created bool, err error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return "", false, fmt.Errorf("create token directory: %w", err)
 	}
-	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
+	if err := restrictDirectory(filepath.Dir(path)); err != nil {
 		return "", false, fmt.Errorf("restrict token directory: %w", err)
 	}
 
@@ -72,7 +72,7 @@ func Ensure(path string) (token string, created bool, err error) {
 	if err := file.Close(); err != nil {
 		return "", false, fmt.Errorf("close token file: %w", err)
 	}
-	if err := os.Chmod(path, 0o600); err != nil {
+	if err := restrictFile(path); err != nil {
 		return "", false, fmt.Errorf("restrict token file: %w", err)
 	}
 	complete = true
@@ -107,7 +107,7 @@ func read(path string) (string, error) {
 	if err != nil || len(raw) != tokenBytes {
 		return "", ErrInvalidTokenFile
 	}
-	if err := os.Chmod(path, 0o600); err != nil {
+	if err := restrictFile(path); err != nil {
 		return "", fmt.Errorf("restrict token file: %w", err)
 	}
 	return token, nil
