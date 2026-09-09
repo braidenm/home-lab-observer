@@ -83,6 +83,7 @@ func exerciseNativeTransport(t *testing.T, factory nativeListenerFactory) {
 		}
 		t.Cleanup(func() { _ = collector.Close() })
 		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 		result := make(chan Inventory, 1)
 		go func() { result <- collector.Collect(ctx) }()
 		select {

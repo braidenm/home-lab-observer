@@ -5,28 +5,23 @@ package containerobs
 import (
 	"net"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
 func TestUnixSocketTransport(t *testing.T) {
 	exerciseNativeTransport(t, func(t *testing.T) (string, net.Listener) {
 		t.Helper()
-		placeholder, err := os.CreateTemp("", "hlo-*.sock")
+		directory, err := os.MkdirTemp("", "hlo-")
 		if err != nil {
 			t.Fatal(err)
 		}
-		path := placeholder.Name()
-		if err := placeholder.Close(); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Remove(path); err != nil {
-			t.Fatal(err)
-		}
+		path := filepath.Join(directory, "s")
+		t.Cleanup(func() { _ = os.Remove(path); _ = os.Remove(directory) })
 		listener, err := net.Listen("unix", path)
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Cleanup(func() { _ = os.Remove(path) })
 		return "unix://" + path, listener
 	})
 }

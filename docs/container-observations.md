@@ -27,7 +27,9 @@ Windows Docker Desktop (Linux engine, when that local pipe is enabled):
 
 Some installations expose `npipe:////./pipe/docker_engine` instead. Use the pipe reported by your local Docker setup;
 these names are examples, not an automatic detection promise. Windows-container resource-stat formats and Podman are
-not certified in this slice. The observer never starts Docker Desktop for you.
+not certified in this slice. Inventory can still be listed for another engine OS, but running-container stats remain
+unavailable with `ENGINE_OS_UNSUPPORTED` unless the engine reports Linux. Missing engine-OS metadata is treated the same
+way. The observer never starts Docker Desktop for you.
 
 Unlock the local dashboard, choose **Workloads**, then **Containers**. To disable collection, stop the observer and
 restart without `--docker-endpoint`. There is no stored engine credential or remote configuration to remove.
