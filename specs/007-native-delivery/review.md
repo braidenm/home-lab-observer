@@ -21,8 +21,9 @@
 - Use a nonexisting release output directory, matching the packager's refusal to overwrite existing artifacts.
 - Inspect Windows ZIPs with a ZIP-capable reader on Linux; GNU tar does not provide this capability.
 - Do not hide duplicate archive members when validating the archive allowlist.
-- Recheck repository release immutability immediately before publication, and verify uploaded draft bytes before
-  changing the release from draft to public.
+- The owner verifies release immutability before dispatch. GitHub's settings endpoint requires administrator-read
+  permission, which is intentionally not added to CI. Require explicit dispatcher confirmation, verify uploaded draft
+  bytes before publishing, and require the public release API to report `immutable: true` before reporting success.
 - Reuse the native delivery cross-build as the existing required `cross-build` check instead of compiling six targets
   twice in two workflows.
 
@@ -33,6 +34,9 @@
 - Existing API contract suite: five schemas, 12 valid and 10 invalid fixtures. The release schema has separate
   positive SemVer and adversarial field/platform/version/URL/size tests.
 - Six real native binaries built locally with explicit version/source metadata and packaged successfully.
+- The actual Windows archive binary passes authenticated API, history, JSON Schema and packaged browser tests at
+  390, 768 and 1440 CSS pixels. `OBSERVER_SMOKE_BINARY` lets the existing smoke suite test an extracted artifact without
+  rebuilding it; production startup behavior is unaffected.
 - Hosted installer results, independent final reviews and first-release download verification are recorded below
   when those checks complete. These pending checks are not represented as passed evidence.
 
