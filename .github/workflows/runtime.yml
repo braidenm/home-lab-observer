@@ -27,6 +27,9 @@ jobs:
           go-version-file: go.mod
           cache: true
       - run: go test ./...
+      - name: Run race detector
+        if: runner.os == 'Linux'
+        run: go test -race ./...
       - run: go vet ./...
 
   cross-build:
@@ -44,5 +47,8 @@ jobs:
           set -euo pipefail
           mkdir -p build
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o build/observer-linux-amd64 ./cmd/observer
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o build/observer-linux-arm64 ./cmd/observer
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -o build/observer-windows-amd64.exe ./cmd/observer
+          CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -trimpath -o build/observer-windows-arm64.exe ./cmd/observer
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -o build/observer-darwin-amd64 ./cmd/observer
           CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -o build/observer-darwin-arm64 ./cmd/observer
