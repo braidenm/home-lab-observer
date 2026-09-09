@@ -203,6 +203,7 @@ jobs:
         run: node scripts/smoke-native-delivery.mjs --mode native --version "$VERSION" --commit "$COMMIT" --directory dist/release
 
   attest:
+    if: github.repository == 'braidenm/home-lab-observer' && github.ref == 'refs/heads/main' && github.actor == github.repository_owner && github.triggering_actor == github.repository_owner
     needs: [authorize, build, vulnerability-scan, native-verify]
     runs-on: ubuntu-24.04
     timeout-minutes: 8
@@ -222,6 +223,7 @@ jobs:
           show-summary: true
 
   publish:
+    if: github.repository == 'braidenm/home-lab-observer' && github.ref == 'refs/heads/main' && github.actor == github.repository_owner && github.triggering_actor == github.repository_owner
     needs: [authorize, build, attest]
     runs-on: ubuntu-24.04
     timeout-minutes: 8

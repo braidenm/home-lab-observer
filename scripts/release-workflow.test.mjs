@@ -126,6 +126,9 @@ test("workflows keep publication manual, permission-scoped and fully pinned", as
   assert.match(release, /release-validate-input\.mjs.+--ref "\$GITHUB_REF"/u);
   assert.match(release, /RELEASE_ACTOR: \$\{\{ github.actor \}\}/u);
   assert.match(release, /RELEASE_TRIGGERING_ACTOR: \$\{\{ github.triggering_actor \}\}/u);
+  for (const job of ["attest", "publish"]) {
+    assert.match(release, new RegExp(`  ${job}:\\n    if: .*github\\.actor == github\\.repository_owner && github\\.triggering_actor == github\\.repository_owner`));
+  }
   assert.match(release, /"\$RELEASE_ACTOR" == "\$RELEASE_OWNER" && "\$RELEASE_TRIGGERING_ACTOR" == "\$RELEASE_OWNER"/u);
   assert.match(release, /gh api --method POST .+\/git\/refs -f ref="refs\/tags\/\$\{tag\}" -f sha="\$COMMIT"/u);
   assert.match(release, /gh release create "\$tag" --verify-tag/u);
