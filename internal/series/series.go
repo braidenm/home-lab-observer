@@ -19,6 +19,10 @@ type Reader interface {
 	Rollups(context.Context, history.MetricID, time.Time, time.Time, int) ([]history.Rollup, error)
 }
 
+type atomicReader interface {
+	ReadMetric(context.Context, history.MetricID, time.Time, time.Time, int) ([]history.Sample, []history.Rollup, error)
+}
+
 type Range string
 
 const (
@@ -145,11 +149,17 @@ type bucket struct {
 
 func buildMetric(ctx context.Context, reader Reader, metric history.MetricID, from, to time.Time, resolution time.Duration) (MetricSeries, error) {
 	result := MetricSeries{MetricID: metric, Unit: metricMetadata[metric].unit, SupportState: "SUPPORTED", CollectionState: "NOT_RUN", Freshness: "UNKNOWN", Points: []Point{}}
-	raw, err := reader.Samples(ctx, metric, from, to, 10000)
-	if err != nil {
-		return MetricSeries{}, err
+	var raw []history.Sample
+	var rollups []history.Rollup
+	var err error
+	if atomic, ok := reader.(atomicReader); ok {
+		raw, rollups, err = atomic.ReadMetric(ctx, metric, from, to, 10000)
+	} else {
+		raw, err = reader.Samples(ctx, metric, from, to, 10000)
+		if err == nil {
+			rollups, err = reader.Rollups(ctx, metric, from, to, 10000)
+		}
 	}
-	rollups, err := reader.Rollups(ctx, metric, from, to, 10000)
 	if err != nil {
 		return MetricSeries{}, err
 	}
