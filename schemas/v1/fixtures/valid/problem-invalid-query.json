@@ -1,0 +1,10 @@
+{
+  "type": "https://example.invalid/problems/invalid-query",
+  "title": "Query value is outside the supported range",
+  "status": 400,
+  "detail": "process_limit must be between 1 and 200.",
+  "instance": "/api/v1/snapshots/current",
+  "code": "INVALID_QUERY",
+  "request_id": "request_sample_001",
+  "fields": [{ "field": "process_limit", "message": "must be between 1 and 200", "code": "OUT_OF_RANGE" }]
+}

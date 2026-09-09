@@ -1,0 +1,22 @@
+{
+  "schema_version": "observer-capabilities/v1",
+  "api_version": "v1",
+  "generated_at": "2026-09-09T12:00:00Z",
+  "observer": { "version": "0.1.0", "mode": "LOCAL_DASHBOARD" },
+  "platform": { "os": "windows", "architecture": "amd64" },
+  "policy": {
+    "read_only": true, "default_bind": "127.0.0.1", "cors_enabled": false,
+    "retention_days": 7, "retention_bytes": 262144000,
+    "log_bodies": { "default_state": "OMITTED", "maximum_body_bytes": 2048, "upload_eligible": false },
+    "response_limits_bytes": { "capabilities": 131072, "current_snapshot": 1048576 }
+  },
+  "collectors": [
+    { "name": "overview", "support_state": "SUPPORTED", "reason_code": null, "data_classification": "PUBLIC_METADATA", "upload_eligible": true },
+    { "name": "filesystems", "support_state": "SUPPORTED", "reason_code": null, "data_classification": "PUBLIC_METADATA", "upload_eligible": true },
+    { "name": "processes", "support_state": "PERMISSION_DENIED", "reason_code": "ACCESS_DENIED", "data_classification": "LOCAL_SENSITIVE", "upload_eligible": false },
+    { "name": "services", "support_state": "SUPPORTED", "reason_code": null, "data_classification": "PUBLIC_METADATA", "upload_eligible": true },
+    { "name": "containers", "support_state": "UNAVAILABLE", "reason_code": "ENGINE_NOT_RUNNING", "data_classification": "PUBLIC_METADATA", "upload_eligible": true },
+    { "name": "logs", "support_state": "DISABLED", "reason_code": "OPT_IN_REQUIRED", "data_classification": "LOCAL_SENSITIVE", "upload_eligible": false },
+    { "name": "observer", "support_state": "SUPPORTED", "reason_code": null, "data_classification": "PUBLIC_METADATA", "upload_eligible": true }
+  ]
+}

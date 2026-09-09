@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:home-lab-observer:schema:current-snapshot:v1",
+  "title": "Home Lab Observer current snapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "snapshot_id", "sequence", "observed_at", "duration_ms", "collection_state", "privacy", "sections"],
+  "properties": {
+    "schema_version": { "const": "observer-current-snapshot/v1" },
+    "snapshot_id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{8,64}$" },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "observed_at": { "type": "string", "format": "date-time" },
+    "duration_ms": { "type": "integer", "minimum": 0, "maximum": 60000 },
+    "collection_state": { "$ref": "#/$defs/collectionState" },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "remote_projection", "message_bodies_upload_eligible", "redaction_count", "dropped_count", "excluded_fields"],
+      "properties": {
+        "profile": { "enum": ["SAFE_DEFAULT", "LOCAL_LOG_BODIES"] },
+        "remote_projection": { "const": "home-lab-server-snapshot/v1" },
+        "message_bodies_upload_eligible": { "const": false },
+        "redaction_count": { "type": "integer", "minimum": 0 },
+        "dropped_count": { "type": "integer", "minimum": 0 },
+        "excluded_fields": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 32,
+          "items": { "enum": ["process_arguments", "environment_variables", "container_commands", "container_mounts", "container_labels", "raw_log_bodies", "credentials", "tokens"] }
+        }
+      }
+    },
+    "sections": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["overview", "filesystems", "processes", "services", "containers", "logs", "observer"],
+      "properties": {
+        "overview": { "$ref": "#/$defs/overviewSection" },
+        "filesystems": { "$ref": "#/$defs/filesystemSection" },
+        "processes": { "$ref": "#/$defs/processSection" },
+        "services": { "$ref": "#/$defs/serviceSection" },
+        "containers": { "$ref": "#/$defs/containerSection" },
+        "logs": { "$ref": "#/$defs/logSection" },
+        "observer": { "$ref": "#/$defs/observerSection" }
+      }
+    }
+  },
+  "$defs": {
+    "supportState": { "enum": ["SUPPORTED", "DISABLED", "UNAVAILABLE", "PERMISSION_DENIED", "UNSUPPORTED"] },
+    "collectionState": { "enum": ["OK", "PARTIAL", "FAILED", "NOT_RUN"] },
+    "freshness": { "enum": ["CURRENT", "STALE", "UNKNOWN"] },
+    "reasonCode": { "type": ["string", "null"], "minLength": 1, "maxLength": 64, "pattern": "^[A-Z0-9_]+$" },
+    "listSection": {
+      "type": "object",
+      "unevaluatedProperties": false,
+      "required": ["support_state", "collection_state", "freshness", "observed_at", "reason_code", "total_count", "returned_count", "truncated", "items"],
+      "properties": {
+        "support_state": { "$ref": "#/$defs/supportState" },
+        "collection_state": { "$ref": "#/$defs/collectionState" },
+        "freshness": { "$ref": "#/$defs/freshness" },
+        "observed_at": { "type": ["string", "null"], "format": "date-time" },
+        "reason_code": { "$ref": "#/$defs/reasonCode" },
+        "total_count": { "type": "integer", "minimum": 0 },
+        "returned_count": { "type": "integer", "minimum": 0 },
+        "truncated": { "type": "boolean" },
+        "items": { "type": "array" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "support_state": { "not": { "const": "SUPPORTED" } } }, "required": ["support_state"] },
+          "then": {
+            "properties": {
+              "collection_state": { "const": "NOT_RUN" },
+              "freshness": { "const": "UNKNOWN" },
+              "observed_at": { "type": "null" },
+              "reason_code": { "type": "string" },
+              "total_count": { "const": 0 },
+              "returned_count": { "const": 0 },
+              "truncated": { "const": false },
+              "items": { "maxItems": 0 }
+            }
+          }
+        }
+      ]
+    },
+    "overviewSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["support_state", "collection_state", "freshness", "observed_at", "reason_code", "data"],
+      "properties": {
+        "support_state": { "$ref": "#/$defs/supportState" },
+        "collection_state": { "$ref": "#/$defs/collectionState" },
+        "freshness": { "$ref": "#/$defs/freshness" },
+        "observed_at": { "type": ["string", "null"], "format": "date-time" },
+        "reason_code": { "$ref": "#/$defs/reasonCode" },
+        "data": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["host_alias", "os", "architecture", "uptime_seconds", "cpu_logical_count", "memory_total_bytes", "memory_used_bytes"],
+              "properties": {
+                "host_alias": { "type": "string", "minLength": 1, "maxLength": 64 },
+                "os": { "enum": ["linux", "windows", "darwin", "other"] },
+                "architecture": { "type": "string", "minLength": 1, "maxLength": 32 },
+                "uptime_seconds": { "type": "integer", "minimum": 0 },
+                "cpu_logical_count": { "type": "integer", "minimum": 1, "maximum": 4096 },
+                "memory_total_bytes": { "type": "integer", "minimum": 0 },
+                "memory_used_bytes": { "type": "integer", "minimum": 0 }
+              }
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "support_state": { "not": { "const": "SUPPORTED" } } }, "required": ["support_state"] },
+          "then": { "properties": { "collection_state": { "const": "NOT_RUN" }, "freshness": { "const": "UNKNOWN" }, "observed_at": { "type": "null" }, "reason_code": { "type": "string" }, "data": { "type": "null" } } }
+        }
+      ]
+    },
+    "filesystemSection": {
+      "allOf": [
+        { "$ref": "#/$defs/listSection" },
+        { "properties": { "items": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/filesystem" } } } }
+      ]
+    },
+    "processSection": {
+      "allOf": [
+        { "$ref": "#/$defs/listSection" },
+        { "properties": { "items": { "type": "array", "maxItems": 200, "items": { "$ref": "#/$defs/process" } } } }
+      ]
+    },
+    "serviceSection": {
+      "allOf": [
+        { "$ref": "#/$defs/listSection" },
+        { "properties": { "items": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/service" } } } }
+      ]
+    },
+    "containerSection": {
+      "allOf": [
+        { "$ref": "#/$defs/listSection" },
+        { "properties": { "items": { "type": "array", "maxItems": 500, "items": { "$ref": "#/$defs/container" } } } }
+      ]
+    },
+    "logSection": {
+      "allOf": [
+        { "$ref": "#/$defs/listSection" },
+        { "properties": { "items": { "type": "array", "maxItems": 200, "items": { "$ref": "#/$defs/logRecord" } } } }
+      ]
+    },
+    "observerSection": {
+      "allOf": [
+        { "$ref": "#/$defs/listSection" },
+        { "properties": { "items": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/observerSignal" } } } }
+      ]
+    },
+    "filesystem": {
+      "type": "object", "additionalProperties": false,
+      "required": ["mount_alias", "filesystem_type", "total_bytes", "used_bytes", "available_bytes"],
+      "properties": {
+        "mount_alias": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "filesystem_type": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "total_bytes": { "type": "integer", "minimum": 0 },
+        "used_bytes": { "type": "integer", "minimum": 0 },
+        "available_bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "process": {
+      "type": "object", "additionalProperties": false,
+      "required": ["pid", "name", "state", "cpu_percent", "memory_bytes"],
+      "properties": {
+        "pid": { "type": "integer", "minimum": 0 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "state": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "cpu_percent": { "type": "number", "minimum": 0, "maximum": 100 },
+        "memory_bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "service": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "state", "start_mode"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "state": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "start_mode": { "type": "string", "minLength": 1, "maxLength": 32 }
+      }
+    },
+    "container": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id_alias", "name", "image", "state", "cpu_percent", "memory_bytes"],
+      "properties": {
+        "id_alias": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "image": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "state": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "cpu_percent": { "type": "number", "minimum": 0, "maximum": 100 },
+        "memory_bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "logRecord": {
+      "type": "object", "additionalProperties": false,
+      "required": ["metadata", "body"],
+      "properties": {
+        "metadata": {
+          "type": "object", "additionalProperties": false,
+          "required": ["observed_at", "source", "severity", "event_code"],
+          "properties": {
+            "observed_at": { "type": "string", "format": "date-time" },
+            "source": { "type": "string", "minLength": 1, "maxLength": 96 },
+            "severity": { "enum": ["TRACE", "DEBUG", "INFO", "WARN", "ERROR", "CRITICAL", "UNKNOWN"] },
+            "event_code": { "type": "string", "minLength": 1, "maxLength": 64 }
+          }
+        },
+        "body": {
+          "oneOf": [
+            {
+              "type": "object", "additionalProperties": false,
+              "required": ["state"],
+              "properties": { "state": { "const": "OMITTED" } }
+            },
+            {
+              "type": "object", "additionalProperties": false,
+              "required": ["state", "redacted_text", "redaction_count", "upload_eligible"],
+              "properties": {
+                "state": { "const": "REDACTED_LOCAL_ONLY" },
+                "redacted_text": { "type": "string", "maxLength": 2048 },
+                "redaction_count": { "type": "integer", "minimum": 0 },
+                "upload_eligible": { "const": false }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "observerSignal": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "state", "value", "unit"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "state": { "enum": ["OK", "WARN", "ERROR"] },
+        "value": { "type": "number" },
+        "unit": { "enum": ["count", "bytes", "milliseconds", "percent"] }
+      }
+    }
+  }
+}

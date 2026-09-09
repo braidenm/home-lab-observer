@@ -1,0 +1,6 @@
+{
+  "type": "https://example.invalid/problems/internal", "title": "Internal error", "status": 500,
+  "detail": "The request could not be completed.", "instance": "/api/v1/snapshots/current",
+  "code": "INTERNAL_ERROR", "request_id": "request_sample_002",
+  "stack_trace": "synthetic stack details must never cross the API boundary"
+}

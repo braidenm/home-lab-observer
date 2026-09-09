@@ -1,0 +1,97 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Home Lab Observer Local API",
+    "version": "1.0.0",
+    "description": "Read-only, loopback-first API. Non-loopback binding is not part of v1. Log bodies remain local-only and require explicit collection and request opt-in."
+  },
+  "servers": [{ "url": "http://127.0.0.1:9847" }],
+  "security": [{ "localBearer": [] }],
+  "paths": {
+    "/health/live": {
+      "get": {
+        "operationId": "getLiveness",
+        "summary": "Report process liveness without host details",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Observer process is live",
+            "content": { "application/json": { "schema": { "$ref": "#\/components\/schemas\/Health" } } }
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "getReadiness",
+        "summary": "Report whether the local API can serve snapshots",
+        "security": [],
+        "responses": {
+          "200": { "description": "Ready", "content": { "application/json": { "schema": { "$ref": "#\/components\/schemas\/Health" } } } },
+          "503": { "description": "Not ready", "content": { "application/json": { "schema": { "$ref": "#\/components\/schemas\/Health" } } } }
+        }
+      }
+    },
+    "/api/v1/capabilities": {
+      "get": {
+        "operationId": "getCapabilities",
+        "summary": "Describe platform support and active privacy policy",
+        "x-max-response-bytes": 131072,
+        "responses": {
+          "200": {
+            "description": "Capabilities",
+            "content": { "application/json": { "schema": { "$ref": "..\/schemas\/v1\/capabilities-v1.schema.json" } } }
+          },
+          "401": { "$ref": "#\/components\/responses\/Problem" },
+          "500": { "$ref": "#\/components\/responses\/Problem" }
+        }
+      }
+    },
+    "/api/v1/snapshots/current": {
+      "get": {
+        "operationId": "getCurrentSnapshot",
+        "summary": "Return one bounded current snapshot",
+        "description": "Collection is read-only. include_log_bodies cannot override the local source opt-in, redaction, 2048-byte body limit, or upload prohibition.",
+        "x-max-response-bytes": 1048576,
+        "parameters": [
+          {
+            "name": "section", "in": "query", "required": false,
+            "description": "Repeat to select sections; omitted means all sections.",
+            "style": "form", "explode": true,
+            "schema": { "type": "array", "uniqueItems": true, "maxItems": 7, "items": { "enum": ["overview", "filesystems", "processes", "services", "containers", "logs", "observer"] } }
+          },
+          { "name": "process_limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 } },
+          { "name": "container_limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 } },
+          { "name": "log_limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 0, "maximum": 200, "default": 50 } },
+          { "name": "include_log_bodies", "in": "query", "required": false, "schema": { "type": "boolean", "default": false } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current snapshot",
+            "content": { "application/json": { "schema": { "$ref": "..\/schemas\/v1\/current-snapshot-v1.schema.json" } } }
+          },
+          "400": { "$ref": "#\/components\/responses\/Problem" },
+          "401": { "$ref": "#\/components\/responses\/Problem" },
+          "500": { "$ref": "#\/components\/responses\/Problem" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "localBearer": { "type": "http", "scheme": "bearer", "bearerFormat": "opaque local token", "description": "Random per-install token. Never accepted in a query parameter." }
+    },
+    "responses": {
+      "Problem": {
+        "description": "RFC 9457 problem without secrets or stack details",
+        "content": { "application/problem+json": { "schema": { "$ref": "..\/schemas\/v1\/problem-details-v1.schema.json" } } }
+      }
+    },
+    "schemas": {
+      "Health": {
+        "type": "object", "additionalProperties": false, "required": ["status"],
+        "properties": { "status": { "enum": ["UP", "NOT_READY"] } }
+      }
+    }
+  }
+}

@@ -1,70 +1,113 @@
-# Spec 002: Cross-platform observer
+# Spec 002: Local API contracts and compatibility fixtures
 
-**Status:** Draft  
+**Status:** Accepted
 **Owner:** Repository owner  
 **Created:** 2026-09-09
+**Accepted:** 2026-09-09
 
 ## User outcome
 
-An owner can download and run Home Lab Observer on Windows, macOS, or Linux; view meaningful current and historical machine health locally; inspect processes, services, containers, and explicitly enabled logs; and optionally connect the observer to Platform Demo without installing a language runtime or exposing an inbound internet service.
+An owner, local tool, or future dashboard can inspect a machine through a documented read-only contract and can tell
+the difference between a healthy zero, an unsupported signal, a disabled collector, a temporary failure, and a
+permission denial. Contract consumers can develop before the runtime exists by using synthetic fixtures, while later
+Windows, macOS, Linux, container, storage, UI, and upload slices share one stable vocabulary.
 
-## Scope
+## Slice boundary
 
-- Native amd64 and arm64 binaries for Windows, macOS, and Linux.
-- Headless service operation plus an optional responsive loopback dashboard.
-- Normalized host, CPU, memory, filesystem, disk I/O, network, uptime, sensor, process, service, Docker, and observer health observations when supported.
-- Bounded local trends and event correlations.
-- Log adapters for journald/syslog, Windows Event Log, macOS unified logging, and Docker with metadata-first defaults, source allowlists, redaction, and opt-in message bodies.
-- Versioned local JSON API, OpenMetrics endpoint, health/readiness endpoints, and OpenAPI/JSON Schema contracts.
-- Optional outbound enrollment and snapshot upload compatible with Platform Demo.
-- OS-native background-service installers, a verified portable installation path, upgrades, diagnostics, rollback, and uninstall instructions.
-- Optional signed multi-architecture Linux container using a constrained Docker API proxy.
+This specification delivers contracts and executable contract validation only:
 
-## Explicit non-goals
+- an OpenAPI 3.1 description for local capabilities, the current sanitized snapshot, and detail-free health reads;
+- versioned JSON Schema 2020-12 documents for capabilities, the current snapshot, and RFC 9457-style Problem Details;
+- valid and intentionally invalid synthetic fixtures;
+- bounded query, collection, response, privacy, and log-body rules;
+- a compatibility policy and requirements-to-evidence traceability matrix; and
+- a GitHub-hosted contract check designed to finish in less than 15 minutes.
 
-- Arbitrary command execution, shell access, process termination, service restart, or container restart.
-- Full log-management/SIEM replacement or unbounded local retention.
-- Kubernetes, Proxmox, SNMP, or multi-node orchestration in this specification.
-- Public network listening by default.
+This slice does **not** implement a listener, collector, store, uploader, CLI, installer, dashboard, Go package, or
+release artifact. Those remain subsequent Spec 002 slices and must consume these contracts rather than redefine them.
 
 ## Functional requirements
 
-- **R1 Capabilities:** `/api/v1/capabilities` reports supported, disabled, unavailable, and permission-denied collectors with actionable reasons.
-- **R2 Overview:** The local UI provides a responsive health overview with current status, saturation, recent changes, and collection freshness.
-- **R3 Trends:** Users can select a bounded time range for resource charts and correlate a point in time with workload and log events.
-- **R4 Workloads:** Process, service, and container views support sort, filter, status, resource use, uptime/restart facts, and drill-down without exposing arguments or environment variables by default.
-- **R5 Logs:** Users can filter enabled logs by time, source, severity, unit/container, and text; expand structured fields; view context; and see redaction/drop counts. Message storage is disabled until explicitly enabled per source.
-- **R6 Storage:** Local retention has configurable age and byte ceilings, deterministic eviction, and visible utilization/drop metrics.
-- **R7 API:** The UI and external consumers use the same documented, versioned read-only API. Unsupported fields remain distinguishable from zero.
-- **R8 Remote upload:** Enrollment exchanges a one-use secret for a scoped renewable credential, upload uses outbound TLS, queues are bounded, and remote data policy is visible.
-- **R9 Packaging:** Clean-machine installers select the correct verified artifact and can install, start, status, diagnose, upgrade, rollback, and uninstall the background service.
-- **R10 Container:** Container deployment is documented as Linux-oriented and never claims visibility into the physical Windows/macOS host behind Docker Desktop.
-- **R11 Self-observation:** Structured service logs, health/readiness, collection latency/failure counters, queue/storage pressure, version, and build provenance are exposed without leaking secrets.
-- **R12 Performance:** Default collection remains lightweight and degrades individual collectors rather than stalling the entire API/UI.
+- **R1 Versioned API:** The canonical local contract MUST be OpenAPI 3.1 under `/api/v1`. It MUST contain only `GET`
+  and `HEAD`-compatible read semantics. Detail-free liveness and readiness reads MAY be outside `/api/v1`.
+- **R2 Capabilities:** `GET /api/v1/capabilities` MUST report code-owned collectors and distinguish `SUPPORTED`,
+  `DISABLED`, `UNAVAILABLE`, `PERMISSION_DENIED`, and `UNSUPPORTED` without fabricating numeric values.
+- **R3 Current snapshot:** `GET /api/v1/snapshots/current` MUST return a versioned, timestamped, bounded snapshot with
+  overview, filesystems, processes, services, containers, logs, and observer self-health sections.
+- **R4 Collection quality:** Every snapshot section MUST report support state, collection state, freshness,
+  stable nullable reason code, total and returned counts, and truncation. Missing and zero values MUST remain distinct.
+- **R5 Query bounds:** Snapshot projection MUST accept only code-owned section names. Process, container, and log limits
+  MUST be bounded to 200, 500, and 200 respectively. Invalid limits MUST return typed Problem Details.
+- **R6 Response bounds:** Capabilities responses MUST be at most 128 KiB and current snapshots at most 1 MiB after
+  UTF-8 encoding. A producer MUST truncate deterministically within per-section limits or fail with a bounded problem;
+  it MUST NOT stream an unbounded response.
+- **R7 Privacy profile:** Both contracts MUST disclose their effective privacy classification and upload eligibility.
+  Raw process arguments, environment variables, credentials, authorization headers, arbitrary file contents, private
+  addresses, and unrestricted attributes are prohibited.
+- **R8 Log separation:** Log metadata and message bodies MUST be separate objects. Metadata MAY be included from a
+  code-owned source. A message body MUST remain omitted by default; an included body MUST be redacted, local-only,
+  bounded to 2 KiB, and explicitly ineligible for upload.
+- **R9 Problems:** API failures MUST use `application/problem+json` with HTTP status, stable machine-readable `code`,
+  optional bounded field issues, and an opaque request ID. Problems MUST NOT contain stack traces, raw exceptions,
+  rejected secrets, authorization values, or source payloads.
+- **R10 Compatibility:** Additive optional response fields are compatible and clients MUST ignore fields they do not
+  understand. Removing or renaming a field, changing meaning/type/unit, narrowing a bound, changing an enum without an
+  unknown-value strategy, or adding a required input requires a new major API/schema version and migration plan.
+- **R11 Fixtures:** Each schema MUST have a valid fixture. Invalid fixtures MUST cover an unknown support state,
+  inconsistent unsupported data, upload-eligible log bodies, and forbidden problem internals.
+- **R12 Machine validation:** One documented command MUST validate OpenAPI structure, all schemas, valid and invalid
+  fixtures, read-only paths, security declarations, bounds, fixture size, privacy canaries, and traceability.
+- **R13 Cross-platform vocabulary:** Fixtures MUST exercise honest platform/capability differences without claiming
+  that this slice ships a Windows, macOS, Linux, or container collector.
+- **R14 Legacy boundary:** The existing Platform Demo `home-lab-server-snapshot/v1` payload remains a separate strict
+  upload projection. Rich local fields and log bodies MUST NOT be added to it by implication.
 
-## Data safety defaults
+## Non-functional requirements
 
-- Excluded: environment variables, raw process command lines, arbitrary file contents, credentials, request authorization, and Docker socket access through the public API.
-- Log message bodies: disabled until enabled for an allowlisted source; redacted before persistence/upload.
-- Local API: loopback-only with strict host/origin checks; non-loopback requires a separately documented authenticated TLS configuration.
-- History and retry queues: bounded by both time and bytes.
+- Contract validation runs on a GitHub-hosted runner with read-only repository permissions and a five-minute job timeout.
+- Schema and fixture validation is deterministic and requires no host telemetry, Docker socket, private runner, secret,
+  network service, or production identifier.
+- Examples use reserved domains, generic platform labels, and synthetic identifiers only.
+- Contract files use UTC RFC 3339 timestamps, base units, bounded strings, closed item objects, and code-owned enums.
+- The OpenAPI document and schemas are source artifacts. Generated runtime types are deferred until a Go module exists.
 
-## Acceptance matrix
+## Compatibility policy
 
-Every release candidate must pass on Windows amd64, macOS amd64/arm64, Linux amd64/arm64, and the Linux container where applicable:
+`/api/v1` is a stable major contract once a runtime release implements it. Within v1:
 
-1. Fresh install and first healthy snapshot.
-2. Background start, stop, restart, status, upgrade, rollback, and uninstall.
-3. Local API contract and loopback enforcement.
-4. Responsive dashboard smoke test at small and desktop viewports.
-5. Capability reporting for present, missing, disabled, and denied sources.
-6. Retention eviction, disk-full protection, redaction, and corrupt-store recovery.
-7. Docker unavailable, reachable, denied, and degraded cases.
-8. Offline upload queue, credential rotation, revocation, and server rejection.
-9. Artifact checksum and GitHub attestation verification.
+1. Producers may add optional response fields after adding fixtures and documentation.
+2. Consumers ignore unknown response fields and treat unknown enum values as `UNKNOWN`, never as healthy or offline.
+3. Request parameters, required response fields, field meanings, base units, privacy class, and published maxima do not
+   change incompatibly.
+4. A breaking change is introduced beside v1 as `/api/v2` and `.../v2` schemas, with an explicit support window,
+   migration fixtures, observability, and rollback plan.
+5. Stored/uploaded schemas version independently from the HTTP surface. The Platform Demo legacy upload projection is
+   not the local snapshot schema.
 
-## Open owner decisions
+## Acceptance evidence
 
-- Default local trend retention and sampling interval.
-- Whether the first prerelease must be Apple-notarized and Windows Authenticode-signed, or may initially rely on checksums and GitHub attestations while certificates are acquired.
-- Which log sources may enable message bodies in the guided setup presets.
+- `npm test` validates and dereferences the OpenAPI contract.
+- Every valid fixture passes its declared schema and every invalid fixture fails it.
+- The validator rejects mutation operations, wildcard/non-loopback servers, missing bearer security, missing bounds,
+  excessive fixture bytes, secret-shaped valid data, and missing requirement traceability.
+- [traceability.md](traceability.md) maps R1-R14 to contract locations, fixtures, and automated assertions.
+
+## Cross-platform roadmap retained
+
+After this accepted slice, delivery remains incremental:
+
+1. normalized domain types and cross-platform capability fakes;
+2. native Windows, macOS, and Linux host collectors plus bounded SQLite storage;
+3. loopback API runtime, health/OpenMetrics, and embedded responsive dashboard;
+4. platform-specific service, container, and allowlisted log adapters;
+5. optional outbound enrollment/upload compatibility with Platform Demo; and
+6. installers, service lifecycle, container profile, provenance, signing, and clean-machine canaries.
+
+Each slice updates these fixtures and compatibility evidence. A platform remains `UNSUPPORTED` until its actual-host
+acceptance suite passes; checksums or attestations do not substitute for Windows Authenticode or Apple notarization.
+
+## Open owner decisions deferred
+
+- Whether the first prerelease must be Apple-notarized and Windows Authenticode-signed.
+- Which log sources may offer local message bodies in guided setup.
+- When a richer remote history contract is justified beyond the legacy latest-snapshot projection.

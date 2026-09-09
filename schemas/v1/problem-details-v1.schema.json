@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:home-lab-observer:schema:problem-details:v1",
+  "title": "Home Lab Observer Problem Details v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "title", "status", "code", "request_id"],
+  "properties": {
+    "type": { "type": "string", "format": "uri-reference", "maxLength": 256 },
+    "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "status": { "type": "integer", "minimum": 400, "maximum": 599 },
+    "detail": { "type": "string", "maxLength": 512 },
+    "instance": { "type": "string", "format": "uri-reference", "maxLength": 256 },
+    "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{2,63}$" },
+    "request_id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{8,64}$" },
+    "fields": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["field", "message", "code"],
+        "properties": {
+          "field": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "message": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{2,63}$" }
+        }
+      }
+    }
+  }
+}
