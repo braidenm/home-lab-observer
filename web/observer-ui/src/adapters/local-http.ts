@@ -376,7 +376,7 @@ function mapListSection<T>(value: unknown, maximumItems: number, mapItem: (value
   const returnedCount = nonNegativeInteger(item.returned_count);
   const truncated = boolean(item.truncated);
   const items = boundedArray(item.items, 0, maximumItems).map(mapItem);
-  if (returnedCount !== items.length || returnedCount > totalCount || truncated !== (totalCount > returnedCount)) throw new Error("list section counts are inconsistent");
+  if (returnedCount !== items.length || returnedCount > totalCount || (!truncated && totalCount > returnedCount)) throw new Error("list section counts are inconsistent");
   assertNonSupportedSectionIsEmpty(quality, totalCount === 0 && returnedCount === 0 && !truncated && items.length === 0);
   return { ...quality, totalCount, returnedCount, truncated, items };
 }

@@ -7,9 +7,9 @@
 - [x] Implement authenticated handlers, health reads, validation middleware, Problem Details, and response ceilings.
 - [x] Build/embed the local dashboard and add token unlock/forget behavior.
 - [x] Connect real series data and surface gaps, storage pressure, and unsupported sections truthfully.
-- [ ] Add unit, integration, browser, restart, retention, secret-canary, and native-platform tests.
+- [x] Add unit, integration, browser, restart, retention, secret-canary, and native-platform tests.
 - [x] Update the README, security/privacy docs, CLI help, and operator documentation.
-- [ ] Add the required bounded CI check and record acceptance evidence.
+- [x] Add the required bounded CI check and record acceptance evidence in [the review record](review.md); required hosted checks gate merge.
 
 ## Persistence and scheduler evidence
 

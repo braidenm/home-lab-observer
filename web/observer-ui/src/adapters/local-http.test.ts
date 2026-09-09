@@ -107,6 +107,12 @@ describe("LocalHttpObserverDataSource", () => {
   });
 
   it("rejects invalid current states, inconsistent counts, and data on non-supported sections", () => {
+    const knownTruncation = cloneFixture(linuxSnapshot);
+    knownTruncation.sections.processes.total_count = knownTruncation.sections.processes.items.length;
+    knownTruncation.sections.processes.returned_count = knownTruncation.sections.processes.items.length;
+    knownTruncation.sections.processes.truncated = true;
+    expect(mapCurrentSnapshot(knownTruncation).sections.processes.truncated).toBe(true);
+
     const badState = cloneFixture(linuxSnapshot);
     badState.sections.processes.collection_state = "HEALTHY";
     expect(() => mapCurrentSnapshot(badState)).toThrow(/collection state/);
