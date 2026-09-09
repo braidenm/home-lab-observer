@@ -84,6 +84,15 @@ func testController(t *testing.T) (*controller, *fakeAdapter, *fakeStopper, Sett
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(root, ".home-lab-observer-managed"), []byte(managedRootMarker+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "bin"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "bin", launcherName()), []byte("managed launcher fixture\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	adapter := &fakeAdapter{state: managerState{available: true}}
 	stopper := &fakeStopper{}
 	return newController(root, adapter, stopper, fakeProbe{value: ReadinessReady}), adapter, stopper, Settings{StateDir: stateDir, ListenAddress: "127.0.0.1:9847"}
@@ -395,6 +404,24 @@ func TestInstallAndBackgroundOperationsShareFailClosedGuard(t *testing.T) {
 	releaseBackground()
 	if _, err := os.Lstat(guardPath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("background operation release retained shared guard: %v", err)
+	}
+}
+
+func TestStaleManagerRevalidatesInstallRootUnderSharedGuard(t *testing.T) {
+	controller, _, _, settings := testController(t)
+	if err := os.Remove(filepath.Join(controller.installRoot, ".home-lab-observer-managed")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(controller.installRoot, "bin", launcherName())); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := controller.Enable(context.Background(), settings); !IsCode(err, CodeUnsafeManagedState) {
+		t.Fatalf("stale manager error = %v, want unsafe managed state", err)
+	}
+	for _, path := range []string{controller.backgroundDir, filepath.Join(controller.installRoot, installGuard)} {
+		if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("stale manager mutated %s: %v", path, err)
+		}
 	}
 }
 

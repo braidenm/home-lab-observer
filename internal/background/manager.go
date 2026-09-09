@@ -414,6 +414,13 @@ func (c *controller) lock(create bool) (func(), error) {
 			releaseInstallGuard()
 		}
 	}()
+	resolvedRoot, err := validateInstallRoot(c.installRoot)
+	if err != nil || resolvedRoot != c.installRoot {
+		if err == nil {
+			err = coded(CodeUnsafeManagedState, errors.New("install root changed before background operation"))
+		}
+		return nil, err
+	}
 
 	createdDirectory := false
 	if create {
