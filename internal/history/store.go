@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	_ "modernc.org/sqlite"
+	"modernc.org/sqlite"
 )
 
 const (
@@ -50,6 +50,7 @@ type Store struct {
 	mu             sync.RWMutex
 	maintenanceMu  sync.Mutex
 	checkpointMu   sync.Mutex
+	lock           *fileLock
 	health         Health
 	recoveryReason string
 }
@@ -65,23 +66,28 @@ func Open(ctx context.Context, config Config, clock Clock) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(config.Path), 0o700); err != nil {
 		return nil, fmt.Errorf("create history directory: %w", err)
 	}
-	existed := fileExists(config.Path)
-	recoveryReason := ""
-	quarantinePath := ""
-	db, err := openDatabase(config.Path)
-	if err != nil && existed {
-		recoveryReason = "DATABASE_CORRUPT"
-		quarantinePath, err = quarantine(config.Path, clock.Now())
-		if err != nil {
-			return nil, fmt.Errorf("quarantine history database: %w", err)
-		}
-		db, err = openDatabase(config.Path)
+	lock, err := acquireFileLock(config.Path + ".lock")
+	if err != nil {
+		return nil, fmt.Errorf("acquire history ownership: %w", err)
 	}
+	keepLock := false
+	defer func() {
+		if !keepLock {
+			_ = lock.Close()
+		}
+	}()
+	existed := fileExists(config.Path)
+	recoveryReason, quarantinePath := "", ""
+	db, err := openDatabase(config.Path)
 	if err != nil {
 		return nil, err
 	}
-	if existed && recoveryReason == "" {
+	if existed {
 		version, inspectErr := inspectDatabase(ctx, db)
+		if inspectErr != nil && !isCorruptionError(inspectErr) {
+			_ = db.Close()
+			return nil, fmt.Errorf("inspect history database: %w", inspectErr)
+		}
 		if inspectErr != nil || version > SchemaVersion {
 			_ = db.Close()
 			recoveryReason = "DATABASE_CORRUPT"
@@ -102,6 +108,10 @@ func Open(ctx context.Context, config Config, clock Clock) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("migrate history database: %w", err)
 	}
+	if err := configureDatabase(ctx, db); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("configure history database: %w", err)
+	}
 	engineVersion, err := sqliteVersion(ctx, db)
 	if err != nil {
 		_ = db.Close()
@@ -110,6 +120,14 @@ func Open(ctx context.Context, config Config, clock Clock) (*Store, error) {
 	if versionLess(engineVersion, MinimumSQLiteVersion) {
 		_ = db.Close()
 		return nil, fmt.Errorf("sqlite %s is older than required %s", engineVersion, MinimumSQLiteVersion)
+	}
+	if recoveryReason != "" {
+		if err := persistRecovery(ctx, db, recoveryReason, quarantinePath); err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("persist recovery status: %w", err)
+		}
+	} else {
+		recoveryReason, quarantinePath = loadRecovery(ctx, db)
 	}
 	insertSample, err := db.PrepareContext(ctx, `INSERT INTO samples(metric, observed_at_ns, value) VALUES(?, ?, ?) ON CONFLICT(metric, observed_at_ns) DO UPDATE SET value=excluded.value`)
 	if err != nil {
@@ -122,12 +140,13 @@ func Open(ctx context.Context, config Config, clock Clock) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
-	store := &Store{db: db, path: config.Path, clock: clock, config: config, insertSample: insertSample, nextSequence: nextSequence, health: Health{State: "AVAILABLE", SQLiteVersion: engineVersion}, recoveryReason: recoveryReason}
+	store := &Store{db: db, path: config.Path, clock: clock, config: config, insertSample: insertSample, nextSequence: nextSequence, lock: lock, health: Health{State: "AVAILABLE", SQLiteVersion: engineVersion}, recoveryReason: recoveryReason}
 	if recoveryReason != "" {
 		store.health.State, store.health.ReasonCode, store.health.QuarantinePath = "DEGRADED", recoveryReason, quarantinePath
 	}
 	store.loadCounters(ctx)
 	store.refreshSize()
+	keepLock = true
 	return store, nil
 }
 
@@ -157,14 +176,19 @@ func openDatabase(path string) (*sql.DB, error) {
 	}
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
-	for _, statement := range []string{"PRAGMA journal_mode=WAL", "PRAGMA synchronous=NORMAL", "PRAGMA busy_timeout=5000", "PRAGMA foreign_keys=ON"} {
-		if _, err := db.Exec(statement); err != nil {
-			_ = db.Close()
-			return nil, fmt.Errorf("configure history database: %w", err)
-		}
-	}
 	return db, nil
 }
+
+func configureDatabase(ctx context.Context, db *sql.DB) error {
+	for _, statement := range []string{"PRAGMA journal_mode=WAL", "PRAGMA synchronous=NORMAL", "PRAGMA busy_timeout=5000", "PRAGMA foreign_keys=ON"} {
+		if _, err := db.ExecContext(ctx, statement); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var errIntegrity = errors.New("database integrity check failed")
 
 func inspectDatabase(ctx context.Context, db *sql.DB) (int, error) {
 	var result string
@@ -172,13 +196,25 @@ func inspectDatabase(ctx context.Context, db *sql.DB) (int, error) {
 		return 0, err
 	}
 	if result != "ok" {
-		return 0, errors.New("database integrity check failed")
+		return 0, errIntegrity
 	}
 	var version int
 	if err := db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
 		return 0, err
 	}
 	return version, nil
+}
+
+func isCorruptionError(err error) bool {
+	if errors.Is(err, errIntegrity) {
+		return true
+	}
+	var sqliteErr *sqlite.Error
+	if !errors.As(err, &sqliteErr) {
+		return false
+	}
+	primary := sqliteErr.Code() & 0xff
+	return primary == 11 || primary == 26
 }
 
 func sqliteVersion(ctx context.Context, db *sql.DB) (string, error) {
@@ -212,6 +248,18 @@ func migrate(ctx context.Context, db *sql.DB) error {
 	if version > SchemaVersion {
 		return errors.New("database schema is newer than runtime")
 	}
+	if version == 0 {
+		if _, err := db.ExecContext(ctx, "PRAGMA auto_vacuum=INCREMENTAL"); err != nil {
+			return err
+		}
+	} else if version == 1 {
+		if _, err := db.ExecContext(ctx, "PRAGMA auto_vacuum=INCREMENTAL"); err != nil {
+			return err
+		}
+		if _, err := db.ExecContext(ctx, "VACUUM"); err != nil {
+			return err
+		}
+	}
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -223,7 +271,8 @@ func migrate(ctx context.Context, db *sql.DB) error {
 		`CREATE TABLE IF NOT EXISTS runtime_state(key TEXT PRIMARY KEY, value INTEGER NOT NULL) WITHOUT ROWID`,
 		`INSERT OR IGNORE INTO runtime_state(key,value) VALUES('sequence',0)`,
 		`CREATE TABLE IF NOT EXISTS store_counters(key TEXT PRIMARY KEY, value INTEGER NOT NULL) WITHOUT ROWID`,
-		`PRAGMA user_version=1`,
+		`CREATE TABLE IF NOT EXISTS store_metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID`,
+		`PRAGMA user_version=2`,
 	}
 	for _, statement := range statements {
 		if _, err := tx.ExecContext(ctx, statement); err != nil {
@@ -231,6 +280,36 @@ func migrate(ctx context.Context, db *sql.DB) error {
 		}
 	}
 	return tx.Commit()
+}
+
+func persistRecovery(ctx context.Context, db *sql.DB, reason, path string) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for key, value := range map[string]string{"recovery_reason": reason, "quarantine_path": path} {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO store_metadata(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, value); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func loadRecovery(ctx context.Context, db *sql.DB) (string, string) {
+	values := map[string]string{}
+	rows, err := db.QueryContext(ctx, `SELECT key,value FROM store_metadata WHERE key IN ('recovery_reason','quarantine_path')`)
+	if err != nil {
+		return "", ""
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var key, value string
+		if rows.Scan(&key, &value) == nil {
+			values[key] = value
+		}
+	}
+	return values["recovery_reason"], values["quarantine_path"]
 }
 
 func (s *Store) NextSequence(ctx context.Context) (valueOut uint64, returnErr error) {
@@ -287,7 +366,15 @@ func (s *Store) Samples(ctx context.Context, metric MetricID, from, to time.Time
 	if limit < 1 || limit > 10000 {
 		return nil, errors.New("invalid sample limit")
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT observed_at_ns,value FROM samples WHERE metric=? AND observed_at_ns>=? AND observed_at_ns<=? ORDER BY observed_at_ns LIMIT ?`, metric, from.UTC().UnixNano(), to.UTC().UnixNano(), limit)
+	return querySamples(ctx, s.db, metric, from, to, limit)
+}
+
+type queryer interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+func querySamples(ctx context.Context, query queryer, metric MetricID, from, to time.Time, limit int) ([]Sample, error) {
+	rows, err := query.QueryContext(ctx, `SELECT observed_at_ns,value FROM samples WHERE metric=? AND observed_at_ns>=? AND observed_at_ns<=? ORDER BY observed_at_ns LIMIT ?`, metric, from.UTC().UnixNano(), to.UTC().UnixNano(), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -311,7 +398,11 @@ func (s *Store) Rollups(ctx context.Context, metric MetricID, from, to time.Time
 	if limit < 1 || limit > 10000 {
 		return nil, errors.New("invalid rollup limit")
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT bucket_start_ns,resolution_seconds,sample_count,minimum,maximum,total,last_value,last_at_ns FROM rollups WHERE metric=? AND bucket_start_ns>=? AND bucket_start_ns<=? ORDER BY bucket_start_ns LIMIT ?`, metric, from.UTC().UnixNano(), to.UTC().UnixNano(), limit)
+	return queryRollups(ctx, s.db, metric, from, to, limit)
+}
+
+func queryRollups(ctx context.Context, query queryer, metric MetricID, from, to time.Time, limit int) ([]Rollup, error) {
+	rows, err := query.QueryContext(ctx, `SELECT bucket_start_ns,resolution_seconds,sample_count,minimum,maximum,total,last_value,last_at_ns FROM rollups WHERE metric=? AND bucket_start_ns>=? AND bucket_start_ns<=? ORDER BY bucket_start_ns LIMIT ?`, metric, from.UTC().UnixNano(), to.UTC().UnixNano(), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -331,6 +422,32 @@ func (s *Store) Rollups(ctx context.Context, metric MetricID, from, to time.Time
 	return result, rows.Err()
 }
 
+func (s *Store) ReadMetric(ctx context.Context, metric MetricID, from, to time.Time, limit int) ([]Sample, []Rollup, error) {
+	if _, ok := allowedMetrics[metric]; !ok {
+		return nil, nil, ErrMetricNotAllowed
+	}
+	if limit < 1 || limit > 10000 {
+		return nil, nil, errors.New("invalid metric limit")
+	}
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, nil, err
+	}
+	defer tx.Rollback()
+	samples, err := querySamples(ctx, tx, metric, from, to, limit)
+	if err != nil {
+		return nil, nil, err
+	}
+	rollups, err := queryRollups(ctx, tx, metric, from, to, limit)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, nil, err
+	}
+	return samples, rollups, nil
+}
+
 func (s *Store) Health() Health { s.mu.RLock(); defer s.mu.RUnlock(); return s.health }
 
 func (s *Store) Close() error {
@@ -340,20 +457,38 @@ func (s *Store) Close() error {
 	err1 := s.insertSample.Close()
 	err2 := s.nextSequence.Close()
 	err3 := s.db.Close()
-	return errors.Join(err1, err2, err3)
+	err4 := s.lock.Close()
+	return errors.Join(err1, err2, err3, err4)
 }
 
 func fileExists(path string) bool { _, err := os.Stat(path); return err == nil }
 func quarantine(path string, at time.Time) (string, error) {
-	suffix := ".quarantine-" + at.UTC().Format("20060102T150405.000000000Z")
-	destination := path + suffix
-	if err := os.Rename(path, destination); err != nil {
+	base := path + ".quarantine-" + at.UTC().Format("20060102T150405.000000000Z")
+	destination := base
+	for attempt := 0; fileExists(destination) || fileExists(destination+"-wal") || fileExists(destination+"-shm"); attempt++ {
+		if attempt >= 999 {
+			return "", errors.New("no quarantine name available")
+		}
+		destination = fmt.Sprintf("%s-%03d", base, attempt+1)
+	}
+	moved := [][2]string{}
+	move := func(source, target string) error {
+		if err := os.Rename(source, target); err != nil {
+			return err
+		}
+		moved = append(moved, [2]string{source, target})
+		return nil
+	}
+	if err := move(path, destination); err != nil {
 		return "", err
 	}
 	for _, sidecar := range []string{"-wal", "-shm"} {
 		source := path + sidecar
 		if _, err := os.Stat(source); err == nil {
-			if err := os.Rename(source, destination+sidecar); err != nil {
+			if err := move(source, destination+sidecar); err != nil {
+				for index := len(moved) - 1; index >= 0; index-- {
+					_ = os.Rename(moved[index][1], moved[index][0])
+				}
 				return "", err
 			}
 		} else if !errors.Is(err, fs.ErrNotExist) {

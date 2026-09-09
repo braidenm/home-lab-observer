@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-const SchemaVersion = 1
+const SchemaVersion = 2
 const MinimumSQLiteVersion = "3.51.3"
 const ExpectedSQLiteVersion = "3.53.4"
 
@@ -40,6 +40,16 @@ func (s Sample) validate() error {
 	}
 	if s.At.IsZero() || math.IsNaN(s.Value) || math.IsInf(s.Value, 0) || s.Value < 0 {
 		return errors.New("invalid metric sample")
+	}
+	switch s.Metric {
+	case CPUUtilization, MemoryUtilization, FilesystemUtilization:
+		if s.Value > 100 {
+			return errors.New("percentage metric exceeds 100")
+		}
+	case ProcessCount:
+		if math.Trunc(s.Value) != s.Value {
+			return errors.New("process count must be an integer")
+		}
 	}
 	return nil
 }

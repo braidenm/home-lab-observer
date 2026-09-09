@@ -39,3 +39,18 @@ func TestExtractOmitsNetworkReset(t *testing.T) {
 		t.Fatalf("samples=%+v", got)
 	}
 }
+
+func TestExtractRejectsInvalidFilesystemAndAvoidsUintOverflow(t *testing.T) {
+	at := time.Now().UTC()
+	invalid := []observation.Filesystem{{TotalBytes: 1, UsedBytes: 2}}
+	snapshot := observation.Snapshot{ObservedAt: at, Filesystems: observation.Section[[]observation.Filesystem]{State: observation.Available, Data: &invalid}}
+	if got := Extract(snapshot, nil); len(got) != 0 {
+		t.Fatalf("invalid sample=%+v", got)
+	}
+	large := []observation.Filesystem{{TotalBytes: ^uint64(0), UsedBytes: ^uint64(0)}, {TotalBytes: 1, UsedBytes: 1}}
+	snapshot.Filesystems.Data = &large
+	got := Extract(snapshot, nil)
+	if len(got) != 1 || got[0].Metric != FilesystemUtilization || got[0].Value != 100 {
+		t.Fatalf("overflow-safe sample=%+v", got)
+	}
+}

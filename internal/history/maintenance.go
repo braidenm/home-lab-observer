@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -32,6 +33,13 @@ func (s *Store) Maintain(ctx context.Context, now time.Time) error {
 		s.recordFailure(ctx, "maintenance_failures", "RETENTION_FAILED")
 		return err
 	}
+	if err := s.incrementalVacuum(ctx); err != nil {
+		s.recordFailure(ctx, "maintenance_failures", "VACUUM_FAILED")
+		return err
+	}
+	if err := s.Checkpoint(ctx, true); err != nil {
+		return err
+	}
 	s.refreshSize()
 	if s.Health().DatabaseBytes > s.config.MaxBytes {
 		removed, err := s.pruneSize(ctx)
@@ -42,15 +50,24 @@ func (s *Store) Maintain(ctx context.Context, now time.Time) error {
 		if removed > 0 {
 			s.addHealthCounter("size_dropped", uint64(removed))
 		}
-	}
-	if err := s.Checkpoint(ctx, false); err != nil {
-		return err
+		if err := s.incrementalVacuum(ctx); err != nil {
+			s.recordFailure(ctx, "maintenance_failures", "VACUUM_FAILED")
+			return err
+		}
+		if err := s.Checkpoint(ctx, true); err != nil {
+			return err
+		}
 	}
 	s.refreshSize()
 	if s.Health().DatabaseBytes > s.config.MaxBytes {
 		s.degrade("STORAGE_PRESSURE")
 	}
 	return nil
+}
+
+func (s *Store) incrementalVacuum(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, "PRAGMA incremental_vacuum("+strconv.Itoa(s.config.BatchSize)+")")
+	return err
 }
 
 func (s *Store) rollupBatch(ctx context.Context, before time.Time) (int64, error) {
@@ -209,6 +226,9 @@ func (s *Store) Checkpoint(ctx context.Context, truncate bool) error {
 	if truncate {
 		mode = "TRUNCATE"
 	}
+	if err := s.persistCounter(ctx, "checkpoint_count", 1); err != nil {
+		return err
+	}
 	var busy, logFrames, checkpointed int
 	err := s.db.QueryRowContext(ctx, "PRAGMA wal_checkpoint("+mode+")").Scan(&busy, &logFrames, &checkpointed)
 	if err != nil {
@@ -222,7 +242,7 @@ func (s *Store) Checkpoint(ctx context.Context, truncate bool) error {
 	s.mu.Lock()
 	s.health.CheckpointCount++
 	s.mu.Unlock()
-	return s.persistCounter(ctx, "checkpoint_count", 1)
+	return nil
 }
 
 func incrementCounter(ctx context.Context, tx *sql.Tx, key string, amount int64) error {
