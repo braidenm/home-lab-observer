@@ -19,7 +19,7 @@ updates:
         patterns:
           - "*"
   - package-ecosystem: npm
-    directory: /
+    directory: /web/observer-ui
     schedule:
       interval: monthly
     open-pull-requests-limit: 2

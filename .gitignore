@@ -25,6 +25,11 @@ node_modules/
 go.work
 go.work.sum
 
+# JavaScript build and dependency output
+node_modules/
+dist/
+dist-demo/
+
 # env file
 .env
 
