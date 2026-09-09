@@ -85,20 +85,22 @@ Counters reject increments beyond 9007199254740991 before persistence.
 
 ```go
 const (
-    MaxSources          = 2
-    MaxAcceptedEvents   = 512
-    MaxExaminedEvents   = 513 // accepted cap plus one deferred lookahead
-    MaxSourceBytes      = 2 << 20
-    MaxJournalLineBytes = 4 << 10
-    MaxCheckpointBytes  = 16 << 10
-    MaxRecentEvents     = 200
-    MaxCoverageIntervalsPerBatch = 4
+    MaxSources                   = 2
+    MaxAcceptedEvents            = 512
+    MaxExaminedEvents            = 513 // all accepted/discarded rows plus optional deferred lookahead
+    MaxSourceBytes               = 2 << 20
+    MaxJournalLineBytes          = 4 << 10
+    MaxCheckpointBytes           = 16 << 10
+    MaxRecentEvents              = 200
+    MaxCoverageSegmentsPerCommit = 2
 )
 
 type Checkpoint struct {
-    Revision     uint64
-    ResetPending bool
-    Opaque       []byte // deep-cloned, <=16KiB; nil while reset is pending
+    Revision          uint64
+    ResetPending      bool
+    Opaque            []byte     // deep-cloned, <=16KiB; nil while reset is pending
+    PreviousAttemptAt *time.Time // every last durably committed attempt, success or failure
+    CoverageThrough   *time.Time // latest caught-up query-start watermark; status only
 }
 func (Checkpoint) Validate() error
 
@@ -120,19 +122,6 @@ type DiscardCount struct {
     Count uint32
 }
 
-type CoverageKind string
-const (
-    CoverageCovered CoverageKind = "COVERED"
-    CoverageGap     CoverageKind = "GAP"
-)
-
-type CoverageInterval struct {
-    Start      time.Time // inclusive UTC
-    End        time.Time // exclusive UTC; Start < End
-    Kind       CoverageKind
-    ReasonCode *ReasonCode // nil for COVERED, required for GAP
-}
-
 type Batch struct {
     Kind             BatchKind
     Source           Source
@@ -150,7 +139,6 @@ type Batch struct {
     Deferred         bool
     CaughtUp         bool
     NextOpaque       []byte
-    Coverage         []CoverageInterval
 }
 func (Batch) Validate() error
 
@@ -159,11 +147,25 @@ type Reader interface {
 }
 ```
 
+`Checkpoint.Validate` accepts `Revision > 0` with nil `Opaque`; that is a valid initialized empty source, not reset
+evidence. `Opaque` and both optional timestamps are deep-cloned at every port boundary. Standalone validation requires
+each non-nil timestamp to be non-zero UTC, requires `CoverageThrough <= PreviousAttemptAt`, and rejects
+`CoverageThrough` when `PreviousAttemptAt` is nil. `ReadRequest` validation additionally requires both prior timestamps
+to be no later than its UTC `QueryStartedAt` and requires `QueryStartedAt > PreviousAttemptAt` when the latter exists;
+Store applies the same comparison between a batch and the checkpoint loaded under CAS. `PreviousAttemptAt` is the
+query-start time of every durably committed attempt, including a failed or reset attempt. `CoverageThrough` changes
+only after a `NORMAL` caught-up proof and is retained across failure/reset; it is the latest successful watermark shown
+in status, never the start of a positive coverage interval.
+
 Fixed adapters, not callers, enforce the two-second per-source deadline and byte/line/native-handle bounds. The
-collector wraps both enabled sources in a four-second overall deadline. Expected platform, permission, timeout,
-malformed-input and reset outcomes return a closed validated `Batch` with a code-owned reason. A non-nil error means
-no trustworthy batch escaped; the collector creates a fixed `FAILED/READER_FAILED` attempt with no cursor advance and
-never exposes the error text.
+collector wraps both enabled sources in a four-second overall deadline. Expected platform, permission, deadline,
+query, malformed-input and reset outcomes return a closed validated `Batch` with a code-owned reason, so they can be
+CAS-committed as attempts. A non-nil error means no trustworthy batch escaped. Unless the collector's parent context
+was cancelled for shutdown, the collector replaces it with a fixed `UNAVAILABLE/FAILED/READER_FAILED` batch with no
+events, discards, cursor advance, or caught-up proof and never exposes the error text. Its kind is `RESET_PENDING` iff
+the loaded checkpoint was already pending, otherwise `NORMAL`; therefore a generic reader error cannot accidentally
+clear reset state or become a normal success. Shutdown cancellation joins the reader/native child and commits nothing,
+so it cannot race the shared Store closing.
 
 Adapter construction receives one validated observer-owned state root, not a request-selected path. Linux cursor
 staging uses fixed per-source bounded owner-only files beneath one dedicated staging directory, removes stale known
@@ -173,24 +175,31 @@ staging path through these ports. The Windows fixed helper continues to use boun
 stderr, not staging files.
 
 Every batch has `ExaminedCount <= 513`; the cap applies to all examined rows, not accepted rows alone. For a normal
-batch, `len(Events) <= 512`, `DiscardedCount == sum(Discards.Count)`, and `ExaminedCount` equals accepted plus discarded
-plus one only when a lookahead was examined and `Deferred` is true. After 512 discarded rows, at most one more row may
-be examined even when no event was accepted. The deferred sentinel is absent from events/discards and `NextOpaque`
-must cause it to be read again. A successful normal batch may advance the cursor; only `CaughtUp` may advance the
-persisted coverage-through watermark to `QueryStartedAt`. Coverage intervals, not that watermark, remain authoritative
-for gaps.
+batch, `len(Events) + DiscardedCount <= 512`, `DiscardedCount == sum(Discards.Count)`, and `ExaminedCount` equals that
+sum plus one only when a lookahead was examined and `Deferred` is true. The 513th row can only be that deferred
+sentinel—never another accepted or discarded row. After 512 discarded rows, at most one sentinel may be examined even
+when no event was accepted. The sentinel is absent from events/discards and `NextOpaque` must cause it to be read again.
+A successful normal batch may advance the cursor; only `CaughtUp` may advance the persisted coverage-through watermark
+to `QueryStartedAt`. That watermark is status, never a start from which positive historical coverage is inferred.
+
+`Batch.Validate` requires all times to be non-zero UTC with `QueryStartedAt <= StartedAt <= FinishedAt`, validates
+every event/discard and safe counter sum, and requires `CaughtUp == false` for failed/reset batches. Events, discards,
+reason pointers, and `NextOpaque` are deep-cloned before caching or persistence. Store additionally checks under the
+CAS transaction that source/revision equal the loaded checkpoint, a normal batch is not accepted while reset is
+pending, and each reset transition is legal. No caller-owned slice or timestamp pointer is retained.
 
 Reset recovery happens within the attempt that proves the ordinary checkpoint stale/invalid, not in an unconditional
 extra cycle. The adapter immediately switches to one bounded metadata-only newest-record tail probe outside the
 initial-read five-minute filter: Windows performs its fixed reverse-channel query for at most one event; Linux uses
 fixed `journalctl -n 1` selected fields and its automatic cursor. It requests no body; a returned record makes
 `ExaminedCount` one but contributes no captured or discarded count. If a cursor is proved, `RESET_ESTABLISHED`
-atomically commits that `NextOpaque`,
-clears `ResetPending`, records `CHECKPOINT_RESET` plus an unknown-size gap, and advances no caught-up coverage. If the
-source is empty or the expected probe cannot prove a cursor, `RESET_PENDING` atomically clears the stale opaque value,
-keeps `ResetPending`, records the bounded latest state/gap and zero counts. A later 60-second attempt with
+atomically commits that `NextOpaque`, clears `ResetPending`, records `CHECKPOINT_RESET` plus the bounded attempt-window
+gap, and advances no caught-up coverage. If the source is empty or the expected probe cannot prove a cursor,
+`RESET_PENDING` atomically clears the stale opaque value, keeps `ResetPending`, records the bounded latest state/gap
+and zero counts. A later 60-second attempt with
 `ResetPending` repeats only this same tail probe until it returns `RESET_ESTABLISHED`; normal after-cursor reading starts
-on the following cycle. Initial revision-zero reads still use the bounded five-minute window and are not reset probes.
+on the following cycle. Any checkpoint with nil `Opaque` and `ResetPending == false` performs a `NORMAL` fixed
+five-minute read regardless of `Revision`; revision is CAS state, not an initialization/reset signal.
 
 ## Store port and CAS
 
@@ -258,6 +267,35 @@ at `ExpectedRevision`, writes minute source/severity rollups, discard-attributio
 coverage intervals and the next revision. Zero CAS rows returns `ErrRevisionConflict`. A failed write advances nothing.
 After an ambiguous commit error, the single-flight collector reloads: revision `expected+1` means applied, unchanged
 revision permits one normal retry, and any other revision is a conflict/reload; it never blindly increments twice.
+
+Coverage is derived by `CommitBatch`, not by the native `Reader`. Each commit derives at most
+`MaxCoverageSegmentsPerCommit` coalesced, half-open UTC `[start,end)` segments. Let `q = Batch.QueryStartedAt`,
+`p = prior Checkpoint.PreviousAttemptAt`, and `floor = q-7d`; every derived start is clamped to at least `floor`, so a
+healthy resume after a shutdown longer than retention records only bounded retained evidence rather than failing:
+
+- A first (`p == nil`) `NORMAL` caught-up batch proves only `[q-5m,q)` covered. A later caught-up normal batch proves
+  only `[max(p,q-60s),q)` covered. When `p < q-60s`, Store first persists
+  `[max(p,floor),q-60s)` as `GAP/MISSED_COLLECTION`; therefore a ten-minute missed poll leaves nine minutes of gap and
+  only the final minute covered.
+- A failed or non-caught-up normal attempt proves no positive coverage. Store persists a gap over `[q-5m,q)` when
+  `p == nil`, otherwise `[max(p,floor),q)`, with only its code-owned reason. Counts captured from backlog remain
+  attributed by event time but do not upgrade that gap.
+- `RESET_PENDING` and `RESET_ESTABLISHED` prove no positive coverage and persist the same bounded attempt-window gap
+  using the batch's code-owned reason (`CHECKPOINT_RESET` for the stale/tail transition, or the fixed underlying
+  failure code for an unsuccessful pending probe). They do not change `CoverageThrough`.
+- Only explicit persisted gap evidence is sticky and wins overlap with later positive coverage. `UNKNOWN` is the
+  absence of evidence in the fixed grid and may become covered after later proof. Store coalesces adjacent intervals
+  only when state and reason match; it does not delete a gap because a later interval overlaps it. The summary reducer
+  therefore reports `PARTIAL` when one API bucket contains both gap and covered evidence.
+
+The existing seven-day/250-MiB history retention applies to these segments, and every summary returns only its fixed
+grid (at most 168 buckets per source and two sources). Thus neither persistence nor a port return grows without the
+accepted age/size/count bounds.
+
+In that same successful transaction Store increments `Revision`, sets `PreviousAttemptAt = q` for every batch, and
+sets `CoverageThrough = q` only for a `NORMAL` caught-up batch. It validates/rejects inverted, non-UTC, zero, or
+unbounded interval input/state before writing. A committed expected source failure therefore advances attempt metadata
+and durable gap evidence without advancing the native cursor or coverage watermark.
 
 Log tables have dedicated log-schema metadata while the existing core SQLite `user_version` remains 2. Incompatible or
 failed log-table initialization makes only the log Store port unavailable with a fixed reason; it does not quarantine
@@ -341,8 +379,13 @@ summary-unavailable Problem response.
 - Prove disabled calls no reader, immediate-first plus 60-second single-flight cadence, cancellation/reaping, and Stop
   before shared Store close using deterministic fakes.
 - Prove CAS success/conflict/ambiguous reread, same-attempt stale-to-tail proof, repeated empty/failed reset-pending
-  probes with zero captured/discarded counts, failed-write no progress, minute attribution, coalesced coverage, retained
-  history after latest failure, retention and shared-store serialization.
+  probes with zero captured/discarded counts, expected failure commit versus shutdown-cancel no-commit, failed-write no
+  progress, minute attribution, coalesced half-open UTC coverage, retained history after latest failure, retention and
+  shared-store serialization. Coverage fixtures prove initial empty caught-up success is five minutes `FULL`, an
+  ordinary success proves only the latest 60 seconds, a ten-minute missed poll leaves nine minutes `GAP` plus one
+  covered minute, failure followed by overlapping success remains `PARTIAL`, backlog counts do not upgrade a gap, and
+  unknown cells may be resolved by later positive proof. A prior attempt older than seven days is clamped to the
+  retention floor without rejecting or inventing pre-retention coverage.
 - Prove projection never calls native code, never emits a body/private checkpoint, applies `log_limit` 0..200, and keeps
   a stale ring after failure.
 - Prove summary fixed grids and independent count/coverage states, 256KiB bound, strict known fields with additive client
