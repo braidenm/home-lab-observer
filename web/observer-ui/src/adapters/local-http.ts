@@ -95,10 +95,7 @@ export class LocalHttpObserverDataSource implements ObserverDataSource {
       signal
     });
     const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.byteLength > maximumBytes) {
-      throw new ObserverTransportError("Observer API response exceeded its documented size limit", response.status);
-    }
+    const bytes = await readBoundedResponse(response, maximumBytes);
     if (!response.ok) {
       const problem = contentType.includes("application/problem+json") ? parseProblem(bytes, response.status) : undefined;
       const message = problem ? `${problem.title}${problem.detail ? `: ${problem.detail}` : ""}` : `Observer API request failed with ${response.status}`;
@@ -114,6 +111,37 @@ export class LocalHttpObserverDataSource implements ObserverDataSource {
       throw new ObserverTransportError("Observer API returned an invalid contract payload", response.status);
     }
   }
+}
+
+async function readBoundedResponse(response: Response, maximumBytes: number): Promise<Uint8Array> {
+  const tooLarge = () => new ObserverTransportError("Observer API response exceeded its documented size limit", response.status);
+  const declared = response.headers.get("content-length");
+  if (declared !== null && Number(declared) > maximumBytes) {
+    await response.body?.cancel();
+    throw tooLarge();
+  }
+  if (!response.body) return new Uint8Array();
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      length += value.byteLength;
+      if (length > maximumBytes) {
+        await reader.cancel();
+        throw tooLarge();
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  return bytes;
 }
 
 export function mapCapabilities(value: unknown): ObserverCapabilities {

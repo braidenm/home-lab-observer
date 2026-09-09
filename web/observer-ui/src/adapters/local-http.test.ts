@@ -13,6 +13,19 @@ const jsonResponse = (body: unknown, status = 200, contentType = "application/js
   new Response(JSON.stringify(body), { status, headers: { "content-type": contentType } });
 
 describe("LocalHttpObserverDataSource", () => {
+  it("cancels an oversized stream before consuming an unbounded response", async () => {
+    let pulled = 0;
+    let canceled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) { pulled += 1; controller.enqueue(new Uint8Array(65536)); },
+      cancel() { canceled = true; }
+    });
+    const source = new LocalHttpObserverDataSource({ fetcher: vi.fn<typeof fetch>().mockResolvedValue(new Response(stream, { headers: { 'content-type': 'application/json' } })) });
+    await expect(source.getCapabilities()).rejects.toThrow('size limit');
+    expect(canceled).toBe(true);
+    expect(pulled).toBeLessThanOrEqual(4);
+  });
+
   it("uses only canonical endpoints on the documented default port", async () => {
     const fetcher = vi.fn<typeof fetch>().mockImplementation(async (input) => {
       const url = String(input);
