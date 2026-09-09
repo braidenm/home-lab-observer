@@ -69,6 +69,19 @@ Running is not proof that every collector is healthy. Open `http://127.0.0.1:984
 using the local token file, and inspect collection freshness and **Observer & privacy**. The token is generated locally;
 it is not a GitHub token. Status JSON never contains it.
 
+Background mode has no console to print the token location. Open the existing `local-api.token` file under the data
+directory you selected with `--state-dir`, or use the default below. Copy it only into the local dashboard, not a
+support message, screenshot or remote website.
+
+| Machine | Default token file |
+| --- | --- |
+| Linux | `${XDG_CONFIG_HOME:-$HOME/.config}/home-lab-observer/local-api.token` |
+| macOS | `$HOME/Library/Application Support/home-lab-observer/local-api.token` |
+| Windows | `%APPDATA%\home-lab-observer\local-api.token` |
+
+The program installation directory and data directory are different on purpose. The token appears only after the
+observer successfully starts; do not create your own token when the file is missing.
+
 ## 3. Stop, restart, disable or upgrade
 
 Replace `status` above with the operation you want:
@@ -105,6 +118,19 @@ bytes, limits, dropped records and write failures, without exposing file content
 A diagnostic write failure does not stop machine observation. Unsafe files, links, an unknown registration or a
 mismatched ownership marker are refused, not overwritten. If startup is unavailable, use foreground mode and include
 only the stable error code, version and OS in a support request—not your token or private logs.
+
+## Troubleshooting without changing permissions
+
+| Reported state or code | Next step |
+| --- | --- |
+| `BACKGROUND_MANAGER_UNAVAILABLE` | Run in your normal signed-in session. On headless Linux, confirm a working user manager; the installer does not enable lingering. Foreground mode remains available. |
+| `BACKGROUND_UNREACHABLE` / `BACKGROUND_NOT_READY` | Allow startup to finish, then check again. Stop any foreground observer using the same port/data directory. Inspect available product diagnostics; do not change firewall settings. |
+| `BACKGROUND_REGISTRATION_MISMATCH` / `BACKGROUND_UNSAFE_MANAGED_STATE` | Keep the files and existing registration intact. Check that you used the original install root/account; do not delete ownership markers or overwrite another task. |
+| `BACKGROUND_GRACEFUL_STOP_FAILED` | Check whether the process is still running. Retry normal stop; choose `--force` only if you accept interrupted work. No automatic force fallback runs. |
+| Diagnostics `UNKNOWN` | The CLI could not verify authenticated diagnostic health. This is not proof that diagnostics are healthy or empty. Check the local dashboard and token/data-directory access. |
+
+Use the same observer version that created an incomplete background setup to retry its lifecycle operation. Avoid
+upgrading or manually deleting a partial registration while recovery is in progress.
 
 ## Architecture and scope
 

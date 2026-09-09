@@ -66,6 +66,7 @@ exits 1 but cannot guarantee a complete JSON document.
 - [Data policy](docs/privacy/data-policy.md)
 - [Reusable observer dashboard](web/observer-ui/README.md)
 - [Run and manage the local preview](docs/local-service.md)
+- [Optional background operation, token location and troubleshooting](docs/background-operation.md)
 - [Enable and understand Docker observations](docs/container-observations.md)
 - [Download, verify, install and manage native previews](docs/install.md)
 - [How native releases are built and verified](docs/releasing.md)
