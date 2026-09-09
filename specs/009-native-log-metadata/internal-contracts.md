@@ -111,7 +111,7 @@ type ReadRequest struct {
 type BatchKind string
 const (
     BatchNormal           BatchKind = "NORMAL"
-    BatchResetRequired    BatchKind = "RESET_REQUIRED"
+    BatchResetPending     BatchKind = "RESET_PENDING"
     BatchResetEstablished BatchKind = "RESET_ESTABLISHED"
 )
 
@@ -172,17 +172,25 @@ arbitrary/random cursor filenames that can accumulate after a crash, exposes cur
 staging path through these ports. The Windows fixed helper continues to use bounded stdin/stdout pipes and discarded
 stderr, not staging files.
 
-For a normal batch, `len(Events) <= 512`, `DiscardedCount == sum(Discards.Count)`, and `ExaminedCount` equals accepted
-plus discarded plus one only when a lookahead was examined and `Deferred` is true. The deferred sentinel is absent
-from events/discards and `NextOpaque` must cause it to be read again. A successful normal batch may advance the cursor;
-only `CaughtUp` may advance the persisted coverage-through watermark to `QueryStartedAt`. Coverage intervals, not that
-watermark, remain authoritative for gaps.
+Every batch has `ExaminedCount <= 513`; the cap applies to all examined rows, not accepted rows alone. For a normal
+batch, `len(Events) <= 512`, `DiscardedCount == sum(Discards.Count)`, and `ExaminedCount` equals accepted plus discarded
+plus one only when a lookahead was examined and `Deferred` is true. After 512 discarded rows, at most one more row may
+be examined even when no event was accepted. The deferred sentinel is absent from events/discards and `NextOpaque`
+must cause it to be read again. A successful normal batch may advance the cursor; only `CaughtUp` may advance the
+persisted coverage-through watermark to `QueryStartedAt`. Coverage intervals, not that watermark, remain authoritative
+for gaps.
 
-Reset is crash-safe and deliberately two-step. `RESET_REQUIRED` commits no events/discards, clears opaque progress,
-sets `ResetPending`, and records a code-owned gap. A later request with `ResetPending` uses the bounded five-minute
-tail only to establish a new cursor. `RESET_ESTABLISHED` again commits zero events/discards, stores `NextOpaque`, clears
-`ResetPending`, and does not advance ordinary caught-up coverage. Failure at either step leaves the last committed
-reset state retryable; reset-window rows never become captured or discarded counts.
+Reset recovery happens within the attempt that proves the ordinary checkpoint stale/invalid, not in an unconditional
+extra cycle. The adapter immediately switches to one bounded metadata-only newest-record tail probe outside the
+initial-read five-minute filter: Windows performs its fixed reverse-channel query for at most one event; Linux uses
+fixed `journalctl -n 1` selected fields and its automatic cursor. It requests no body; a returned record makes
+`ExaminedCount` one but contributes no captured or discarded count. If a cursor is proved, `RESET_ESTABLISHED`
+atomically commits that `NextOpaque`,
+clears `ResetPending`, records `CHECKPOINT_RESET` plus an unknown-size gap, and advances no caught-up coverage. If the
+source is empty or the expected probe cannot prove a cursor, `RESET_PENDING` atomically clears the stale opaque value,
+keeps `ResetPending`, records the bounded latest state/gap and zero counts. A later 60-second attempt with
+`ResetPending` repeats only this same tail probe until it returns `RESET_ESTABLISHED`; normal after-cursor reading starts
+on the following cycle. Initial revision-zero reads still use the bounded five-minute window and are not reset probes.
 
 ## Store port and CAS
 
@@ -332,8 +340,9 @@ summary-unavailable Problem response.
 - Table-test every value validator, batch count/lookahead/reset invariant, checkpoint deep clone and safe-integer edge.
 - Prove disabled calls no reader, immediate-first plus 60-second single-flight cadence, cancellation/reaping, and Stop
   before shared Store close using deterministic fakes.
-- Prove CAS success/conflict/ambiguous reread, reset two-step zero counts, failed-write no progress, minute attribution,
-  coalesced coverage, retained history after latest failure, retention and shared-store serialization.
+- Prove CAS success/conflict/ambiguous reread, same-attempt stale-to-tail proof, repeated empty/failed reset-pending
+  probes with zero captured/discarded counts, failed-write no progress, minute attribution, coalesced coverage, retained
+  history after latest failure, retention and shared-store serialization.
 - Prove projection never calls native code, never emits a body/private checkpoint, applies `log_limit` 0..200, and keeps
   a stale ring after failure.
 - Prove summary fixed grids and independent count/coverage states, 256KiB bound, strict known fields with additive client
