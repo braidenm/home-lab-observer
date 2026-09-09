@@ -48,10 +48,14 @@ func TestCurrentMatchesSchemaValidatedFixture(t *testing.T) {
 
 func TestUnsupportedSectionsAreEmptyAndHonest(t *testing.T) {
 	snapshot := Current(observation.Snapshot{ObservedAt: time.Unix(0, 0), Quality: observation.Quality{State: observation.Failed}}, SystemInfo{})
-	for name, section := range map[string]EmptySection{"services": snapshot.Sections.Services, "containers": snapshot.Sections.Containers, "logs": snapshot.Sections.Logs, "observer": snapshot.Sections.Observer} {
+	for name, section := range map[string]EmptySection{"services": snapshot.Sections.Services, "containers": snapshot.Sections.Containers, "logs": snapshot.Sections.Logs} {
 		if section.SupportState != "UNSUPPORTED" || section.CollectionState != "NOT_RUN" || section.Items == nil || len(section.Items) != 0 {
 			t.Fatalf("%s=%+v", name, section)
 		}
+	}
+	observer := snapshot.Sections.Observer
+	if observer.SupportState != "UNSUPPORTED" || observer.CollectionState != "NOT_RUN" || observer.Items == nil || len(observer.Items) != 0 {
+		t.Fatalf("observer=%+v", observer)
 	}
 }
 
