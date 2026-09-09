@@ -49,6 +49,7 @@ exits 1 but cannot guarantee a complete JSON document.
 - [Security model](SECURITY.md)
 - [Threat model](docs/security/threat-model.md)
 - [Data policy](docs/privacy/data-policy.md)
+- [Reusable observer dashboard](web/observer-ui/README.md)
 
 ## Supported delivery targets
 

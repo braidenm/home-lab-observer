@@ -1,0 +1,44 @@
+name: Dashboard
+
+on:
+  pull_request:
+    paths:
+      - "web/observer-ui/**"
+      - ".github/workflows/dashboard.yml"
+      - ".github/dependabot.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "web/observer-ui/**"
+      - ".github/workflows/dashboard.yml"
+      - ".github/dependabot.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dashboard-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, test, and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web/observer-ui
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: "22.22.3"
+          cache: npm
+          cache-dependency-path: web/observer-ui/package-lock.json
+      - name: Install pinned dependencies
+        run: npm ci
+      - name: Verify dashboard package
+        run: npm run check
