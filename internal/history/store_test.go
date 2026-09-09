@@ -265,6 +265,58 @@ func TestCorruptAndIncompatibleDatabasesAreQuarantined(t *testing.T) {
 		if err := db.Close(); err != nil {
 			t.Fatal(err)
 		}
+	}}, {"schema-affinity", "DATABASE_SCHEMA_INCOMPATIBLE", func(t *testing.T, path string) {
+		store := openTestStore(t, DefaultConfig(path))
+		if err := store.Close(); err != nil {
+			t.Fatal(err)
+		}
+		db, err := sql.Open("sqlite", path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`ALTER TABLE samples RENAME TO original_samples;
+			CREATE TABLE samples(metric BLOB NOT NULL, observed_at_ns INTEGER NOT NULL, value REAL NOT NULL, PRIMARY KEY(metric,observed_at_ns)) WITHOUT ROWID;
+			DROP TABLE original_samples`); err != nil {
+			db.Close()
+			t.Fatal(err)
+		}
+		if err := db.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}}, {"schema-primary-key", "DATABASE_SCHEMA_INCOMPATIBLE", func(t *testing.T, path string) {
+		store := openTestStore(t, DefaultConfig(path))
+		if err := store.Close(); err != nil {
+			t.Fatal(err)
+		}
+		db, err := sql.Open("sqlite", path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`ALTER TABLE samples RENAME TO original_samples;
+			CREATE TABLE samples(metric TEXT NOT NULL, observed_at_ns INTEGER NOT NULL, value REAL NOT NULL, PRIMARY KEY(observed_at_ns,metric)) WITHOUT ROWID;
+			DROP TABLE original_samples`); err != nil {
+			db.Close()
+			t.Fatal(err)
+		}
+		if err := db.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}}, {"auto-vacuum", "DATABASE_SCHEMA_INCOMPATIBLE", func(t *testing.T, path string) {
+		store := openTestStore(t, DefaultConfig(path))
+		if err := store.Close(); err != nil {
+			t.Fatal(err)
+		}
+		db, err := sql.Open("sqlite", path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`PRAGMA auto_vacuum=NONE; VACUUM`); err != nil {
+			db.Close()
+			t.Fatal(err)
+		}
+		if err := db.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}}} {
 		t.Run(testCase.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "history.db")

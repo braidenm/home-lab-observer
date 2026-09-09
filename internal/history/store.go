@@ -215,22 +215,35 @@ func inspectDatabase(ctx context.Context, db *sql.DB) (int, error) {
 }
 
 func validateCurrentSchema(ctx context.Context, db *sql.DB) error {
+	type columnShape struct {
+		name       string
+		columnType string
+		notNull    int
+		primaryKey int
+	}
 	tables := []struct {
 		name    string
-		columns []string
+		columns []columnShape
 	}{
-		{"samples", []string{"metric", "observed_at_ns", "value"}},
-		{"rollups", []string{"metric", "bucket_start_ns", "resolution_seconds", "sample_count", "minimum", "maximum", "total", "last_value", "last_at_ns"}},
-		{"runtime_state", []string{"key", "value"}},
-		{"store_counters", []string{"key", "value"}},
-		{"store_metadata", []string{"key", "value"}},
+		{"samples", []columnShape{{"metric", "TEXT", 1, 1}, {"observed_at_ns", "INTEGER", 1, 2}, {"value", "REAL", 1, 0}}},
+		{"rollups", []columnShape{{"metric", "TEXT", 1, 1}, {"bucket_start_ns", "INTEGER", 1, 2}, {"resolution_seconds", "INTEGER", 1, 3}, {"sample_count", "INTEGER", 1, 0}, {"minimum", "REAL", 1, 0}, {"maximum", "REAL", 1, 0}, {"total", "REAL", 1, 0}, {"last_value", "REAL", 1, 0}, {"last_at_ns", "INTEGER", 1, 0}}},
+		{"runtime_state", []columnShape{{"key", "TEXT", 1, 1}, {"value", "INTEGER", 1, 0}}},
+		{"store_counters", []columnShape{{"key", "TEXT", 1, 1}, {"value", "INTEGER", 1, 0}}},
+		{"store_metadata", []columnShape{{"key", "TEXT", 1, 1}, {"value", "TEXT", 1, 0}}},
+	}
+	var autoVacuum int
+	if err := db.QueryRowContext(ctx, "PRAGMA auto_vacuum").Scan(&autoVacuum); err != nil {
+		return err
+	}
+	if autoVacuum != 2 {
+		return fmt.Errorf("%w: auto_vacuum=%d, want INCREMENTAL", errIncompatibleSchema, autoVacuum)
 	}
 	for _, table := range tables {
 		rows, err := db.QueryContext(ctx, "PRAGMA table_info("+table.name+")")
 		if err != nil {
 			return err
 		}
-		columns := make([]string, 0, len(table.columns))
+		columns := make([]columnShape, 0, len(table.columns))
 		for rows.Next() {
 			var cid, notNull, primaryKey int
 			var name, columnType string
@@ -239,7 +252,11 @@ func validateCurrentSchema(ctx context.Context, db *sql.DB) error {
 				rows.Close()
 				return err
 			}
-			columns = append(columns, name)
+			if cid != len(columns) || defaultValue != nil {
+				rows.Close()
+				return fmt.Errorf("%w: table %s has a non-canonical column descriptor", errIncompatibleSchema, table.name)
+			}
+			columns = append(columns, columnShape{name, columnType, notNull, primaryKey})
 		}
 		if err := rows.Close(); err != nil {
 			return err
@@ -248,7 +265,17 @@ func validateCurrentSchema(ctx context.Context, db *sql.DB) error {
 			return err
 		}
 		if !slices.Equal(columns, table.columns) {
-			return fmt.Errorf("%w: table %s columns are %v", errIncompatibleSchema, table.name, columns)
+			return fmt.Errorf("%w: table %s column descriptors are %v", errIncompatibleSchema, table.name, columns)
+		}
+		var tableType string
+		var columnCount, withoutRowID, strict int
+		if err := db.QueryRowContext(ctx, `SELECT type,ncol,wr,strict FROM pragma_table_list WHERE schema='main' AND name=?`, table.name).Scan(&tableType, &columnCount, &withoutRowID, &strict); errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: table %s is missing", errIncompatibleSchema, table.name)
+		} else if err != nil {
+			return err
+		}
+		if tableType != "table" || columnCount != len(table.columns) || withoutRowID != 1 || strict != 0 {
+			return fmt.Errorf("%w: table %s has a non-canonical layout", errIncompatibleSchema, table.name)
 		}
 	}
 	var sequence int64
