@@ -66,5 +66,5 @@ func run(args []string, stdout, stderr io.Writer, collect collectFunc) int {
 
 func printUsage(writer io.Writer) {
 	fmt.Fprintln(writer, "usage: observer collect-once [--max-processes N] [--processes=true|false] [--timeout DURATION]")
-	fmt.Fprintln(writer, "       observer serve [--listen 127.0.0.1:9847] [--state-dir PATH]")
+	fmt.Fprintln(writer, "       observer serve [--listen 127.0.0.1:9847] [--state-dir PATH] [--docker-endpoint LOCAL_SOCKET]")
 }

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/braidenm/home-lab-observer/internal/collector"
+	"github.com/braidenm/home-lab-observer/internal/containerobs"
 	"github.com/braidenm/home-lab-observer/internal/history"
 	"github.com/braidenm/home-lab-observer/internal/localapi"
 	"github.com/braidenm/home-lab-observer/internal/localauth"
@@ -29,6 +30,7 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 	flags.SetOutput(stderr)
 	listen := flags.String("listen", "127.0.0.1:9847", "local IPv4 address and port")
 	stateDir := flags.String("state-dir", "", "dedicated observer state directory on a local disk")
+	dockerEndpoint := flags.String("docker-endpoint", "", "opt-in local Docker Unix socket or Windows named pipe; disabled by default")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -39,6 +41,12 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "invalid serve options: use an explicit 127.0.0.1 address and port")
 		return 2
 	}
+	containers, err := containerobs.New(containerobs.Config{Endpoint: *dockerEndpoint})
+	if err != nil {
+		fmt.Fprintln(stderr, "invalid Docker endpoint: use an explicit local unix:///absolute/path socket or npipe:////./pipe/name")
+		return 2
+	}
+	defer containers.Close()
 	if *stateDir == "" {
 		tokenPath, err := localauth.DefaultTokenPath()
 		if err != nil {
@@ -55,7 +63,7 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	logger := slog.New(slog.NewJSONHandler(stderr, nil))
-	if err := serve(ctx, *listen, resolved, stdout, logger); err != nil {
+	if err := serve(ctx, *listen, resolved, stdout, logger, containers); err != nil {
 		// Errors may contain a private file path or OS data. Keep ordinary logs code-owned.
 		logger.Error("observer_stopped", "code", "SERVICE_FAILED")
 		return 1
@@ -63,7 +71,7 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func serve(ctx context.Context, address, stateDir string, output io.Writer, logger *slog.Logger) error {
+func serve(ctx context.Context, address, stateDir string, output io.Writer, logger *slog.Logger, optionalContainers ...*containerobs.Collector) error {
 	// Bind before opening state so a second process cannot mutate an active instance's store.
 	listener, err := net.Listen("tcp4", address)
 	if err != nil {
@@ -84,14 +92,27 @@ func serve(ctx context.Context, address, stateDir string, output io.Writer, logg
 	}
 	cfg := collector.DefaultConfig()
 	cfg.CollectorVersion, cfg.MaxProcesses = version, 200
-	runtime, err := scheduler.New(collector.New(collector.RealClock{}, collector.GopsutilProvider{}, cfg).Collect, store, scheduler.DefaultConfig())
+	var containers *containerobs.Collector
+	if len(optionalContainers) > 0 {
+		containers = optionalContainers[0]
+	}
+	if containers == nil {
+		containers, err = containerobs.New(containerobs.Config{})
+		if err != nil {
+			_ = store.Close()
+			return err
+		}
+		defer containers.Close()
+	}
+	collect := collectWithContainers(collector.New(collector.RealClock{}, collector.GopsutilProvider{}, cfg).Collect, containers)
+	runtime, err := scheduler.New(collect, store, scheduler.DefaultConfig())
 	if err != nil {
 		_ = store.Close()
 		return err
 	}
 	_, portText, _ := net.SplitHostPort(address)
 	port, _ := strconv.Atoi(portText)
-	handler, err := localapi.NewHandler(localapi.Config{Port: port, Token: token, Version: version, Source: runtime, History: store, Now: time.Now})
+	handler, err := localapi.NewHandler(localapi.Config{Port: port, Token: token, Version: version, Source: runtime, History: store, ContainerSource: containers, Now: time.Now})
 	if err != nil {
 		_ = store.Close()
 		return err

@@ -79,8 +79,9 @@ service, alerting, or remote action support. Those capabilities remain visibly `
 
 ## Follow-up roadmap
 
-- Spec 006: Docker/Podman, OS services, temperatures/sensors/SMART, and native log-source adapters with bounded log
-  metadata and opt-in redacted local bodies.
+- Spec 006: opt-in read-only Docker inventory and resource readings through a specialized local read model.
+  Podman compatibility, OS services, temperatures/sensors/SMART and native log sources are deferred to separately
+  reviewed focused collector specifications; log bodies retain explicit local opt-in and redaction requirements.
 - Spec 007: signed/checksummed native releases, Linux container, Bash/PowerShell installers, service definitions,
   upgrades, uninstalls, and rollback.
 - Spec 008: outbound enrollment/upload into Platform Demo with owner/resource binding and no inbound host exposure.

@@ -55,6 +55,8 @@ func TestServeHelpAndUnsafeBind(t *testing.T) {
 		{[]string{"serve", "--listen", "0.0.0.0:9847"}, 2},
 		{[]string{"serve", "--listen", "localhost:9847"}, 2},
 		{[]string{"serve", "--unknown"}, 2},
+		{[]string{"serve", "--docker-endpoint", "tcp://127.0.0.1:2375"}, 2},
+		{[]string{"serve", "--docker-endpoint", "ssh://owner@example.invalid"}, 2},
 	} {
 		var out, errOut strings.Builder
 		if got := run(test.args, &out, &errOut, nil); got != test.want {

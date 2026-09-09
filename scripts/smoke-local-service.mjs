@@ -28,7 +28,7 @@ try {
   const ajv = new Ajv({ allErrors: true, strict: false });
   addFormats(ajv);
   const validators = {};
-  for (const name of ['capabilities', 'current-snapshot', 'metric-series', 'problem-details']) {
+  for (const name of ['capabilities', 'current-snapshot', 'metric-series', 'container-inventory', 'problem-details']) {
     validators[name] = ajv.compile(JSON.parse(await readFile(join(root, `schemas/v1/${name}-v1.schema.json`), 'utf8')));
   }
   async function validated(path, name, status = 200, requestHeaders = headers) {
@@ -43,6 +43,11 @@ try {
   }
   await validated('/api/v1/capabilities', 'problem-details', 401, {});
   await validated('/api/v1/capabilities', 'capabilities');
+  const containers = await validated('/api/v1/containers?limit=500', 'container-inventory');
+  assert.equal(containers.support_state, 'DISABLED');
+  assert.equal(containers.policy.remote_upload_eligible, false);
+  await validated('/api/v1/containers?limit=501', 'problem-details', 400);
+  await validated('/api/v1/containers', 'problem-details', 401, {});
   let current;
   await until(async () => {
     const response = await fetch(`${origin}/api/v1/snapshots/current`, { headers });
@@ -96,16 +101,40 @@ try {
           await page.keyboard.press('ArrowRight');
           await page.waitForFunction(() => document.activeElement?.textContent === 'Containers');
           assert.equal(await page.getByRole('tab', { name: 'Containers', exact: true }).getAttribute('aria-selected'), 'true');
-          await page.getByText('No records: collector support is UNSUPPORTED.', { exact: true }).waitFor();
+          await page.getByRole('heading', { name: 'Container observations are disabled', exact: true }).waitFor();
         }
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${view} overflows at ${width}px`);
-        if ((view === 'Overview' || view === 'Trends') && width !== 768) {
+        if ((view === 'Overview' || view === 'Trends' || view === 'Workloads') && width !== 768) {
           await page.screenshot({ path: join(temporary, `${view.toLowerCase()}-${width}.png`), fullPage: true });
         }
       }
       assert(!(await page.locator('body').innerText()).includes(token), 'token visible in page text');
       await page.screenshot({ path: join(temporary, `dashboard-${width}.png`), fullPage: true });
     }
+    // Synthetic transport data exercises presentation only; the real engine has its own Linux smoke.
+    const fixture = JSON.parse(await readFile(join(root, 'schemas/v1/fixtures/valid/container-inventory-running-stopped.json'), 'utf8'));
+    fixture.observed_at = new Date().toISOString();
+    assert(validators['container-inventory'](fixture), 'container browser fixture violates contract');
+    await page.route('**/api/v1/containers?limit=500', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixture) }));
+    for (const width of [390, 768, 1440]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await page.reload();
+      await page.getByRole('button', { name: 'Workloads', exact: true }).click();
+      await page.getByRole('tab', { name: 'Containers', exact: true }).click();
+      const table = page.getByRole('table', { name: 'Containers: name and image, state, CPU, memory, metrics quality, and alias', exact: true });
+      await table.waitFor();
+      const stopped = table.getByRole('row').filter({ hasText: 'sample-worker' });
+      assert.equal(await stopped.count(), 1);
+      assert((await stopped.innerText()).includes('Unavailable'), 'stopped container lacks unavailable label');
+      assert(!(await stopped.innerText()).includes('0.0%'), 'stopped container appears to measure zero CPU');
+      await page.getByLabel('Filter returned records', { exact: true }).fill('metrics-limited');
+      assert.equal(await table.getByRole('row').count(), 2, 'container filter did not isolate one record');
+      assert((await table.innerText()).includes('0.0%'), 'measured zero was hidden');
+      await page.getByLabel('Filter returned records', { exact: true }).fill('');
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `Populated containers overflow page at ${width}px`);
+      await page.screenshot({ path: join(temporary, `containers-${width}.png`), fullPage: true });
+    }
+    await page.unroute('**/api/v1/containers?limit=500');
     await page.getByRole('button', { name: 'Lock dashboard', exact: true }).click();
     await page.getByRole('button', { name: 'Unlock dashboard', exact: true }).waitFor();
     assert(!(await page.evaluate(() => JSON.stringify(sessionStorage))).includes(token), 'lock retained the token');

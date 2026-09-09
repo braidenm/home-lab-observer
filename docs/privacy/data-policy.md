@@ -2,9 +2,11 @@
 
 This policy defines first-release defaults. The effective local configuration and Platform upload projection must be visible in the product.
 
-The Spec 005 source preview has no uploader and sends no observations to Platform Demo. It implements host/process
-current reads and six aggregate numeric history metrics only. Service, container, and log collection below are planned
-capabilities, not active collectors. Process observations are local-sensitive and not upload-eligible in the preview.
+The source preview has no uploader and sends no observations to Platform Demo. It implements host/process current
+reads, six aggregate numeric host history metrics, and explicitly enabled local Docker inventory/resource readings.
+Process and container observations are local-sensitive, current-memory-only and not upload-eligible in this preview.
+Service and log collection below remain planned capabilities. The table describes first-release targets; future history
+or upload projections need their own reviewed specifications before becoming active.
 
 | Data class | Collected by default | Kept locally | Eligible for remote upload | Notes |
 | --- | --- | --- | --- | --- |

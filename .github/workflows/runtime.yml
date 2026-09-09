@@ -42,6 +42,9 @@ jobs:
         run: node scripts/validate-localapi-scenarios.mjs
       - name: Smoke-test the actual local service and history
         run: node scripts/smoke-local-service.mjs
+      - name: Verify read-only observations against a real isolated Docker workload
+        if: runner.os == 'Linux'
+        run: node scripts/smoke-docker-service.mjs
 
   cross-build:
     runs-on: ubuntu-latest
