@@ -151,4 +151,14 @@ test("workflows keep publication manual, permission-scoped and fully pinned", as
   }
   assert.match(release, /needs: \[authorize, build, vulnerability-scan, native-verify\]/u);
   assert.match(release, /needs: \[authorize, build, attest\]/u);
+  assert.match(release, /--notes-file docs\/releases\/native-preview\.md/u);
+  for (const workflow of [delivery, release]) {
+    assert.match(workflow, /Install schema validators for packaged runtime smoke\n\s+run: npm ci --ignore-scripts --no-audit --no-fund/u);
+    assert.match(workflow, /OBSERVER_TEST_USER_MANAGER: '1'/u);
+  }
+  const smoke = await readFile(path.join(repositoryRoot, "scripts/smoke-native-delivery.mjs"), "utf8");
+  assert.match(smoke, /smoke-background-runtime\.mjs/u);
+  assert.match(smoke, /smoke-windows-manager\.mjs/u);
+  assert.match(smoke, /OBSERVER_SMOKE_INSTALL_ROOT: installRoot/u);
+  assert.match(smoke, /if \(preserveForManagerFailure\)/u);
 });
