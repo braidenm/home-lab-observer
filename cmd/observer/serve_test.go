@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -13,6 +14,27 @@ import (
 
 	"github.com/braidenm/home-lab-observer/internal/history"
 )
+
+func TestClassifyShutdownFailure(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		wantResult string
+		wantCode   string
+	}{
+		{name: "deadline", err: context.DeadlineExceeded, wantResult: "TIMEOUT", wantCode: "SHUTDOWN_TIMEOUT"},
+		{name: "wrapped cancellation", err: errors.Join(errors.New("stop"), context.Canceled), wantResult: "TIMEOUT", wantCode: "SHUTDOWN_TIMEOUT"},
+		{name: "durable close", err: errors.New("synthetic store close failure"), wantResult: "FAILED", wantCode: "SHUTDOWN_FAILED"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result, code := classifyShutdownFailure(test.err)
+			if string(result) != test.wantResult || code != test.wantCode {
+				t.Fatalf("classifyShutdownFailure() = (%q, %q), want (%q, %q)", result, code, test.wantResult, test.wantCode)
+			}
+		})
+	}
+}
 
 func TestHTTPInternalLogsDoNotEchoSourceDetails(t *testing.T) {
 	var output strings.Builder

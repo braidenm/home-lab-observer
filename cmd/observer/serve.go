@@ -187,8 +187,9 @@ func serveRuntime(ctx context.Context, address, stateDir string, output io.Write
 		stopErr := runtime.Stop(stopCtx)
 		cancel()
 		if stopErr != nil {
-			stopCode = diagnostics.CodeTimeout
-			logger.Error("collection_shutdown_failed", "code", "SHUTDOWN_TIMEOUT")
+			var shutdownCode string
+			stopCode, shutdownCode = classifyShutdownFailure(stopErr)
+			logger.Error("collection_shutdown_failed", "code", shutdownCode)
 		}
 		if err == nil || errors.Is(err, http.ErrServerClosed) {
 			err = errors.New("HTTP server stopped without a shutdown request")
@@ -210,8 +211,9 @@ func serveRuntime(ctx context.Context, address, stateDir string, output io.Write
 		stopErr := runtime.Stop(stopCtx)
 		stopCancel()
 		if stopErr != nil {
-			stopCode = diagnostics.CodeTimeout
-			logger.Error("collection_shutdown_failed", "code", "SHUTDOWN_TIMEOUT")
+			var shutdownCode string
+			stopCode, shutdownCode = classifyShutdownFailure(stopErr)
+			logger.Error("collection_shutdown_failed", "code", shutdownCode)
 		}
 		if err := errors.Join(shutdownErr, serveErr, stopErr); err != nil {
 			return err
@@ -221,6 +223,13 @@ func serveRuntime(ctx context.Context, address, stateDir string, output io.Write
 		stopCode = diagnostics.CodeOK
 		return nil
 	}
+}
+
+func classifyShutdownFailure(err error) (diagnostics.ResultCode, string) {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return diagnostics.CodeTimeout, "SHUTDOWN_TIMEOUT"
+	}
+	return diagnostics.CodeFailed, "SHUTDOWN_FAILED"
 }
 
 type safeHTTPLog struct {
