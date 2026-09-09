@@ -20,6 +20,10 @@
 Runtime, OS-manager and CLI/API/UI slices are authored in independent worktrees. Review is cross-slice: no author's
 own implementation approval replaces another review. Root integrates only committed, tested slices and required CI
 must pass before auto-merge. No developer-host startup registration or production server mutation is part of testing.
+The opt-in real Windows manager smoke is limited to disposable GitHub-hosted CI and an installer-created temporary
+root; it refuses local/self-hosted execution. Guards use the documented `GITHUB_ACTIONS` and `RUNNER_ENVIRONMENT`
+[GitHub variables](https://docs.github.com/en/actions/reference/workflows-and-actions/variables), verified 2026-09-09.
+If manager cleanup is uncertain, the test preserves its files instead of uninstalling beneath a possible running job.
 
 Early integration review identified these cases for explicit regression coverage:
 
