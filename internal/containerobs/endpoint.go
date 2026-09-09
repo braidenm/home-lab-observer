@@ -15,6 +15,24 @@ type localEndpoint struct {
 	address string
 }
 
+// ValidateEndpoint applies the collector's exact native endpoint policy without
+// connecting to Docker or collecting anything. Empty means explicitly disabled.
+// Lifecycle configuration uses this boundary rather than duplicating URL rules.
+func ValidateEndpoint(raw string) error {
+	if raw == "" {
+		return nil
+	}
+	endpoint, err := parseLocalEndpoint(raw)
+	if err != nil {
+		return err
+	}
+	transport, err := nativeTransport(endpoint)
+	if err == nil {
+		transport.CloseIdleConnections()
+	}
+	return err
+}
+
 func parseLocalEndpoint(raw string) (localEndpoint, error) {
 	if raw == "" || raw != strings.TrimSpace(raw) {
 		return localEndpoint{}, errors.New("docker endpoint is empty or contains surrounding whitespace")
