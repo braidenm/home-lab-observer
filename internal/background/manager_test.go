@@ -79,14 +79,24 @@ func (f fakeProbe) Probe(context.Context, Settings) ProbeStatus {
 
 func testController(t *testing.T) (*controller, *fakeAdapter, *fakeStopper, Settings) {
 	t.Helper()
-	root := filepath.Join(t.TempDir(), "programs")
-	stateDir := filepath.Join(t.TempDir(), "state")
+	root := filepath.Join(canonicalTempDir(t), "programs")
+	stateDir := filepath.Join(canonicalTempDir(t), "state")
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	adapter := &fakeAdapter{state: managerState{available: true}}
 	stopper := &fakeStopper{}
 	return newController(root, adapter, stopper, fakeProbe{value: ReadinessReady}), adapter, stopper, Settings{StateDir: stateDir, ListenAddress: "127.0.0.1:9847"}
+}
+
+func canonicalTempDir(t *testing.T) string {
+	t.Helper()
+	directory := t.TempDir()
+	resolved, err := filepath.EvalSymlinks(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resolved
 }
 
 func TestLifecycleIsIdempotentAndGracefulByDefault(t *testing.T) {
@@ -278,8 +288,8 @@ func TestInterruptedDisableCleanupIsRecoverable(t *testing.T) {
 }
 
 func TestLinkedBackgroundAreaIsRejectedBeforeMutation(t *testing.T) {
-	root := t.TempDir()
-	target := filepath.Join(t.TempDir(), "target")
+	root := canonicalTempDir(t)
+	target := filepath.Join(canonicalTempDir(t), "target")
 	if err := os.Mkdir(target, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -348,7 +358,7 @@ func TestSettingsAreClosedAndOutsideProgramFiles(t *testing.T) {
 	if _, err := controller.Enable(context.Background(), settings); !IsCode(err, CodeInvalidSettings) {
 		t.Fatalf("overlapping state error = %v", err)
 	}
-	settings.StateDir = filepath.Join(t.TempDir(), "state")
+	settings.StateDir = filepath.Join(canonicalTempDir(t), "state")
 	if _, err := controller.Enable(context.Background(), settings); err != nil {
 		t.Fatal(err)
 	}

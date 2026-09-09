@@ -27,7 +27,7 @@ func TestSystemdTemplateSyntaxAndStopBoundaries(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(definition.content)
-	for _, required := range []string{"SendSIGKILL=no", "StandardOutput=null", "StandardError=null", "Restart=on-failure", "observer $$ path"} {
+	for _, required := range []string{"SendSIGKILL=no", "StandardOutput=null", "StandardError=null", "Restart=on-failure", `ExecStart=:"`, "observer $ path"} {
 		if !strings.Contains(text, required) {
 			t.Fatalf("unit missing %q", required)
 		}

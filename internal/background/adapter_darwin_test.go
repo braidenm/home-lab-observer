@@ -12,7 +12,7 @@ import (
 )
 
 func TestLaunchAgentTemplateSyntaxAndStopBoundaries(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "Observer & local")
+	root := filepath.Join(canonicalTempDir(t), "Observer & local")
 	runner := &recordingRunner{}
 	adapter := &darwinAdapter{runner: runner, root: root, domain: "gui/501"}
 	definition, err := adapter.registration(Settings{})
@@ -25,7 +25,7 @@ func TestLaunchAgentTemplateSyntaxAndStopBoundaries(t *testing.T) {
 			t.Fatalf("plist missing %q", required)
 		}
 	}
-	plist := filepath.Join(t.TempDir(), "observer.plist")
+	plist := filepath.Join(canonicalTempDir(t), "observer.plist")
 	if err := os.WriteFile(plist, definition.content, 0o600); err != nil {
 		t.Fatal(err)
 	}

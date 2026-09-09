@@ -36,7 +36,7 @@ Description=Home Lab Observer (user session)
 
 [Service]
 Type=simple
-ExecStart=%s background run --install-root %s
+ExecStart=:%s background run --install-root %s
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=35s
@@ -54,7 +54,6 @@ WantedBy=default.target
 func systemdQuote(value string) string {
 	value = strings.ReplaceAll(value, `\`, `\\`)
 	value = strings.ReplaceAll(value, `"`, `\"`)
-	value = strings.ReplaceAll(value, "$", "$$")
 	value = strings.ReplaceAll(value, "%", "%%")
 	return `"` + value + `"`
 }
