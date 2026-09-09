@@ -367,7 +367,7 @@ func cpuPercent(stats *engineStats, prior cpuCounters, hasPrior bool) *float64 {
 }
 
 func currentCPUCounters(stats *engineStats) (cpuCounters, bool) {
-	if stats.CPUStats.SystemUsage == nil {
+	if stats.CPUStats.SystemUsage == nil || *stats.CPUStats.SystemUsage == 0 {
 		return cpuCounters{}, false
 	}
 	capacity := stats.CPUStats.OnlineCPUs

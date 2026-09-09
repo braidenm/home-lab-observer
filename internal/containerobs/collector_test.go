@@ -131,6 +131,30 @@ func TestCPUUsesPreviousBoundedPollWhenPreCPUIsAbsent(t *testing.T) {
 	}
 }
 
+func TestZeroSystemCounterCannotSeedPriorCPU(t *testing.T) {
+	var poll atomic.Int32
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		switch request.URL.Path {
+		case "/version":
+			return jsonResponse(200, `{"ApiVersion":"1.45","Os":"linux"}`), nil
+		case "/v1.45/containers/json":
+			return jsonResponse(200, `[{"Id":"`+testID1+`","Names":["/app"],"Image":"app","State":"running"}]`), nil
+		default:
+			cycle := poll.Add(1)
+			return jsonResponse(200, fmt.Sprintf(`{"cpu_stats":{"cpu_usage":{"total_usage":%d},"system_cpu_usage":%d,"online_cpus":4},"memory_stats":{"usage":10}}`, cycle*100, (cycle-1)*1000)), nil
+		}
+	})}
+	collector := newCollectorForTest(client, time.Now)
+	for cycle := 1; cycle <= 2; cycle++ {
+		if got := collector.Collect(context.Background()).Items[0]; got.CPUPercent != nil {
+			t.Fatalf("poll %d used invalid zero baseline: %+v", cycle, got)
+		}
+	}
+	if got := collector.Collect(context.Background()).Items[0]; got.CPUPercent == nil || *got.CPUPercent != 10 {
+		t.Fatalf("valid baseline did not recover CPU: %+v", got)
+	}
+}
+
 func TestCollectBoundsFanoutAndTruncatesInventory(t *testing.T) {
 	containers := make([]engineContainer, MaxContainers+1)
 	for index := range containers {
