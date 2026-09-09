@@ -296,6 +296,7 @@ func TestSequenceFailureDoesNotPublishRegressedFallback(t *testing.T) {
 	store.mu.Unlock()
 	ticker.channel <- at
 	waitFor(t, func() bool { return scheduler.Stats().StoreFailures == 1 })
+	waitFor(t, func() bool { store.mu.Lock(); defer store.mu.Unlock(); return store.maintains >= 2 })
 	current, _ := scheduler.Current()
 	if current.Sequence != 100 {
 		t.Fatalf("regressed sequence=%d", current.Sequence)

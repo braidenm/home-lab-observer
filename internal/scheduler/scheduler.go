@@ -154,6 +154,8 @@ func (s *Scheduler) collectOnce(parent context.Context) {
 		s.mu.Lock()
 		s.stats.StoreFailures++
 		s.mu.Unlock()
+		// Retention may relieve space pressure even when sequence allocation failed.
+		s.maintain(parent)
 		return
 	}
 	s.mu.Lock()

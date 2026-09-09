@@ -42,4 +42,23 @@ func TestSchemaScenarioContracts(t *testing.T) {
 		}
 		t.Logf("SCHEMA_SCENARIO %s %s", test.schema, strings.TrimSpace(response.Body.String()))
 	}
+	for _, support := range []string{"UNSUPPORTED", "DISABLED", "UNAVAILABLE", "PERMISSION_DENIED"} {
+		reason := "COLLECTOR_UNAVAILABLE"
+		source := schemaMetricSource{fakeSource: fakeSource{current: current, ok: true}, status: projection.SectionStatus{SupportState: support, ReasonCode: &reason}}
+		handler := newTestHandler(t, source, handlerReader{}, now)
+		response := serve(handler, http.MethodGet, "/api/v1/metrics/series?range=1h&metric=process.count", testToken, "")
+		if response.Code != 200 || !strings.Contains(response.Body.String(), `"support_state":"`+support+`"`) {
+			t.Fatalf("missing support state %s", support)
+		}
+		t.Logf("SCHEMA_SCENARIO metric-series %s", strings.TrimSpace(response.Body.String()))
+	}
+}
+
+type schemaMetricSource struct {
+	fakeSource
+	status projection.SectionStatus
+}
+
+func (source schemaMetricSource) MetricStatuses() map[history.MetricID]projection.SectionStatus {
+	return map[history.MetricID]projection.SectionStatus{history.ProcessCount: source.status}
 }

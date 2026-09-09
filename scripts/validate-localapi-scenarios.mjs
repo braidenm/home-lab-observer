@@ -21,5 +21,5 @@ for (const line of run.stdout.split('\n')) {
   assert(validate(JSON.parse(match[2])), `${match[1]} scenario: ${ajv.errorsText(validate.errors)}`);
   count++;
 }
-assert(count >= 6, 'expected all synthetic handler scenarios');
+assert(count >= 10, 'expected all synthetic handler scenarios');
 console.log(`Validated ${count} synthetic handler responses, including partial/stale/selected/unavailable reads.`);
