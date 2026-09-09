@@ -3,6 +3,8 @@ package history
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -61,7 +63,9 @@ func (s *Store) Maintain(ctx context.Context, now time.Time) error {
 	s.refreshSize()
 	if s.Health().DatabaseBytes > s.config.MaxBytes {
 		s.degrade("STORAGE_PRESSURE")
+		return nil
 	}
+	s.recoverTransient("ROLLUP_FAILED", "RETENTION_FAILED", "VACUUM_FAILED", "CHECKPOINT_FAILED", "STORAGE_PRESSURE")
 	return nil
 }
 
@@ -196,17 +200,61 @@ func (s *Store) pruneSize(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	defer tx.Rollback()
-	result, err := tx.ExecContext(ctx, `DELETE FROM samples WHERE (metric,observed_at_ns) IN (SELECT metric,observed_at_ns FROM samples ORDER BY observed_at_ns,metric LIMIT ?)`, s.config.BatchSize)
+	type candidate struct {
+		kind       string
+		metric     MetricID
+		at         int64
+		resolution int64
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT kind,metric,at,resolution_seconds FROM (
+		SELECT 'sample' AS kind,metric,observed_at_ns AS at,0 AS resolution_seconds FROM samples
+		UNION ALL
+		SELECT 'rollup' AS kind,metric,bucket_start_ns AS at,resolution_seconds FROM rollups
+	) ORDER BY at,metric,kind,resolution_seconds LIMIT ?`, s.config.BatchSize)
 	if err != nil {
 		return 0, err
 	}
-	count, _ := result.RowsAffected()
-	if count == 0 {
-		result, err = tx.ExecContext(ctx, `DELETE FROM rollups WHERE (metric,bucket_start_ns,resolution_seconds) IN (SELECT metric,bucket_start_ns,resolution_seconds FROM rollups ORDER BY bucket_start_ns,metric LIMIT ?)`, s.config.BatchSize)
+	candidates := make([]candidate, 0, s.config.BatchSize)
+	for rows.Next() {
+		var item candidate
+		if err := rows.Scan(&item.kind, &item.metric, &item.at, &item.resolution); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		candidates = append(candidates, item)
+	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	deleteSample, err := tx.PrepareContext(ctx, `DELETE FROM samples WHERE metric=? AND observed_at_ns=?`)
+	if err != nil {
+		return 0, err
+	}
+	defer deleteSample.Close()
+	deleteRollup, err := tx.PrepareContext(ctx, `DELETE FROM rollups WHERE metric=? AND bucket_start_ns=? AND resolution_seconds=?`)
+	if err != nil {
+		return 0, err
+	}
+	defer deleteRollup.Close()
+	var count int64
+	for _, item := range candidates {
+		var result sql.Result
+		if item.kind == "sample" {
+			result, err = deleteSample.ExecContext(ctx, item.metric, item.at)
+		} else {
+			result, err = deleteRollup.ExecContext(ctx, item.metric, item.at, item.resolution)
+		}
 		if err != nil {
 			return 0, err
 		}
-		count, _ = result.RowsAffected()
+		removed, err := result.RowsAffected()
+		if err != nil {
+			return 0, err
+		}
+		count += removed
 	}
 	if count > 0 {
 		if err := incrementCounter(ctx, tx, "size_dropped", count); err != nil {
@@ -219,6 +267,8 @@ func (s *Store) pruneSize(ctx context.Context) (int64, error) {
 	return count, nil
 }
 
+var errCheckpointBusy = errors.New("database checkpoint is busy")
+
 func (s *Store) Checkpoint(ctx context.Context, truncate bool) error {
 	s.checkpointMu.Lock()
 	defer s.checkpointMu.Unlock()
@@ -226,23 +276,46 @@ func (s *Store) Checkpoint(ctx context.Context, truncate bool) error {
 	if truncate {
 		mode = "TRUNCATE"
 	}
-	if err := s.persistCounter(ctx, "checkpoint_count", 1); err != nil {
+	if err := s.runCheckpoint(ctx, mode); err != nil {
+		s.recordCheckpointFailure(ctx)
 		return err
 	}
-	var busy, logFrames, checkpointed int
-	err := s.db.QueryRowContext(ctx, "PRAGMA wal_checkpoint("+mode+")").Scan(&busy, &logFrames, &checkpointed)
-	if err != nil {
-		s.mu.Lock()
-		s.health.CheckpointFailures++
-		s.mu.Unlock()
-		_ = s.persistCounter(ctx, "checkpoint_failures", 1)
-		s.degrade("CHECKPOINT_FAILED")
+	// Persist success only after SQLite has accepted the checkpoint. A second
+	// truncate clears the WAL frame created by the durable counter update.
+	if err := s.persistCounter(ctx, "checkpoint_count", 1); err != nil {
+		s.recordCheckpointFailure(ctx)
 		return err
 	}
 	s.mu.Lock()
 	s.health.CheckpointCount++
 	s.mu.Unlock()
+	if truncate {
+		if err := s.runCheckpoint(ctx, mode); err != nil {
+			s.recordCheckpointFailure(ctx)
+			return err
+		}
+	}
+	s.recoverTransient("CHECKPOINT_FAILED")
 	return nil
+}
+
+func (s *Store) runCheckpoint(ctx context.Context, mode string) error {
+	var busy, logFrames, checkpointed int
+	if err := s.db.QueryRowContext(ctx, "PRAGMA wal_checkpoint("+mode+")").Scan(&busy, &logFrames, &checkpointed); err != nil {
+		return err
+	}
+	if busy != 0 {
+		return fmt.Errorf("%w: %d WAL frames remain", errCheckpointBusy, logFrames-checkpointed)
+	}
+	return nil
+}
+
+func (s *Store) recordCheckpointFailure(ctx context.Context) {
+	s.mu.Lock()
+	s.health.CheckpointFailures++
+	s.mu.Unlock()
+	_ = s.persistCounter(ctx, "checkpoint_failures", 1)
+	s.degrade("CHECKPOINT_FAILED")
 }
 
 func incrementCounter(ctx context.Context, tx *sql.Tx, key string, amount int64) error {
@@ -319,6 +392,21 @@ func (s *Store) degrade(reason string) {
 		s.health.ReasonCode = s.recoveryReason
 	} else {
 		s.health.ReasonCode = reason
+	}
+}
+
+func (s *Store) recoverTransient(reasons ...string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.recoveryReason != "" || s.health.State != "DEGRADED" {
+		return
+	}
+	for _, reason := range reasons {
+		if s.health.ReasonCode == reason {
+			s.health.State = "AVAILABLE"
+			s.health.ReasonCode = ""
+			return
+		}
 	}
 }
 

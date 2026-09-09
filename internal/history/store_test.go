@@ -153,6 +153,38 @@ func TestSizeRetentionIsIncrementalAndObservable(t *testing.T) {
 	}
 }
 
+func TestSizeRetentionPrunesGloballyOldestRow(t *testing.T) {
+	now := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
+	config := DefaultConfig(filepath.Join(t.TempDir(), "history.db"))
+	config.MaxBytes = 1
+	config.BatchSize = 1
+	config.RollupAfter = 365 * 24 * time.Hour
+	config.RetentionAge = 365 * 24 * time.Hour
+	store := openTestStore(t, config)
+	ctx := context.Background()
+	old := now.Add(-2 * time.Hour)
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO rollups(metric,bucket_start_ns,resolution_seconds,sample_count,minimum,maximum,total,last_value,last_at_ns) VALUES(?,?,?,?,?,?,?,?,?)`, CPUUtilization, old.UnixNano(), 300, 1, 10, 10, 10, 10, old.UnixNano()); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WriteSamples(ctx, []Sample{{Metric: CPUUtilization, At: now.Add(-time.Hour), Value: 20}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Maintain(ctx, now); err != nil {
+		t.Fatal(err)
+	}
+	rollups, err := store.Rollups(ctx, CPUUtilization, now.Add(-3*time.Hour), now, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	samples, err := store.Samples(ctx, CPUUtilization, now.Add(-3*time.Hour), now, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rollups) != 0 || len(samples) != 1 {
+		t.Fatalf("oldest row was not pruned first: rollups=%v samples=%v", rollups, samples)
+	}
+}
+
 func TestSizeRetentionReclaimsPhysicalPages(t *testing.T) {
 	now := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
 	config := DefaultConfig(filepath.Join(t.TempDir(), "history.db"))
@@ -206,18 +238,31 @@ func TestSizeRetentionReclaimsPhysicalPages(t *testing.T) {
 
 func TestCorruptAndIncompatibleDatabasesAreQuarantined(t *testing.T) {
 	for _, testCase := range []struct {
-		name    string
-		prepare func(*testing.T, string)
-	}{{"corrupt", func(t *testing.T, path string) {
+		name           string
+		expectedReason string
+		prepare        func(*testing.T, string)
+	}{{"corrupt", "DATABASE_CORRUPT", func(t *testing.T, path string) {
 		if err := os.WriteFile(path, []byte("not sqlite and token=synthetic"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-	}}, {"incompatible", func(t *testing.T, path string) {
+	}}, {"incompatible", "DATABASE_VERSION_INCOMPATIBLE", func(t *testing.T, path string) {
 		store := openTestStore(t, DefaultConfig(path))
 		if _, err := store.db.Exec("PRAGMA user_version=999"); err != nil {
 			t.Fatal(err)
 		}
 		if err := store.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}}, {"schema-shape", "DATABASE_SCHEMA_INCOMPATIBLE", func(t *testing.T, path string) {
+		db, err := sql.Open("sqlite", path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`CREATE TABLE samples(wrong TEXT); PRAGMA user_version=2`); err != nil {
+			db.Close()
+			t.Fatal(err)
+		}
+		if err := db.Close(); err != nil {
 			t.Fatal(err)
 		}
 	}}} {
@@ -232,6 +277,9 @@ func TestCorruptAndIncompatibleDatabasesAreQuarantined(t *testing.T) {
 			health := store.Health()
 			if health.State != "DEGRADED" || health.QuarantinePath == "" {
 				t.Fatalf("health=%+v", health)
+			}
+			if testCase.expectedReason != "" && health.ReasonCode != testCase.expectedReason {
+				t.Fatalf("reason=%q, want %q", health.ReasonCode, testCase.expectedReason)
 			}
 			if _, err := os.Stat(health.QuarantinePath); err != nil {
 				t.Fatalf("quarantine missing: %v", err)
@@ -360,5 +408,74 @@ func TestCheckpointAndCountersPersist(t *testing.T) {
 	defer again.Close()
 	if again.Health().CheckpointCount < before {
 		t.Fatalf("counter did not persist: %d < %d", again.Health().CheckpointCount, before)
+	}
+}
+
+func TestCheckpointBusyIsFailureAndSuccessfulRetryRecoversHealth(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.db")
+	store := openTestStore(t, DefaultConfig(path))
+	ctx := context.Background()
+	now := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
+	if err := store.WriteSamples(ctx, []Sample{{Metric: CPUUtilization, At: now, Value: 10}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Checkpoint(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	before := store.Health()
+	reader, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	readTx, err := reader.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer readTx.Rollback()
+	var count int
+	if err := readTx.QueryRowContext(ctx, `SELECT COUNT(*) FROM samples`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WriteSamples(ctx, []Sample{{Metric: CPUUtilization, At: now.Add(time.Second), Value: 20}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.ExecContext(ctx, `PRAGMA busy_timeout=1`); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Checkpoint(ctx, true); !errors.Is(err, errCheckpointBusy) {
+		t.Fatalf("checkpoint err=%v", err)
+	}
+	failed := store.Health()
+	if failed.CheckpointCount != before.CheckpointCount || failed.CheckpointFailures != before.CheckpointFailures+1 {
+		t.Fatalf("miscounted busy checkpoint: before=%+v after=%+v", before, failed)
+	}
+	if failed.State != "DEGRADED" || failed.ReasonCode != "CHECKPOINT_FAILED" {
+		t.Fatalf("health=%+v", failed)
+	}
+	if err := readTx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Checkpoint(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	recovered := store.Health()
+	if recovered.State != "AVAILABLE" || recovered.ReasonCode != "" {
+		t.Fatalf("health did not recover: %+v", recovered)
+	}
+	if recovered.CheckpointCount != before.CheckpointCount+1 {
+		t.Fatalf("successful retry not counted: before=%+v after=%+v", before, recovered)
+	}
+}
+
+func TestSuccessfulMaintenanceRecoversTransientHealth(t *testing.T) {
+	store := openTestStore(t, DefaultConfig(filepath.Join(t.TempDir(), "history.db")))
+	store.degrade("RETENTION_FAILED")
+	if err := store.Maintain(context.Background(), time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	health := store.Health()
+	if health.State != "AVAILABLE" || health.ReasonCode != "" {
+		t.Fatalf("health did not recover after successful maintenance: %+v", health)
 	}
 }

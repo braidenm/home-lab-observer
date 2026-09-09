@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -84,14 +85,16 @@ func Open(ctx context.Context, config Config, clock Clock) (*Store, error) {
 	}
 	if existed {
 		version, inspectErr := inspectDatabase(ctx, db)
-		if inspectErr != nil && !isCorruptionError(inspectErr) {
+		if inspectErr != nil && !isCorruptionError(inspectErr) && !errors.Is(inspectErr, errIncompatibleSchema) {
 			_ = db.Close()
 			return nil, fmt.Errorf("inspect history database: %w", inspectErr)
 		}
 		if inspectErr != nil || version > SchemaVersion {
 			_ = db.Close()
 			recoveryReason = "DATABASE_CORRUPT"
-			if version > SchemaVersion {
+			if errors.Is(inspectErr, errIncompatibleSchema) {
+				recoveryReason = "DATABASE_SCHEMA_INCOMPATIBLE"
+			} else if version > SchemaVersion {
 				recoveryReason = "DATABASE_VERSION_INCOMPATIBLE"
 			}
 			quarantinePath, err = quarantine(config.Path, clock.Now())
@@ -189,6 +192,7 @@ func configureDatabase(ctx context.Context, db *sql.DB) error {
 }
 
 var errIntegrity = errors.New("database integrity check failed")
+var errIncompatibleSchema = errors.New("database schema is incompatible")
 
 func inspectDatabase(ctx context.Context, db *sql.DB) (int, error) {
 	var result string
@@ -202,7 +206,61 @@ func inspectDatabase(ctx context.Context, db *sql.DB) (int, error) {
 	if err := db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
 		return 0, err
 	}
+	if version == SchemaVersion {
+		if err := validateCurrentSchema(ctx, db); err != nil {
+			return version, err
+		}
+	}
 	return version, nil
+}
+
+func validateCurrentSchema(ctx context.Context, db *sql.DB) error {
+	tables := []struct {
+		name    string
+		columns []string
+	}{
+		{"samples", []string{"metric", "observed_at_ns", "value"}},
+		{"rollups", []string{"metric", "bucket_start_ns", "resolution_seconds", "sample_count", "minimum", "maximum", "total", "last_value", "last_at_ns"}},
+		{"runtime_state", []string{"key", "value"}},
+		{"store_counters", []string{"key", "value"}},
+		{"store_metadata", []string{"key", "value"}},
+	}
+	for _, table := range tables {
+		rows, err := db.QueryContext(ctx, "PRAGMA table_info("+table.name+")")
+		if err != nil {
+			return err
+		}
+		columns := make([]string, 0, len(table.columns))
+		for rows.Next() {
+			var cid, notNull, primaryKey int
+			var name, columnType string
+			var defaultValue any
+			if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+				rows.Close()
+				return err
+			}
+			columns = append(columns, name)
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		if !slices.Equal(columns, table.columns) {
+			return fmt.Errorf("%w: table %s columns are %v", errIncompatibleSchema, table.name, columns)
+		}
+	}
+	var sequence int64
+	if err := db.QueryRowContext(ctx, `SELECT value FROM runtime_state WHERE key='sequence'`).Scan(&sequence); errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("%w: sequence state is missing", errIncompatibleSchema)
+	} else if err != nil {
+		return err
+	}
+	if sequence < 0 {
+		return fmt.Errorf("%w: sequence state is missing or invalid", errIncompatibleSchema)
+	}
+	return nil
 }
 
 func isCorruptionError(err error) bool {
@@ -325,6 +383,7 @@ func (s *Store) NextSequence(ctx context.Context) (valueOut uint64, returnErr er
 	if value < 0 {
 		return 0, errors.New("invalid durable sequence")
 	}
+	s.recoverTransient("SEQUENCE_FAILED")
 	return uint64(value), nil
 }
 
@@ -356,7 +415,11 @@ func (s *Store) WriteSamples(ctx context.Context, samples []Sample) (returnErr e
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.recoverTransient("WRITE_FAILED")
+	return nil
 }
 
 func (s *Store) Samples(ctx context.Context, metric MetricID, from, to time.Time, limit int) ([]Sample, error) {
