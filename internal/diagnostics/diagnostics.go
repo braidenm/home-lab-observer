@@ -134,6 +134,10 @@ func New(config Config) *Writer {
 		writer.unavailable(errors.Is(err, ownerfs.ErrUnsafePath))
 		return writer
 	}
+	if err := ownerfs.RestrictDirectory(directory); err != nil {
+		writer.unavailable(errors.Is(err, ownerfs.ErrUnsafePath))
+		return writer
+	}
 	writer.health.Available = true
 	writer.health.State = "AVAILABLE"
 	writer.done, writer.stopped = make(chan struct{}), make(chan struct{})
@@ -302,30 +306,46 @@ func (w *Writer) maintainLocked() error {
 }
 
 func oldestRecordTime(path string, info os.FileInfo) (time.Time, error) {
-	if info.Size() == 0 {
-		return info.ModTime().UTC(), nil
-	}
 	file, err := os.Open(path)
 	if err != nil {
 		return time.Time{}, err
 	}
 	defer file.Close()
-	line, err := io.ReadAll(io.LimitReader(file, MaxRecordBytes+1))
+	openedInfo, err := file.Stat()
+	if err != nil || !os.SameFile(info, openedInfo) || openedInfo.Size() < 0 || openedInfo.Size() > MaxFileBytes {
+		return time.Time{}, ownerfs.ErrUnsafePath
+	}
+	if openedInfo.Size() == 0 {
+		return openedInfo.ModTime().UTC(), nil
+	}
+	contents, err := io.ReadAll(io.LimitReader(file, MaxFileBytes+1))
 	if err != nil {
 		return time.Time{}, err
 	}
-	newline := -1
-	for index, value := range line {
-		if value == '\n' {
-			newline = index
-			break
-		}
-	}
-	if newline < 0 || int64(newline+1) > MaxRecordBytes {
+	if int64(len(contents)) != openedInfo.Size() || int64(len(contents)) > MaxFileBytes || contents[len(contents)-1] != '\n' {
 		return time.Time{}, ownerfs.ErrUnsafePath
 	}
+	var oldest time.Time
+	for len(contents) > 0 {
+		newline := bytes.IndexByte(contents, '\n')
+		if newline <= 0 || int64(newline+1) > MaxRecordBytes {
+			return time.Time{}, ownerfs.ErrUnsafePath
+		}
+		at, err := validateDiskRecord(contents[:newline])
+		if err != nil {
+			return time.Time{}, err
+		}
+		if oldest.IsZero() || at.Before(oldest) {
+			oldest = at
+		}
+		contents = contents[newline+1:]
+	}
+	return oldest, nil
+}
+
+func validateDiskRecord(line []byte) (time.Time, error) {
 	var record diskRecord
-	decoder := json.NewDecoder(bytes.NewReader(line[:newline]))
+	decoder := json.NewDecoder(bytes.NewReader(line))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&record); err != nil {
 		return time.Time{}, ownerfs.ErrUnsafePath
@@ -338,6 +358,10 @@ func oldestRecordTime(path string, info os.FileInfo) (time.Time, error) {
 		return time.Time{}, ownerfs.ErrUnsafePath
 	}
 	if _, ok := resultCodes[record.Code]; !ok || len(record.Version) > 64 || !safeVersion.MatchString(record.Version) || record.DurationMS < 0 || record.DurationMS > time.Hour.Milliseconds() {
+		return time.Time{}, ownerfs.ErrUnsafePath
+	}
+	canonical, err := json.Marshal(record)
+	if err != nil || !bytes.Equal(canonical, line) {
 		return time.Time{}, ownerfs.ErrUnsafePath
 	}
 	at, err := time.Parse(time.RFC3339Nano, record.ObservedAt)

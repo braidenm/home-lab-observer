@@ -26,6 +26,30 @@ func TestEnsurePrivateSubdirCreatesOnlyFixedChild(t *testing.T) {
 	}
 }
 
+func TestEnsurePrivateSubdirDoesNotMutateExistingUnknownChild(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("mode bits do not describe Windows ACL mutation")
+	}
+	state := testStateDir(t)
+	directory := filepath.Join(state, "diagnostics")
+	if err := os.Mkdir(directory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "unknown"), []byte("synthetic-canary"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := EnsurePrivateSubdir(state, "diagnostics"); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o755 {
+		t.Fatalf("existing unknown child mode mutated to %o", info.Mode().Perm())
+	}
+}
+
 func TestEnsurePrivateSubdirRejectsLinkedAncestorBeforeMutation(t *testing.T) {
 	root := canonicalTempDir(t)
 	target := filepath.Join(root, "target")

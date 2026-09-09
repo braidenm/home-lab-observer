@@ -79,6 +79,9 @@ func New(config Config) (*Endpoint, error) {
 	if err := validateDirectoryEntries(directory); err != nil {
 		return nil, err
 	}
+	if err := ownerfs.RestrictDirectory(directory); err != nil {
+		return nil, classifyPath(err)
+	}
 	lock, err := acquireFileLock(filepath.Join(directory, lockName))
 	if err != nil {
 		return nil, err

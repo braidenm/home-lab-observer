@@ -49,14 +49,19 @@ func EnsurePrivateSubdir(stateDir, child string) (string, error) {
 	}
 
 	directory := filepath.Join(stateDir, child)
-	if err := os.Mkdir(directory, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
+	createdDirectory := false
+	if err := os.Mkdir(directory, 0o700); err == nil {
+		createdDirectory = true
+	} else if !errors.Is(err, os.ErrExist) {
 		return "", err
 	}
 	if err := validateDirectoryPath(directory); err != nil {
 		return "", fmt.Errorf("%w: private directory", ErrUnsafePath)
 	}
-	if err := RestrictDirectory(directory); err != nil {
-		return "", err
+	if createdDirectory {
+		if err := RestrictDirectory(directory); err != nil {
+			return "", err
+		}
 	}
 	return directory, nil
 }

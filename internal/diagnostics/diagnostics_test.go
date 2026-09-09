@@ -2,6 +2,7 @@ package diagnostics
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
@@ -180,6 +181,44 @@ func TestUnknownSymlinkAndHardLinkEntriesAreRefusedWithoutDeletion(t *testing.T)
 	}
 }
 
+func TestExistingFileValidatesEveryBoundedRecord(t *testing.T) {
+	now := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
+	valid, err := json.Marshal(diskRecord{ObservedAt: now.Format(time.RFC3339Nano), Event: EventRuntimeReady, Code: CodeOK, Version: "dev"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret := "github" + "_pat_" + strings.Repeat("A", 30)
+	tests := []struct {
+		name   string
+		second []byte
+	}{
+		{name: "oversized", second: bytes.Repeat([]byte("A"), int(MaxRecordBytes))},
+		{name: "unknown-secret-field", second: []byte(`{"observed_at":"2026-09-09T12:00:00Z","event":"RUNTIME_READY","code":"OK","version":"dev","count":0,"duration_ms":0,"message":"` + secret + `"}`)},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			state := testStateDir(t)
+			directory := filepath.Join(state, "diagnostics")
+			if err := os.Mkdir(directory, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			contents := append(append(append([]byte{}, valid...), '\n'), test.second...)
+			contents = append(contents, '\n')
+			path := filepath.Join(directory, "observer.jsonl")
+			mustWrite(t, path, contents)
+			writer := New(Config{StateDir: state, Enabled: true, Now: func() time.Time { return now }})
+			defer writer.Close()
+			if health := writer.Health(); health.Available || health.ReasonCode != "UNSAFE_DIAGNOSTICS_PATH" {
+				t.Fatalf("health = %+v", health)
+			}
+			got, err := os.ReadFile(path)
+			if err != nil || !bytes.Equal(got, contents) {
+				t.Fatalf("unsafe file was changed: %v", err)
+			}
+		})
+	}
+}
+
 func TestConcurrentRecordsRemainWhole(t *testing.T) {
 	state := testStateDir(t)
 	writer := New(Config{StateDir: state, Enabled: true})
@@ -220,11 +259,12 @@ func writePaddedRecord(t *testing.T, path string, at time.Time, size int64) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	contents := append(record, '\n')
-	if int64(len(contents)) > size {
-		size = int64(len(contents))
+	line := append(record, '\n')
+	repetitions := int(size / int64(len(line)))
+	if repetitions == 0 {
+		repetitions = 1
 	}
-	contents = append(contents, make([]byte, size-int64(len(contents)))...)
+	contents := bytes.Repeat(line, repetitions)
 	mustWrite(t, path, contents)
 }
 
