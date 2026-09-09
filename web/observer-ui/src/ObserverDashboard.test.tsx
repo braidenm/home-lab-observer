@@ -31,6 +31,19 @@ describe("ObserverDashboard", () => {
     expect(screen.queryByText(/account|owner|--password|authorization=/i)).toBeNull();
   });
 
+  it("clears a workload filter when keyboard navigation changes tabs", async () => {
+    const user = userEvent.setup();
+    render(<ObserverDashboard dataSource={new SyntheticObserverDataSource()} />);
+    await screen.findByRole("heading", { name: "studio-node" });
+    await user.click(screen.getByRole("button", { name: "Workloads" }));
+    const filter = screen.getByPlaceholderText("Find process…") as HTMLInputElement;
+    await user.type(filter, "visual studio code");
+    screen.getByRole("tab", { name: "Processes" }).focus();
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByRole("tab", { name: "Services" }).getAttribute("aria-selected")).toBe("true");
+    expect((screen.getByPlaceholderText("Find service…") as HTMLInputElement).value).toBe("");
+  });
+
   it("shows only exact log metadata and body state", async () => {
     const user = userEvent.setup();
     render(<ObserverDashboard dataSource={new SyntheticObserverDataSource()} />);
@@ -154,6 +167,15 @@ describe("ObserverDashboard", () => {
     const emptyInventory: ContainerInventory = { ...containerInventory, collectionState: "OK", reasonCode: null, totalCount: 0, returnedCount: 0, truncated: false, items: [] };
     rerender(<ObserverDashboard dataSource={sourceWithContainerInventory(emptyInventory)} />);
     expect(await screen.findByText("Supported collection completed with zero records.")).toBeTruthy();
+  });
+
+  it("clarifies that legacy container capability does not describe dedicated inventory", async () => {
+    const user = userEvent.setup();
+    render(<ObserverDashboard dataSource={sourceWithContainerInventory(containerInventory)} />);
+    await screen.findByRole("heading", { name: "studio-node" });
+    await user.click(screen.getByRole("button", { name: "Observer & privacy" }));
+    expect(screen.getByText(/legacy snapshot container capability.*does not describe the dedicated container inventory/i)).toBeTruthy();
+    expect(screen.getByText(/Workloads › Containers/)).toBeTruthy();
   });
 });
 

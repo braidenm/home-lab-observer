@@ -42,7 +42,7 @@ export function ObserverDashboard({ dataSource, initialView = "overview", mode =
         {activeView === "trends" && <TrendsView trends={trends.value} status={trends.status} error={trends.error} range={range} onRangeChange={setRange} />}
         {activeView === "workloads" && <WorkloadsView snapshot={snapshot} containerInventory={containerInventory} />}
         {activeView === "logs" && <SnapshotGate resource={snapshot}>{snapshot.value && <LogsView snapshot={snapshot.value} capabilities={capabilities.value} />}</SnapshotGate>}
-        {activeView === "health" && <HealthPrivacyView capabilities={capabilities.value} snapshot={snapshot.value} mode={mode} />}
+        {activeView === "health" && <HealthPrivacyView capabilities={capabilities.value} snapshot={snapshot.value} mode={mode} hasContainerInventory={dataSource.getContainerInventory !== undefined} />}
       </main>
       <footer className="observer-footer"><span>{boundary}</span><span aria-live="polite">{snapshot.value ? `Snapshot ${snapshot.value.collectionState}` : refreshedAt ? `Last response ${refreshedAt.toLocaleTimeString()}` : "Awaiting data"}</span></footer>
     </div>

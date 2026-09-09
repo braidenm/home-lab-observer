@@ -32,9 +32,14 @@ export function WorkloadsView({ snapshot, containerInventory }: WorkloadsViewPro
     return `${item.name} ${item.state}${containerMetadata}`.toLowerCase().includes(normalized);
   }) ?? [], [normalized, section]);
 
+  const chooseKind = (next: WorkloadKind) => {
+    setKind(next);
+    setQuery("");
+  };
+
   const selectRelative = (index: number) => {
     const next = kinds[(index + kinds.length) % kinds.length];
-    setKind(next.value);
+    chooseKind(next.value);
     requestAnimationFrame(() => document.getElementById(`${id}-${next.value}`)?.focus());
   };
 
@@ -45,7 +50,7 @@ export function WorkloadsView({ snapshot, containerInventory }: WorkloadsViewPro
         <div className="observer-toolbar">
           <div className="observer-segmented" role="tablist" aria-label="Workload type">
             {kinds.map((item, index) => (
-              <button key={item.value} id={`${id}-${item.value}`} type="button" role="tab" aria-selected={kind === item.value} aria-controls={`${id}-panel`} tabIndex={kind === item.value ? 0 : -1} className={kind === item.value ? "is-active" : ""} onClick={() => setKind(item.value)} onKeyDown={(event) => {
+              <button key={item.value} id={`${id}-${item.value}`} type="button" role="tab" aria-selected={kind === item.value} aria-controls={`${id}-panel`} tabIndex={kind === item.value ? 0 : -1} className={kind === item.value ? "is-active" : ""} onClick={() => chooseKind(item.value)} onKeyDown={(event) => {
                 if (event.key === "ArrowRight") { event.preventDefault(); selectRelative(index + 1); }
                 if (event.key === "ArrowLeft") { event.preventDefault(); selectRelative(index - 1); }
                 if (event.key === "Home") { event.preventDefault(); selectRelative(0); }
