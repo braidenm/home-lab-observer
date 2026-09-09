@@ -18,11 +18,15 @@ executable contract before implementation begins, after Spec 008 merges.
    checkpoint, examined/discarded counts, deferred/caught-up flags and stable state/reason. Commit event-time rollups,
    attempt coverage, checkpoint and incremented revision in one compare-and-swap transaction. An ambiguous outcome
    requires rereading the revision; no blind repeat increment.
-4. **Reset without invented semantics:** an initial empty checkpoint may capture the last five minutes and may remain
-   cursorless when it returns no rows. An invalid/stale checkpoint records `CHECKPOINT_RESET` plus an unknown-size gap.
-   It must not guess that a bounded time-window query can establish a tail cursor without counting rows. Until a native
-   mechanism is documented and proved to return a trustworthy cursor without acquiring/counting reset-window records,
-   retain the last durable checkpoint and retry/recover without advancing it. Rebuilding lost counts needs a later
+4. **Recoverable reset without counts:** an initial empty checkpoint may capture the last five minutes and may remain
+   cursorless when it returns no rows. After an invalid/stale checkpoint, use a fixed metadata-only tail probe outside
+   that time window. Windows queries the fixed channel with `EvtQueryReverseDirection`, calls `EvtNext` for at most one
+   event, renders only the selected properties and creates its bookmark. Linux uses fixed `journalctl -n 1` selected
+   JSON fields and accepts the automatic `__CURSOR`; it never requests MESSAGE. The probe obeys the ordinary two-second,
+   byte, checkpoint and field bounds, contributes no captured or discarded counts or covered-through advancement, and
+   CAS-commits the new cursor with `CHECKPOINT_RESET` and an unknown-size gap. An empty source clears the stale cursor
+   and remains `CHECKPOINT_RESET_PENDING`/cursorless; later cycles repeat the bounded probe until one tail record proves a cursor,
+   and the cycle after that resumes normal after-cursor reads. Rebuilding skipped historical counts needs a later
    deduplication design.
 5. **Coverage is not a count:** store each attempt and covered-through time separately. Only a successful caught-up
    read advances coverage through its query start time. Histogram events use event timestamps. Backlog, timeout,
@@ -61,5 +65,6 @@ executable contract before implementation begins, after Spec 008 merges.
     unrecognized fields are rejected rather than projected.
 
 These decisions intentionally prefer disclosed gaps over duplicate/invented counts. Tests must cover actual child
-timeout/reaping and protocol limits, journal cursor-file cleanup/argv privacy, source/native field allowlists, storage
-CAS/retry/reset behavior, and both zero and unknown coverage. No real host log bodies are needed for verification.
+timeout/reaping and protocol limits, journal cursor-file cleanup/argv privacy, source/native field allowlists, stale to
+tail-proof to normal-read recovery, repeated empty reset-pending probes, zero-count reset commits, storage CAS/retries,
+and both zero and unknown coverage. No real host log bodies are needed for verification.

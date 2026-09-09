@@ -37,6 +37,11 @@ claim a hard native deadline merely because a Go context expires. The reviewed d
 helper process with bounded private stdin/metadata stdout; the parent kills and waits at the deadline. The helper has
 no storage write role or arbitrary command surface.
 
+Microsoft's [query flag reference](https://learn.microsoft.com/en-us/windows/win32/api/winevt/ne-winevt-evt_query_flags)
+defines `EvtQueryReverseDirection` as newest-to-oldest. A stale-bookmark recovery can therefore query the same fixed
+System/Application channel in reverse, retrieve at most one event, render only the existing selected properties and
+use the documented bookmark update/render sequence. That event is checkpoint evidence only and is not counted.
+
 **Linux:** execute a fixed approved absolute `journalctl` path directly, without a shell or user-selected command.
 The [journalctl v255 manual](https://www.freedesktop.org/software/systemd/man/255/journalctl.html) describes bounded
 JSON output and `--output-fields` (available since 236). Request severity and message ID only; cursor/time are
@@ -52,6 +57,10 @@ The [journal export format](https://systemd.io/JOURNAL_EXPORT_FORMATS/) explains
 UTF-8 strings. One research fetch of the v255 page succeeded during independent review; a later root fetch failed.
 Root subsequently verified the [v255 upstream manual source](https://github.com/systemd/systemd/blob/v255/man/journalctl.xml),
 including the explicit version-242 introduction and continuation semantics for `--cursor-file`.
+The same manual defines `-n 1` as selecting the most recent journal event and says JSON output always includes
+`__CURSOR` and addressing timestamps even when `--output-fields` is set. A stale-cursor recovery can therefore issue a
+fixed `-n 1` query with only PRIORITY and MESSAGE_ID requested, no five-minute filter and no MESSAGE, then use the
+automatic cursor as tail proof. It must ignore the record for all captured/discarded counts.
 
 **macOS:** keep native logs explicitly unsupported in this slice. Apple's
 [OSLogStore local access](https://developer.apple.com/documentation/oslog/oslogstore/local()) has entitlement and
@@ -91,8 +100,9 @@ historical counts or pretend the retained current ring is fresh. Each UI resourc
 - **Can a UI parameter enable logs?** No. Only explicit local startup configuration enables fixed source presets;
   requests never add sources, execute queries, select files or acquire bodies.
 - **Can retries double-count?** Commit rollup and checkpoint atomically. Storage failure does not advance the cursor;
-  restart resumes the last committed cursor. An invalid/stale checkpoint discloses a gap and stays unchanged unless a
-  native, documented metadata-only mechanism can prove a new tail cursor; a bounded time window is not such proof.
+  restart resumes the last committed cursor. An invalid/stale checkpoint uses the documented one-record metadata-only
+  tail probe above, commits no counts and discloses a gap. An empty channel remains reset-pending/cursorless and retries
+  later; normal after-cursor collection starts only on the cycle after a tail cursor is committed.
 - **What if the OS produces too much?** Cap source work, accepted rows, bytes, time and in-memory records; expose drops
   and partial coverage, not a claim of total machine events. Native cancellation must reap processes/close handles.
 - **What is retained?** Seven days within the shared store budget. Bodies never enter this slice. Apply the same

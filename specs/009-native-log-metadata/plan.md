@@ -11,9 +11,9 @@
 3. Store/domain slice: one bounded session-only current ring, compact minute source/severity rollups, coalesced coverage,
    latest-attempt metadata, atomic checkpoint transaction, coverage queries and bounded retention/migration tests.
    Keep SQLite `user_version=2`; use additive tables plus a dedicated log-metadata version in `store_metadata` so the
-   prior preview ignores the new tables. Freeze revision-CAS commits, ambiguous-outcome rereads,
-   reset-without-counting semantics and caught-up query-start coverage from review-decisions.md. Do not introduce cyclic
-   package dependencies between readers, history and projection.
+   prior preview ignores the new tables. Freeze revision-CAS commits, ambiguous-outcome rereads, metadata-only tail
+   reset without counts, reset-pending empty-source behavior and caught-up query-start coverage from
+   review-decisions.md. Do not introduce cyclic package dependencies between readers, history and projection.
 4. API/UI slice: explicit source startup settings, current/capability projection, closed summary schema, optional source,
    histogram/filter/status presentation and native service smoke. Extend background settings without enabling sources
    in older settings; maintain uninstall/upgrade behavior.

@@ -27,9 +27,14 @@ useful without Platform Demo, with honest cross-platform gaps.
   their creating OS thread. Linux passes the opaque checkpoint value through a private per-attempt cursor file; the
   fixed `--cursor-file=<code-owned-path>` option necessarily exposes only that non-observed temporary path in argv.
   Cancellation closes/reaps all native resources. Intersecting byte/row limits can stop work before 512 events.
-  Initial reads capture at most the last five minutes. An empty checkpoint can remain cursorless. A stale/invalid
-  checkpoint never invents a tail probe: without a documented native mechanism that returns a trustworthy tail cursor
-  without reading/counting records, keep the durable checkpoint unchanged and disclose an unknown-size gap.
+  Initial reads capture at most the last five minutes. On a stale/invalid checkpoint, run one metadata-only tail probe:
+  Windows queries the fixed channel in reverse order and reads at most one event to produce a bookmark; Linux runs the
+  fixed selected-field journal query with `-n 1`, outside the five-minute filter, and accepts only its automatic cursor.
+  The probe uses the same source deadline, byte/checkpoint limits and field allowlist, never requests a message/body,
+  and contributes neither captured nor discarded counts or covered-through advancement. Atomically persist the proved
+  cursor with `CHECKPOINT_RESET` and an unknown-size gap. If the source is empty, atomically clear the stale cursor and
+  remain `CHECKPOINT_RESET_PENDING`/cursorless; repeat the same bounded probe until a tail is proved, then resume
+  normal after-cursor collection on the following cycle.
 - L4: Normalize only UTC time, exact lowercase source alias (`system` or Windows-only `application`), seven code-owned
   severities and a validated bounded event code. Map journald priority 0..2 to CRITICAL, 3 to ERROR, 4 to WARN, 5..6
   to INFO and 7 to DEBUG. Map Windows Level 1 to CRITICAL, 2 to ERROR, 3 to WARN, 4 to INFO, 5 to TRACE, and 0,

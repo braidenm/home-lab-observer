@@ -28,9 +28,13 @@ code-owned temporary path is visible there. Neither helper output nor journalctl
 The store atomically commits compact minute source/severity rollups, coalesced attempt coverage, latest attempt state
 and a checkpoint revision. It does not persist one row per poll. Revision
 compare-and-swap prevents replayed batches from incrementing counts twice; an uncertain commit is resolved by rereading
-the revision. A stale checkpoint discloses a gap and stays unchanged unless a documented native metadata-only operation
-can prove a new tail cursor without acquiring or counting reset-window records. Coverage uses caught-up query-start time
-and remains separate from event-time histogram counts. Unknown loss is a gap, never an invented number.
+the revision. A stale checkpoint triggers one bounded metadata-only latest-record probe: Windows uses a reverse fixed-
+channel query and bookmark; Linux uses fixed `journalctl -n 1` selected JSON fields and its automatic cursor. The probe
+never requests bodies, adds no counts or covered-through time, and CAS-commits only the proved cursor,
+`CHECKPOINT_RESET` and an unknown-size gap.
+An empty source stays reset-pending and cursorless until a later probe proves a tail; normal collection resumes on the
+following cycle. Coverage uses caught-up query-start time and remains separate from event-time histogram counts.
+Unknown loss is a gap, never an invented number.
 
 Recent event codes live only in one 200-record process-memory/session ring. Current counts describe that ring, not
 persisted history; a restart can therefore retain summary history while the current list is empty. Persist no raw
