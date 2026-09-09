@@ -21,11 +21,16 @@ not author; the integration owner verifies the packaged service and browser. Req
 - OpenAPI/JSON Schema validation: five schemas, 12 valid and 10 invalid fixtures.
 - Eleven synthetic handler responses validate, including dedicated container, limited and disabled views.
 - Integrated UI typecheck, 29 component/adapter tests, library/demo builds and deterministic embedded build pass.
-- Collector, full native service and packaged browser verification are pending final integration.
+- Full Go suite, vet and real native snapshot schema validation pass on Windows.
+- Packaged Edge smoke passes at 390/768/1440 pixels: protected real service/history, disabled container guidance,
+  keyboard tabs, synthetic running/stopped/partial table, filtering, no page overflow and token lock/forget.
+  The synthetic browser table is not presented as live-engine evidence; Linux CI tests that separately.
+- Independent UI review inspected phone/desktop screenshots and approved readability, accessible table scrolling,
+  keyboard navigation and honest zero/unavailable/partial states. Images stay local and are not published as host data.
 
 ## Hosted evidence
 
-Pending the reviewed pull request. Linux CI additionally creates isolated synthetic running/stopped Docker workloads,
+Pending the reviewed head of [PR 9](https://github.com/braidenm/home-lab-observer/pull/9). Linux CI additionally creates isolated synthetic running/stopped Docker workloads,
 checks inventory and real CPU/memory, verifies privacy/authentication/limits and checks workloads remain unchanged.
 Windows/macOS native tests and cross-builds do not imply certification against live Desktop engines.
 
