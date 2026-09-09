@@ -42,7 +42,7 @@ func TestWindowsTaskTemplateIsAcceptedInMemoryWithoutRegistration(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := `$xml=[IO.File]::ReadAllText($args[0]); $expectedArguments=[IO.File]::ReadAllText($args[2]); $service=New-Object -ComObject 'Schedule.Service'; $service.Connect(); $task=$service.NewTask(0); $task.XmlText=$xml; $task.RegistrationInfo.URI='\Home Lab Observer'; $actualArguments=[string]$task.Actions.Item(1).Arguments; if ($task.Principal.LogonType -ne 3 -or $task.Principal.RunLevel -ne 0 -or $task.Settings.ExecutionTimeLimit -ne 'PT0S') { exit 9 }; if ($actualArguments -cne $expectedArguments) { exit 10 }; if ($actualArguments -match '&(?:amp|apos|quot|lt|gt);') { exit 11 }; [IO.File]::WriteAllText($args[1],$task.XmlText,(New-Object Text.UTF8Encoding($false)))`
+	script := `$xml=[IO.File]::ReadAllText($args[0]); $expectedArguments=[IO.File]::ReadAllText($args[2]); $service=New-Object -ComObject 'Schedule.Service'; $service.Connect(); $task=$service.NewTask(0); $task.XmlText=$xml; $task.RegistrationInfo.URI='\Home Lab Observer'; $actualArguments=[string]$task.Actions.Item(1).Arguments; if ($task.Principal.LogonType -ne 3 -or $task.Principal.RunLevel -ne 0 -or $task.Settings.ExecutionTimeLimit -ne 'PT0S') { exit 9 }; if ($actualArguments -cne $expectedArguments) { exit 10 }; if ($actualArguments -match '&(?:amp|apos|quot|lt|gt);') { exit 11 }; if ($task.Settings.UseUnifiedSchedulingEngine -ne $true) { exit 12 }; [IO.File]::WriteAllText($args[1],$task.XmlText,(New-Object Text.UTF8Encoding($false)))`
 	scriptPath := filepath.Join(t.TempDir(), "verify-task.ps1")
 	if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
 		t.Fatal(err)
@@ -100,6 +100,13 @@ func TestWindowsSavedTaskMayOmitOnlyExactKnownDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	original := string(definition.content)
+	if !strings.Contains(original, `<UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>`) {
+		t.Fatal("generated task does not require the unified scheduling engine")
+	}
+	legacyEngine := strings.Replace(original, `<UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>`, `<UseUnifiedSchedulingEngine>false</UseUnifiedSchedulingEngine>`, 1)
+	if validTaskXML(legacyEngine, definition.content) {
+		t.Fatal("saved task with the legacy scheduling engine was accepted as owned")
+	}
 	cases := []struct {
 		name       string
 		element    string
