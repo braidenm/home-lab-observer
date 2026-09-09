@@ -13,6 +13,15 @@ afterEach(() => {
 });
 
 describe("EmbeddedObserverApp", () => {
+  it("fails safely when data-source construction rejects a token", async () => {
+    const user = userEvent.setup();
+    render(<EmbeddedObserverApp createDataSource={() => { throw new Error("synthetic-private-detail"); }} />);
+    await user.type(screen.getByLabelText("Local access token"), "synthetic-token");
+    await user.click(screen.getByRole("button", { name: "Unlock dashboard" }));
+    expect((await screen.findByRole("alert")).textContent).not.toContain("synthetic-private-detail");
+    expect(window.sessionStorage.getItem(SESSION_TOKEN_KEY)).toBeNull();
+  });
+
   it("stores a submitted token only after capabilities validation and forgets it on lock", async () => {
     const user = userEvent.setup();
     let acceptCapabilities: (value: ObserverCapabilities) => void = () => undefined;

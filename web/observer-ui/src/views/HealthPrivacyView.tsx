@@ -19,6 +19,7 @@ export function HealthPrivacyView({ capabilities, snapshot, mode }: { capabiliti
 
       <section className="observer-panel observer-panel--flush" aria-labelledby="collectors-title">
         <div className="observer-section-heading observer-section-heading--inside"><div><p className="observer-kicker">Complete state envelope</p><h3 id="collectors-title">Collector and section status</h3></div><span className="observer-caption">Missing is never rendered as zero</span></div>
+        <p className="observer-table-note">Scroll the table horizontally to inspect all collection details on smaller screens.</p>
         <div className="observer-table-scroll" role="region" aria-label="Collector and section status table; horizontally scrollable on small screens" tabIndex={0}>
           <table className="observer-table"><caption className="observer-visually-hidden">Capability support plus snapshot collection, freshness, reason, count, and truncation for every section</caption><thead><tr><th scope="col">Section</th><th scope="col">Capability</th><th scope="col">Snapshot support</th><th scope="col">Collection</th><th scope="col">Freshness</th><th scope="col">Observed</th><th scope="col">Returned / total</th><th scope="col">Truncated</th><th scope="col">Reason</th><th scope="col">Class / upload</th></tr></thead>
             <tbody>{sectionNames.map((name) => {
