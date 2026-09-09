@@ -146,7 +146,7 @@ func TestBackgroundErrorsExposeOnlyStableCode(t *testing.T) {
 }
 
 func TestLocalProbeSeparatesReadinessAndAuthenticatedDiagnostics(t *testing.T) {
-	state := filepath.Join(t.TempDir(), "state")
+	state := filepath.Join(canonicalTestTempDir(t), "state")
 	token, _, err := localauth.Ensure(filepath.Join(state, "local-api.token"))
 	if err != nil {
 		t.Fatal(err)
@@ -173,7 +173,7 @@ func TestLocalProbeSeparatesReadinessAndAuthenticatedDiagnostics(t *testing.T) {
 		t.Fatalf("probe=%+v", got)
 	}
 
-	missingState := filepath.Join(t.TempDir(), "missing-state")
+	missingState := filepath.Join(canonicalTestTempDir(t), "missing-state")
 	got = (localReadinessProbe{}).Probe(context.Background(), background.Settings{StateDir: missingState, ListenAddress: settings.ListenAddress})
 	if got.Readiness != background.ReadinessReady || got.Diagnostics != background.DiagnosticsUnknown {
 		t.Fatalf("missing-token probe=%+v", got)
@@ -181,4 +181,13 @@ func TestLocalProbeSeparatesReadinessAndAuthenticatedDiagnostics(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(missingState, "local-api.token")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("status probe created a missing token: %v", err)
 	}
+}
+
+func canonicalTestTempDir(t *testing.T) string {
+	t.Helper()
+	directory, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return directory
 }

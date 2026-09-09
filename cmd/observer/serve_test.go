@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/braidenm/home-lab-observer/internal/history"
+	"github.com/braidenm/home-lab-observer/internal/lifecycle"
 )
 
 func TestClassifyShutdownFailure(t *testing.T) {
@@ -33,6 +34,44 @@ func TestClassifyShutdownFailure(t *testing.T) {
 				t.Fatalf("classifyShutdownFailure() = (%q, %q), want (%q, %q)", result, code, test.wantResult, test.wantCode)
 			}
 		})
+	}
+}
+
+type failingCloseLifecycle struct {
+	requested chan struct{}
+	closeErr  error
+	abandoned bool
+}
+
+func (endpoint *failingCloseLifecycle) StopRequested() <-chan struct{} { return endpoint.requested }
+func (endpoint *failingCloseLifecycle) Close() error                   { return endpoint.closeErr }
+func (endpoint *failingCloseLifecycle) Abandon() error {
+	endpoint.abandoned = true
+	return nil
+}
+
+func TestServePropagatesLifecycleCleanupFailure(t *testing.T) {
+	reservation, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := reservation.Addr().String()
+	_ = reservation.Close()
+	requested := make(chan struct{})
+	close(requested)
+	want := errors.New("synthetic lifecycle cleanup failure")
+	endpoint := &failingCloseLifecycle{requested: requested, closeErr: want}
+	err = serveRuntime(context.Background(), address, filepath.Join(canonicalTestTempDir(t), "state"), io.Discard, slog.New(slog.NewTextHandler(io.Discard, nil)), serveRuntimeOptions{
+		managed: true,
+		newLifecycle: func(lifecycle.Config) (managedLifecycle, error) {
+			return endpoint, nil
+		},
+	})
+	if !errors.Is(err, want) {
+		t.Fatalf("serveRuntime() error=%v, want lifecycle cleanup failure", err)
+	}
+	if !endpoint.abandoned {
+		t.Fatal("serveRuntime() did not preserve the unclean lifecycle path")
 	}
 }
 

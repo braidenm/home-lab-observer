@@ -77,9 +77,11 @@ function runObserver(args) {
   const remaining = deadline - Date.now();
   assert(remaining > 0, "Windows manager smoke exceeded its 110-second deadline");
   try {
-    return execFileSync(binary, args, { encoding: "utf8", timeout: Math.min(45_000, remaining), windowsHide: true });
-  } catch {
-    throw new Error(`observer ${args.slice(0, 2).join(" ")} failed`);
+    return execFileSync(binary, args, { encoding: "utf8", maxBuffer: 65_536, timeout: Math.min(45_000, remaining), windowsHide: true });
+  } catch (error) {
+    const stderr = typeof error?.stderr === "string" ? error.stderr : Buffer.isBuffer(error?.stderr) ? error.stderr.toString("utf8") : "";
+    const stableCode = stderr.match(/\bBACKGROUND_[A-Z_]+\b/)?.[0];
+    throw new Error(`observer ${args.slice(0, 2).join(" ")} failed${stableCode ? ` (${stableCode})` : ""}`);
   }
 }
 

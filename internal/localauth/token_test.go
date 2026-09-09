@@ -9,7 +9,7 @@ import (
 )
 
 func TestEnsureCreatesAndReusesPrivateToken(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "state", "local-api.token")
+	path := filepath.Join(canonicalTokenTestTempDir(t), "state", "local-api.token")
 	first, created, err := Ensure(path)
 	if err != nil || !created || first == "" {
 		t.Fatalf("first Ensure() token=%q created=%v err=%v", first, created, err)
@@ -28,6 +28,15 @@ func TestEnsureCreatesAndReusesPrivateToken(t *testing.T) {
 			t.Fatalf("token permissions=%v err=%v", info.Mode().Perm(), err)
 		}
 	}
+}
+
+func canonicalTokenTestTempDir(t *testing.T) string {
+	t.Helper()
+	directory, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return directory
 }
 
 func TestLoadDoesNotCreateMissingToken(t *testing.T) {

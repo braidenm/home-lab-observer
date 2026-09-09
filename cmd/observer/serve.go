@@ -87,6 +87,13 @@ type serveRuntimeOptions struct {
 	managed        bool
 	dockerEndpoint string
 	containers     *containerobs.Collector
+	newLifecycle   func(lifecycle.Config) (managedLifecycle, error)
+}
+
+type managedLifecycle interface {
+	StopRequested() <-chan struct{}
+	Close() error
+	Abandon() error
 }
 
 func serveRuntime(ctx context.Context, address, stateDir string, output io.Writer, logger *slog.Logger, options serveRuntimeOptions) error {
@@ -108,18 +115,22 @@ func serveRuntime(ctx context.Context, address, stateDir string, output io.Write
 		fmt.Fprintln(output, "Could not open observation history. Use a writable local disk and inspect the observer state directory.")
 		return err
 	}
-	var endpoint *lifecycle.Endpoint
-	cleanShutdown := false
+	var endpoint managedLifecycle
+	lifecycleFinalized := false
 	if options.managed {
-		endpoint, err = lifecycle.New(lifecycle.Config{StateDir: stateDir})
+		newLifecycle := options.newLifecycle
+		if newLifecycle == nil {
+			newLifecycle = func(config lifecycle.Config) (managedLifecycle, error) {
+				return lifecycle.New(config)
+			}
+		}
+		endpoint, err = newLifecycle(lifecycle.Config{StateDir: stateDir})
 		if err != nil {
 			_ = store.Close()
 			return err
 		}
 		defer func() {
-			if cleanShutdown {
-				_ = endpoint.Close()
-			} else {
+			if !lifecycleFinalized {
 				_ = endpoint.Abandon()
 			}
 		}()
@@ -218,7 +229,12 @@ func serveRuntime(ctx context.Context, address, stateDir string, output io.Write
 		if err := errors.Join(shutdownErr, serveErr, stopErr); err != nil {
 			return err
 		}
-		cleanShutdown = true
+		if endpoint != nil {
+			if err := endpoint.Close(); err != nil {
+				return err
+			}
+			lifecycleFinalized = true
+		}
 		logger.Info("observer_stopped", "code", "SHUTDOWN_COMPLETE")
 		stopCode = diagnostics.CodeOK
 		return nil
