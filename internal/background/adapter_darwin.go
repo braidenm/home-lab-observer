@@ -65,8 +65,12 @@ func (a *darwinAdapter) inspect(ctx context.Context, expected registration) (man
 		return state, coded(CodeRegistrationMismatch, err)
 	}
 	if !exists {
-		if _, loadedErr := a.runner.run(ctx, command{name: "launchctl", args: []string{"print", a.domain + "/" + managerIdentity}}); loadedErr == nil {
+		loaded, loadedErr := a.runner.run(ctx, command{name: "launchctl", args: []string{"print", a.domain + "/" + managerIdentity}})
+		if loadedErr == nil {
 			return state, coded(CodeRegistrationMismatch, errors.New("launchd has a loaded job without the managed plist"))
+		}
+		if loaded.exitCode == 0 {
+			return state, loadedErr
 		}
 		return state, nil
 	}
@@ -77,6 +81,8 @@ func (a *darwinAdapter) inspect(ctx context.Context, expected registration) (man
 	result, err := a.runner.run(ctx, command{name: "launchctl", args: []string{"print", a.domain + "/" + managerIdentity}, capture: true})
 	if err == nil {
 		state.running = strings.Contains(result.output, "state = running")
+	} else if result.exitCode == 0 {
+		return state, err
 	}
 	return state, nil
 }

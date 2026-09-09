@@ -234,6 +234,13 @@ func (c *controller) Disable(ctx context.Context, options StopOptions) (Status, 
 	if status, recovered, err := c.resumeInterruptedDisable(ctx); recovered || err != nil {
 		return status, err
 	}
+	managed, err := c.hasManagedState()
+	if err != nil {
+		return Status{}, err
+	}
+	if !managed {
+		return statusFor(managerState{available: c.adapter.available(ctx)}, ReadinessUnknown), nil
+	}
 	return c.withManaged(ctx, func(settings Settings, registration registration) (Status, error) {
 		state, err := c.adapter.inspect(ctx, registration)
 		if err != nil {
@@ -278,6 +285,14 @@ func (c *controller) disabling() bool {
 }
 
 func (c *controller) resumeInterruptedDisable(ctx context.Context) (Status, bool, error) {
+	if _, err := os.Lstat(c.backgroundDir); errors.Is(err, os.ErrNotExist) {
+		return Status{}, false, nil
+	}
+	unlock, err := c.lock(false)
+	if err != nil {
+		return Status{}, true, err
+	}
+	defer unlock()
 	if _, err := os.Lstat(filepath.Join(c.backgroundDir, markerFile)); err == nil {
 		return Status{}, false, nil
 	}
@@ -288,11 +303,6 @@ func (c *controller) resumeInterruptedDisable(ctx context.Context) (Status, bool
 	if err != nil || string(transition) != backgroundMarker+"\n" {
 		return Status{}, true, coded(CodeUnsafeManagedState, errors.New("interrupted disable marker is unsafe"))
 	}
-	unlock, err := c.lock(false)
-	if err != nil {
-		return Status{}, true, err
-	}
-	defer unlock()
 	allowed := map[string]bool{lockDirectory: true, disablingFile: true, settingsFile: true, "home-lab-observer.service": true, "com.braidenm.home-lab-observer.plist": true, "task.xml": true}
 	entries, err := os.ReadDir(c.backgroundDir)
 	if err != nil {
@@ -309,7 +319,9 @@ func (c *controller) resumeInterruptedDisable(ctx context.Context) (Status, bool
 		}
 	}
 	for _, name := range []string{settingsFile, "home-lab-observer.service", "com.braidenm.home-lab-observer.plist", "task.xml", disablingFile} {
-		_ = os.Remove(filepath.Join(c.backgroundDir, name))
+		if err := os.Remove(filepath.Join(c.backgroundDir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return Status{}, true, coded(CodeUnsafeManagedState, err)
+		}
 	}
 	return statusFor(managerState{available: c.adapter.available(ctx)}, ReadinessUnknown), true, nil
 }

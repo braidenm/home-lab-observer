@@ -23,6 +23,9 @@ func trustedManagerExecutable(name string) (string, error) {
 		return "", err
 	}
 	path := filepath.Join(directory, base)
+	if base == "powershell.exe" {
+		path = filepath.Join(directory, "WindowsPowerShell", "v1.0", base)
+	}
 	info, err := os.Stat(path)
 	if err != nil || !info.Mode().IsRegular() {
 		return "", errors.New("trusted Windows manager executable is unavailable")

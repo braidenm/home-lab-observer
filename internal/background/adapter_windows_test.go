@@ -31,10 +31,14 @@ func TestWindowsTaskTemplateIsAcceptedInMemoryWithoutRegistration(t *testing.T) 
 	}
 	powershell, err := trustedManagerExecutable("powershell.exe")
 	if err != nil {
-		t.Skip(err)
+		t.Fatal(err)
 	}
 	script := `$xml=[IO.File]::ReadAllText($args[0]); $service=New-Object -ComObject 'Schedule.Service'; $service.Connect(); $task=$service.NewTask(0); $task.XmlText=$xml; if ($task.Principal.LogonType -ne 3 -or $task.Principal.RunLevel -ne 0 -or $task.Settings.ExecutionTimeLimit -ne 'PT0S') { exit 9 }; [IO.File]::WriteAllText($args[1],$task.XmlText,(New-Object Text.UTF8Encoding($false)))`
-	command := exec.Command(powershell, "-NoProfile", "-NonInteractive", "-Command", script, path, roundTrip)
+	scriptPath := filepath.Join(t.TempDir(), "verify-task.ps1")
+	if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(powershell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath, path, roundTrip)
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("Task Scheduler rejected generated XML: %v: %s", err, output)
 	}
@@ -43,7 +47,14 @@ func TestWindowsTaskTemplateIsAcceptedInMemoryWithoutRegistration(t *testing.T) 
 		t.Fatal(err)
 	}
 	if !validTaskXML(string(normalized), definition.content) {
-		t.Fatal("canonical matcher rejected Task Scheduler's in-memory XML round trip")
+		want, _ := canonicalTaskXML(definition.content)
+		got, _ := canonicalTaskXML(normalized)
+		for index := 0; index < len(want) && index < len(got); index++ {
+			if want[index] != got[index] {
+				t.Fatalf("canonical matcher rejected Task Scheduler XML at %d: want %q got %q; want tail %q got tail %q", index, want[index], got[index], want[index:], got[index:])
+			}
+		}
+		t.Fatalf("canonical matcher rejected Task Scheduler XML token lengths: want %d got %d", len(want), len(got))
 	}
 	malicious := strings.Replace(string(definition.content), "</Actions>", "<Exec><Command>cmd.exe</Command></Exec></Actions>", 1)
 	if validTaskXML(malicious, definition.content) {

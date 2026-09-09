@@ -118,6 +118,10 @@ func TestLifecycleIsIdempotentAndGracefulByDefault(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(controller.backgroundDir, markerFile)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("disable retained managed marker")
 	}
+	status, err = controller.Disable(ctx, StopOptions{})
+	if err != nil || status.State != StateNotRegistered {
+		t.Fatalf("idempotent disable = %#v, %v", status, err)
+	}
 }
 
 func TestExplicitForceNeverFollowsGracefulFailure(t *testing.T) {

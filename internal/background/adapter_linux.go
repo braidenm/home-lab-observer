@@ -87,6 +87,27 @@ func (a *linuxAdapter) inspect(ctx context.Context, expected registration) (mana
 		return state, coded(CodeRegistrationMismatch, errors.New("existing systemd user unit is not managed by this observer"))
 	}
 	state.registered = true
+	properties, err := a.runner.run(ctx, command{name: "systemctl", args: []string{"--user", "show", "--property=FragmentPath", "--property=DropInPaths", "--property=NeedDaemonReload", managerIdentity}, capture: true})
+	if err != nil {
+		return state, err
+	}
+	wantProperties := map[string]string{"FragmentPath": a.target, "DropInPaths": "", "NeedDaemonReload": "no"}
+	seen := make(map[string]string, 3)
+	for _, line := range strings.Split(strings.TrimSpace(properties.output), "\n") {
+		key, value, found := strings.Cut(strings.TrimSuffix(line, "\r"), "=")
+		if !found || len(seen) >= 3 {
+			return state, coded(CodeRegistrationMismatch, errors.New("systemd unit properties are malformed"))
+		}
+		seen[key] = value
+	}
+	if len(seen) != len(wantProperties) {
+		return state, coded(CodeRegistrationMismatch, errors.New("systemd unit properties are incomplete"))
+	}
+	for key, expectedValue := range wantProperties {
+		if seen[key] != expectedValue {
+			return state, coded(CodeRegistrationMismatch, errors.New("systemd unit has overrides or needs reload"))
+		}
+	}
 	result, err := a.runner.run(ctx, command{name: "systemctl", args: []string{"--user", "is-active", "--quiet", managerIdentity}})
 	if err == nil {
 		state.running = true
