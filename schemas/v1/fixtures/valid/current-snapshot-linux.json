@@ -1,0 +1,51 @@
+{
+  "schema_version": "observer-current-snapshot/v1",
+  "snapshot_id": "sample_linux_001",
+  "sequence": 42,
+  "observed_at": "2026-09-09T12:00:00Z",
+  "duration_ms": 184,
+  "collection_state": "PARTIAL",
+  "privacy": {
+    "profile": "SAFE_DEFAULT",
+    "remote_projection": "home-lab-server-snapshot/v1",
+    "message_bodies_upload_eligible": false,
+    "redaction_count": 0,
+    "dropped_count": 0,
+    "excluded_fields": ["process_arguments", "environment_variables", "container_commands", "container_mounts", "container_labels", "raw_log_bodies", "credentials", "tokens"]
+  },
+  "sections": {
+    "overview": {
+      "support_state": "SUPPORTED", "collection_state": "OK", "freshness": "CURRENT", "observed_at": "2026-09-09T12:00:00Z", "reason_code": null,
+      "data": { "host_alias": "lab-node-a", "os": "linux", "architecture": "amd64", "uptime_seconds": 86400, "cpu_logical_count": 8, "memory_total_bytes": 17179869184, "memory_used_bytes": 6442450944 }
+    },
+    "filesystems": {
+      "support_state": "SUPPORTED", "collection_state": "OK", "freshness": "CURRENT", "observed_at": "2026-09-09T12:00:00Z", "reason_code": null,
+      "total_count": 1, "returned_count": 1, "truncated": false,
+      "items": [{ "mount_alias": "system", "filesystem_type": "ext4", "total_bytes": 536870912000, "used_bytes": 214748364800, "available_bytes": 322122547200 }]
+    },
+    "processes": {
+      "support_state": "SUPPORTED", "collection_state": "OK", "freshness": "CURRENT", "observed_at": "2026-09-09T12:00:00Z", "reason_code": null,
+      "total_count": 231, "returned_count": 1, "truncated": true,
+      "items": [{ "pid": 101, "name": "sample-worker", "state": "running", "cpu_percent": 2.5, "memory_bytes": 67108864 }]
+    },
+    "services": {
+      "support_state": "UNAVAILABLE", "collection_state": "NOT_RUN", "freshness": "UNKNOWN", "observed_at": null, "reason_code": "SERVICE_MANAGER_NOT_FOUND",
+      "total_count": 0, "returned_count": 0, "truncated": false, "items": []
+    },
+    "containers": {
+      "support_state": "SUPPORTED", "collection_state": "OK", "freshness": "CURRENT", "observed_at": "2026-09-09T12:00:00Z", "reason_code": null,
+      "total_count": 1, "returned_count": 1, "truncated": false,
+      "items": [{ "id_alias": "container-001", "name": "sample-api", "image": "example.invalid/sample-api:1.0", "state": "running", "cpu_percent": 1.25, "memory_bytes": 134217728 }]
+    },
+    "logs": {
+      "support_state": "SUPPORTED", "collection_state": "OK", "freshness": "CURRENT", "observed_at": "2026-09-09T12:00:00Z", "reason_code": null,
+      "total_count": 1, "returned_count": 1, "truncated": false,
+      "items": [{ "metadata": { "observed_at": "2026-09-09T11:59:58Z", "source": "sample-api", "severity": "INFO", "event_code": "READY" }, "body": { "state": "OMITTED" } }]
+    },
+    "observer": {
+      "support_state": "SUPPORTED", "collection_state": "OK", "freshness": "CURRENT", "observed_at": "2026-09-09T12:00:00Z", "reason_code": null,
+      "total_count": 1, "returned_count": 1, "truncated": false,
+      "items": [{ "name": "collection_duration", "state": "OK", "value": 184, "unit": "milliseconds" }]
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "schema_version": "observer-current-snapshot/v1",
+  "snapshot_id": "sample_macos_001",
+  "sequence": 7,
+  "observed_at": "2026-09-09T12:00:00Z",
+  "duration_ms": 91,
+  "collection_state": "PARTIAL",
+  "privacy": {
+    "profile": "LOCAL_LOG_BODIES",
+    "remote_projection": "home-lab-server-snapshot/v1",
+    "message_bodies_upload_eligible": false,
+    "redaction_count": 2,
+    "dropped_count": 0,
+    "excluded_fields": ["process_arguments", "environment_variables", "container_commands", "container_mounts", "container_labels", "credentials", "tokens"]
+  },
+  "sections": {
+    "overview": { "support_state": "SUPPORTED", "collection_state": "OK", "freshness": "CURRENT", "observed_at": "2026-09-09T12:00:00Z", "reason_code": null, "data": { "host_alias": "lab-node-b", "os": "darwin", "architecture": "arm64", "uptime_seconds": 7200, "cpu_logical_count": 10, "memory_total_bytes": 34359738368, "memory_used_bytes": 8589934592 } },
+    "filesystems": { "support_state": "SUPPORTED", "collection_state": "OK", "freshness": "CURRENT", "observed_at": "2026-09-09T12:00:00Z", "reason_code": null, "total_count": 0, "returned_count": 0, "truncated": false, "items": [] },
+    "processes": { "support_state": "SUPPORTED", "collection_state": "OK", "freshness": "CURRENT", "observed_at": "2026-09-09T12:00:00Z", "reason_code": null, "total_count": 0, "returned_count": 0, "truncated": false, "items": [] },
+    "services": { "support_state": "UNSUPPORTED", "collection_state": "NOT_RUN", "freshness": "UNKNOWN", "observed_at": null, "reason_code": "PLATFORM_UNSUPPORTED", "total_count": 0, "returned_count": 0, "truncated": false, "items": [] },
+    "containers": { "support_state": "UNAVAILABLE", "collection_state": "NOT_RUN", "freshness": "UNKNOWN", "observed_at": null, "reason_code": "ENGINE_NOT_RUNNING", "total_count": 0, "returned_count": 0, "truncated": false, "items": [] },
+    "logs": {
+      "support_state": "SUPPORTED", "collection_state": "OK", "freshness": "CURRENT", "observed_at": "2026-09-09T12:00:00Z", "reason_code": null,
+      "total_count": 1, "returned_count": 1, "truncated": false,
+      "items": [{ "metadata": { "observed_at": "2026-09-09T11:59:58Z", "source": "sample-service", "severity": "WARN", "event_code": "RETRY" }, "body": { "state": "REDACTED_LOCAL_ONLY", "redacted_text": "retry for user [REDACTED]", "redaction_count": 2, "upload_eligible": false } }]
+    },
+    "observer": { "support_state": "SUPPORTED", "collection_state": "OK", "freshness": "CURRENT", "observed_at": "2026-09-09T12:00:00Z", "reason_code": null, "total_count": 0, "returned_count": 0, "truncated": false, "items": [] }
+  }
+}

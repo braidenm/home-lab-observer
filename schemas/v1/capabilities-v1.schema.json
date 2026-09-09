@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:home-lab-observer:schema:capabilities:v1",
+  "title": "Home Lab Observer capabilities v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "api_version", "generated_at", "observer", "platform", "policy", "collectors"],
+  "properties": {
+    "schema_version": { "const": "observer-capabilities/v1" },
+    "api_version": { "const": "v1" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "observer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "mode"],
+      "properties": {
+        "version": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "mode": { "enum": ["HEADLESS", "LOCAL_DASHBOARD"] }
+      }
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "architecture"],
+      "properties": {
+        "os": { "enum": ["linux", "windows", "darwin", "other"] },
+        "architecture": { "type": "string", "minLength": 1, "maxLength": 32 }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["read_only", "default_bind", "cors_enabled", "retention_days", "retention_bytes", "log_bodies", "response_limits_bytes"],
+      "properties": {
+        "read_only": { "const": true },
+        "default_bind": { "const": "127.0.0.1" },
+        "cors_enabled": { "const": false },
+        "retention_days": { "type": "integer", "minimum": 0, "maximum": 7 },
+        "retention_bytes": { "type": "integer", "minimum": 0, "maximum": 262144000 },
+        "log_bodies": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["default_state", "maximum_body_bytes", "upload_eligible"],
+          "properties": {
+            "default_state": { "const": "OMITTED" },
+            "maximum_body_bytes": { "const": 2048 },
+            "upload_eligible": { "const": false }
+          }
+        },
+        "response_limits_bytes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["capabilities", "current_snapshot"],
+          "properties": {
+            "capabilities": { "const": 131072 },
+            "current_snapshot": { "const": 1048576 }
+          }
+        }
+      }
+    },
+    "collectors": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "support_state", "reason_code", "data_classification", "upload_eligible"],
+        "properties": {
+          "name": { "enum": ["overview", "filesystems", "processes", "services", "containers", "logs", "observer"] },
+          "support_state": { "$ref": "#/$defs/supportState" },
+          "reason_code": { "type": ["string", "null"], "minLength": 1, "maxLength": 64, "pattern": "^[A-Z0-9_]+$" },
+          "data_classification": { "enum": ["PUBLIC_METADATA", "LOCAL_SENSITIVE"] },
+          "upload_eligible": { "type": "boolean" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "supportState": { "enum": ["SUPPORTED", "DISABLED", "UNAVAILABLE", "PERMISSION_DENIED", "UNSUPPORTED"] }
+  }
+}

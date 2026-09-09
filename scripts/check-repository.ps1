@@ -24,7 +24,17 @@ $requiredFiles = @(
     'specs/001-repository-foundation/tasks.md',
     'specs/002-cross-platform-observer/spec.md',
     'specs/002-cross-platform-observer/plan.md',
-    'specs/002-cross-platform-observer/tasks.md'
+    'specs/002-cross-platform-observer/tasks.md',
+    'specs/002-cross-platform-observer/traceability.md',
+    'api/openapi.v1.json',
+    'schemas/v1/capabilities-v1.schema.json',
+    'schemas/v1/current-snapshot-v1.schema.json',
+    'schemas/v1/problem-details-v1.schema.json',
+    'schemas/v1/fixtures/manifest.json',
+    'scripts/validate-contracts.mjs',
+    'package.json',
+    'package-lock.json',
+    '.github/workflows/contracts.yml'
 )
 
 $missingFiles = @(
