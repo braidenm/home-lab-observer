@@ -29,8 +29,9 @@ wait for a signed release; a source build is also available for technical owners
 
 ## Simplest start: unpack and run
 
-After verification, extract the archive into a folder you own. On Windows, open `Run-Observer.cmd`; on Linux/macOS, run
-`bash ./run-observer.sh` from that folder. Or run `observer` (`observer.exe` on Windows) directly without arguments.
+After verification, extract the archive into a folder you own. On Windows, open `Run-Observer.cmd`; on macOS, open
+`Run-Observer.command` in Terminal; on Linux, run `bash ./run-observer.sh` from that folder. On macOS you can also run
+`bash ./Run-Observer.command`. Or run `observer` (`observer.exe` on Windows) directly without arguments.
 
 The foreground console prints the local dashboard address and the location of the private access-token file. Open
 `http://127.0.0.1:9847`, read that file locally, and paste the token into **Unlock dashboard**. The token is generated on

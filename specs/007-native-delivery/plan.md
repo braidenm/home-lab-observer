@@ -10,7 +10,7 @@ Parallel slices: releasepack/contracts; Bash/PowerShell install and lifecycle he
 integration owner handles CLI version/direct-run behavior, docs, independent review coordination and publication.
 
 Each archive has exactly one root directory home-lab-observer_VERSION_OS_ARCH containing observer[.exe], LICENSE,
-START-HERE.md, and run-observer.sh (Unix) or Run-Observer.cmd (Windows). Archive names are the same root plus .tar.gz/.zip.
+START-HERE.md, and run-observer.sh (Linux), Run-Observer.command (macOS) or Run-Observer.cmd (Windows). Archive names are the same root plus .tar.gz/.zip.
 Manifest assets use os=linux|darwin|windows and arch=amd64|arm64. Version is SemVer prerelease without a leading v; tag
 adds v. Installer scripts are separately uploaded versioned release assets, not embedded in the manifest's binary list.
 SHA256SUMS covers all downloadable files except itself; provenance attests archives, manifest, installer scripts and SBOM.

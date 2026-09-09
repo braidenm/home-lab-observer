@@ -1,8 +1,8 @@
 # Run the local observer
 
-The foreground local service is the development preview. Downloadable signed installers and background-service helpers
-are a later release milestone; no GitHub token, Platform Demo account, or Docker installation is needed to build and run
-this native preview.
+The foreground local service is the native preview. [Verified archives and per-user installation helpers](install.md)
+provide a path without development tools; publisher-signed installers and background-service profiles remain later
+milestones. No GitHub token, Platform Demo account, or Docker installation is needed to build and run this preview.
 
 ## Build and run
 
@@ -19,6 +19,9 @@ On Windows PowerShell:
 go build -o observer.exe ./cmd/observer
 .\observer.exe serve
 ```
+
+Running the binary without arguments also starts this foreground server. `observer version --json` reports the build
+without starting the server, collecting observations or opening network connections.
 
 The process prints its local dashboard address and the path to `local-api.token`. Open that file on the same machine,
 copy its contents into the dashboard's **Local access token** field, and choose **Unlock dashboard**. Use **Lock dashboard**
