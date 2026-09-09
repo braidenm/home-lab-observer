@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"embed"
 	"io/fs"
-	"mime"
 	"net/http"
 	"path"
 	"strings"
@@ -47,7 +46,8 @@ func NewHandler(assets fs.FS) http.Handler {
 			http.NotFound(response, request)
 			return
 		}
-		contentType := mime.TypeByExtension(path.Ext(name))
+		// Fixed release manifest types must not depend on an OS MIME registry.
+		contentType := map[string]string{".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8"}[path.Ext(name)]
 		if contentType == "" {
 			contentType = "application/octet-stream"
 		}

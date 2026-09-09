@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/braidenm/home-lab-observer/internal/history"
+	"github.com/braidenm/home-lab-observer/internal/projection"
 )
 
 const SchemaVersion = "observer-metric-series/v1"
@@ -81,7 +82,7 @@ type rangeConfig struct {
 	resolution time.Duration
 }
 
-func Build(ctx context.Context, reader Reader, now time.Time, requestedRange Range, metrics []history.MetricID) (Response, error) {
+func Build(ctx context.Context, reader Reader, now time.Time, requestedRange Range, metrics []history.MetricID, statuses ...map[history.MetricID]projection.SectionStatus) (Response, error) {
 	if reader == nil {
 		return Response{}, errors.New("series reader is required")
 	}
@@ -113,9 +114,25 @@ func Build(ctx context.Context, reader Reader, now time.Time, requestedRange Ran
 		RequestedMetrics:      append([]history.MetricID(nil), metrics...), Series: make([]MetricSeries, 0, len(metrics)),
 	}
 	for _, metric := range metrics {
+		var status *projection.SectionStatus
+		if len(statuses) > 0 {
+			value, exists := statuses[0][metric]
+			if !exists {
+				value = projection.SectionStatus{SupportState: "UNAVAILABLE", CollectionState: "NOT_RUN", Freshness: "UNKNOWN", ReasonCode: stringPointer("COLLECTOR_NOT_RUN")}
+			}
+			status = &value
+			if status.SupportState != "SUPPORTED" {
+				response.Series = append(response.Series, MetricSeries{MetricID: metric, Unit: metricMetadata[metric].unit, SupportState: status.SupportState, CollectionState: "NOT_RUN", Freshness: "UNKNOWN", ReasonCode: status.ReasonCode, Points: []Point{}})
+				continue
+			}
+		}
 		built, err := buildMetric(ctx, reader, metric, windowStart, now, config.resolution)
 		if err != nil {
 			return Response{}, fmt.Errorf("build %s series: %w", metric, err)
+		}
+		if status != nil && status.CollectionState == "PARTIAL" && built.PointCount > 0 {
+			built.CollectionState = "PARTIAL"
+			built.ReasonCode = status.ReasonCode
 		}
 		response.Series = append(response.Series, built)
 	}

@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"log/slog"
 	"net"
 	"net/http"
@@ -107,7 +108,7 @@ func serve(ctx context.Context, address, stateDir string, output io.Writer, logg
 			logger.Error("collection_shutdown_failed", "code", "SHUTDOWN_TIMEOUT")
 		}
 	}()
-	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8192}
+	server := &http.Server{Handler: handler, ErrorLog: log.New(safeHTTPLog{logger}, "", 0), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8192}
 	stopped := make(chan error, 1)
 	go func() { stopped <- server.Serve(listener) }()
 	fmt.Fprintf(output, "Home Lab Observer: http://%s\nLocal access token file: %s\nOpen the file locally and paste its token into the dashboard. Press Ctrl+C to stop.\n", address, tokenPath)
@@ -128,4 +129,11 @@ func serve(ctx context.Context, address, stateDir string, output io.Writer, logg
 		logger.Info("observer_stopped", "code", "SHUTDOWN_COMPLETE")
 		return nil
 	}
+}
+
+type safeHTTPLog struct{ logger *slog.Logger }
+
+func (writer safeHTTPLog) Write(message []byte) (int, error) {
+	writer.logger.Error("http_server_error", "code", "HTTP_INTERNAL_ERROR")
+	return len(message), nil
 }
