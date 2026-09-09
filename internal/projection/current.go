@@ -98,6 +98,18 @@ type EmptySection struct {
 	Items []any `json:"items"`
 }
 
+type ObserverSignal struct {
+	Name  string  `json:"name"`
+	State string  `json:"state"`
+	Value float64 `json:"value"`
+	Unit  string  `json:"unit"`
+}
+
+type ObserverSection struct {
+	ListStatus
+	Items []ObserverSignal `json:"items"`
+}
+
 type Sections struct {
 	Overview    OverviewSection   `json:"overview"`
 	Filesystems FilesystemSection `json:"filesystems"`
@@ -105,7 +117,7 @@ type Sections struct {
 	Services    EmptySection      `json:"services"`
 	Containers  EmptySection      `json:"containers"`
 	Logs        EmptySection      `json:"logs"`
-	Observer    EmptySection      `json:"observer"`
+	Observer    ObserverSection   `json:"observer"`
 }
 
 type CurrentSnapshot struct {
@@ -124,7 +136,7 @@ func Current(raw observation.Snapshot, system SystemInfo) CurrentSnapshot {
 	unsupported := unsupportedSection("COLLECTOR_NOT_IMPLEMENTED")
 	sections := Sections{
 		Overview: projectOverview(raw, system), Filesystems: projectFilesystems(raw), Processes: projectProcesses(raw),
-		Services: unsupported, Containers: unsupported, Logs: unsupported, Observer: unsupported,
+		Services: unsupported, Containers: unsupported, Logs: unsupported, Observer: unsupportedObserverSection("COLLECTOR_NOT_IMPLEMENTED"),
 	}
 	return CurrentSnapshot{
 		SchemaVersion:   CurrentSnapshotVersion,
@@ -140,6 +152,20 @@ func Current(raw observation.Snapshot, system SystemInfo) CurrentSnapshot {
 		},
 		Sections: sections,
 	}
+}
+
+func WithObserverSignals(current CurrentSnapshot, observedAt time.Time, signals []ObserverSignal, degradedReason string) CurrentSnapshot {
+	if len(signals) > 32 {
+		signals = signals[:32]
+	}
+	state := SectionStatus{SupportState: "SUPPORTED", CollectionState: "OK", Freshness: "CURRENT", ObservedAt: timePtr(observedAt.UTC())}
+	if degradedReason != "" {
+		state.CollectionState = "PARTIAL"
+		state.ReasonCode = stringPtr(safeToken(degradedReason, "OBSERVER_DEGRADED", 64))
+	}
+	items := append([]ObserverSignal(nil), signals...)
+	current.Sections.Observer = ObserverSection{ListStatus: ListStatus{SectionStatus: state, TotalCount: len(items), ReturnedCount: len(items)}, Items: items}
+	return current
 }
 
 func projectOverview(raw observation.Snapshot, system SystemInfo) OverviewSection {
@@ -212,6 +238,10 @@ func listStatus(status SectionStatus, quality observation.SectionQuality) ListSt
 
 func unsupportedSection(reason string) EmptySection {
 	return EmptySection{ListStatus: ListStatus{SectionStatus: stateWithReason("UNSUPPORTED", reason)}, Items: []any{}}
+}
+
+func unsupportedObserverSection(reason string) ObserverSection {
+	return ObserverSection{ListStatus: ListStatus{SectionStatus: stateWithReason("UNSUPPORTED", reason)}, Items: []ObserverSignal{}}
 }
 
 func statusFor(state observation.SupportState, reason observation.ReasonCode, observed time.Time) SectionStatus {
@@ -299,6 +329,7 @@ func reasonString(reason observation.ReasonCode, fallback string) string {
 		return '_'
 	}, string(reason))
 }
+func stringPtr(value string) *string     { return &value }
 func timePtr(value time.Time) *time.Time { return &value }
 func normalizedOS(value string) string {
 	if value == "linux" || value == "windows" || value == "darwin" {
