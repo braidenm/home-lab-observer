@@ -7,7 +7,8 @@ package. Nothing is sent to Platform Demo by this preview.
 ## Choose your download
 
 Open [GitHub Releases](https://github.com/braidenm/home-lab-observer/releases) and choose the explicitly labeled preview.
-The first planned version is `0.1.0-preview.1`. Choose your **host OS**, not Docker's virtual-machine OS:
+The first published version is [0.1.0-preview.1](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-preview.1).
+Choose your **host OS**, not Docker's virtual-machine OS:
 
 | Machine | Archive suffix |
 | --- | --- |
