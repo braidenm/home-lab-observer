@@ -83,9 +83,11 @@ schema on 2026-09-09 against the sanitized diagnostic from hosted run `344087463
 
 Run `34410120460` then exposed the same order-only difference inside `Settings`. A complete review of Microsoft's
 schema confirms `xs:all` for the emitted profile's `Task`, `RegistrationInfo`, `Settings`, `IdleSettings`,
-`RestartOnFailure` and `Principal` nodes. Those exact namespace-qualified paths can be compared without child-order
-significance; attributes, values, allowed children and multiplicity remain exact. Trigger, action and executable
-sequences are not included. This extends the initial top-level finding rather than making every XML subtree unordered.
+`RestartOnFailure`, `Principal` and `Exec` nodes. Those exact namespace-qualified paths can be compared without
+child-order significance; attributes, values, allowed children and multiplicity remain exact. Trigger sequences and
+the sequence of actions are not included. Independent review caught that the fields inside one `Exec` are also an
+unordered group; this does not permit changing its command or arguments. This extends the initial top-level finding
+rather than making every XML subtree unordered.
 
 ## Acceptance and rollback
 
