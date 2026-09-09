@@ -103,7 +103,16 @@ function ServiceTable({ items }: { items: CurrentSnapshot["sections"]["services"
 }
 
 function ContainerTable({ items, dedicated }: { items: Array<ContainerObservation | ContainerInventoryItem>; dedicated: boolean }) {
-  return <table className="observer-table observer-container-table"><caption className="observer-visually-hidden">Containers: name and image, state, host-capacity CPU, engine-reported memory, metrics quality, and alias</caption><thead><tr><th scope="col">Name / image</th><th scope="col">State</th><th scope="col">CPU (host)</th><th scope="col">Memory</th>{dedicated && <th scope="col">Metrics</th>}<th scope="col">Alias</th></tr></thead><tbody>{items.map((item) => <tr key={item.idAlias}><th scope="row"><strong>{item.name}</strong><small title={item.image}>{item.image}</small></th><td><StateBadge state={item.state} /></td><td>{item.cpuPercent === null ? "Unavailable" : `${item.cpuPercent.toFixed(1)}%`}</td><td>{formatBytes(item.memoryBytes)}</td>{dedicated && "metricsState" in item && <td><StateBadge state={item.metricsState} />{item.reasonCode && <small>{titleCase(item.reasonCode)}</small>}</td>}<td>{item.idAlias}</td></tr>)}</tbody></table>;
+  const caption = dedicated
+    ? "Containers: name and image, state, host-capacity CPU, engine-reported memory, metrics quality, and alias"
+    : "Containers: name and image, state, CPU, memory, and alias";
+  return <table className="observer-table observer-container-table"><caption className="observer-visually-hidden">{caption}</caption><thead><tr><th scope="col">Name / image</th><th scope="col">State</th><th scope="col">{dedicated ? "CPU (host)" : "CPU"}</th><th scope="col">Memory</th>{dedicated && <th scope="col">Metrics</th>}<th scope="col">Alias</th></tr></thead><tbody>{items.map((item) => <tr key={item.idAlias}><th scope="row"><strong>{item.name}</strong><small title={item.image}>{item.image}</small></th><td><StateBadge state={item.state} /></td><td>{item.cpuPercent === null ? "Unavailable" : `${item.cpuPercent.toFixed(1)}%`}</td><td>{formatBytes(item.memoryBytes)}</td>{dedicated && "metricsState" in item && <td><ContainerMetricQuality item={item} /></td>}<td>{item.idAlias}</td></tr>)}</tbody></table>;
+}
+
+function ContainerMetricQuality({ item }: { item: ContainerInventoryItem }) {
+  const stateLabel = titleCase(item.metricsState);
+  const reasonLabel = item.reasonCode ? titleCase(item.reasonCode) : null;
+  return <><StateBadge state={item.metricsState} />{reasonLabel && reasonLabel !== stateLabel && <small>{reasonLabel}</small>}</>;
 }
 
 function emptyMessage(support: string, collection: string, filtered: boolean): string {

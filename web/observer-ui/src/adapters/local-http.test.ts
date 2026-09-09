@@ -20,13 +20,13 @@ const containerInventory = {
   support_state: "SUPPORTED",
   collection_state: "PARTIAL",
   freshness: "CURRENT",
-  reason_code: "SOME_STATS_UNAVAILABLE",
+  reason_code: "STATS_PARTIAL",
   total_count: 2,
   returned_count: 2,
   truncated: false,
   items: [
     { id_alias: "ctr_0000000000000001", name: "observer-smoke-running", image: "example.invalid/observer:1.0", state: "running", cpu_percent: 0, memory_bytes: 134217728, metrics_state: "AVAILABLE", reason_code: null },
-    { id_alias: "ctr_0000000000000002", name: "observer-smoke-stopped", image: "example.invalid/worker:1.0", state: "exited", cpu_percent: null, memory_bytes: null, metrics_state: "NOT_RUNNING", reason_code: "CONTAINER_NOT_RUNNING" }
+    { id_alias: "ctr_0000000000000002", name: "observer-smoke-stopped", image: "example.invalid/worker:1.0", state: "exited", cpu_percent: null, memory_bytes: null, metrics_state: "NOT_RUNNING", reason_code: "NOT_RUNNING" }
   ],
   policy: { read_only: true, data_classification: "LOCAL_SENSITIVE", remote_upload_eligible: false }
 };
@@ -94,6 +94,10 @@ describe("LocalHttpObserverDataSource", () => {
   });
 
   it("strictly rejects invalid or secret-bearing container inventory fields", () => {
+    const knownTruncation = cloneFixture(containerInventory);
+    knownTruncation.truncated = true;
+    expect(mapContainerInventory(knownTruncation).truncated).toBe(true);
+
     const secret = cloneFixture(containerInventory);
     secret.items[0].environment_variables = ["TOKEN=synthetic-secret"];
     expect(() => mapContainerInventory(secret)).toThrow(/contract field/);

@@ -120,7 +120,7 @@ describe("ObserverDashboard", () => {
     expect(screen.getByText("observer-smoke-stopped")).toBeTruthy();
     expect(screen.getByText("0.0%")).toBeTruthy();
     expect(screen.getAllByText("Unavailable")).toHaveLength(2);
-    expect(screen.getByText("Container Not Running")).toBeTruthy();
+    expect(screen.getByText("Not Running")).toBeTruthy();
   });
 
   it("isolates a dedicated container inventory error inside the Containers tab", async () => {
@@ -163,13 +163,13 @@ const containerInventory: ContainerInventory = {
   supportState: "SUPPORTED",
   collectionState: "PARTIAL",
   freshness: "CURRENT",
-  reasonCode: "SOME_STATS_UNAVAILABLE",
+  reasonCode: "STATS_PARTIAL",
   totalCount: 2,
   returnedCount: 2,
   truncated: false,
   items: [
     { idAlias: "ctr_0000000000000001", name: "observer-smoke-running", image: "example.invalid/observer:1.0", state: "running", cpuPercent: 0, memoryBytes: 134217728, metricsState: "AVAILABLE", reasonCode: null },
-    { idAlias: "ctr_0000000000000002", name: "observer-smoke-stopped", image: "example.invalid/worker:1.0", state: "exited", cpuPercent: null, memoryBytes: null, metricsState: "NOT_RUNNING", reasonCode: "CONTAINER_NOT_RUNNING" }
+    { idAlias: "ctr_0000000000000002", name: "observer-smoke-stopped", image: "example.invalid/worker:1.0", state: "exited", cpuPercent: null, memoryBytes: null, metricsState: "NOT_RUNNING", reasonCode: "NOT_RUNNING" }
   ],
   policy: { readOnly: true, dataClassification: "LOCAL_SENSITIVE", remoteUploadEligible: false }
 };

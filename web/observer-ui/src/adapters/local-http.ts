@@ -290,7 +290,7 @@ export function mapContainerInventory(value: unknown): ContainerInventory {
   const returnedCount = integer(root.returned_count, 0, 500);
   const truncated = boolean(root.truncated);
   const items = boundedArray(root.items, 0, 500).map(mapContainerInventoryItem);
-  if (returnedCount !== items.length || returnedCount > totalCount || truncated !== (totalCount > returnedCount)) {
+  if (returnedCount !== items.length || returnedCount > totalCount || (!truncated && totalCount > returnedCount)) {
     throw new Error("container inventory counts are inconsistent");
   }
   assertNonSupportedSectionIsEmpty(quality, totalCount === 0 && returnedCount === 0 && !truncated && items.length === 0);
