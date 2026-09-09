@@ -44,6 +44,20 @@ func TestSeriesQueryRequiresClosedUniqueValues(t *testing.T) {
 	}
 }
 
+func TestContainerQueryIsClosedAndBounded(t *testing.T) {
+	for raw, want := range map[string]int{"": 100, "limit=1": 1, "limit=500": 500} {
+		query, err := parseContainerQuery(raw)
+		if err != nil || query.limit != want {
+			t.Fatalf("query %q = %+v, err=%v", raw, query, err)
+		}
+	}
+	for _, raw := range []string{"limit=0", "limit=501", "limit=01", "limit=-1", "limit=1&limit=2", "limit=1&extra=value", "limit=", "limit=%20", "limit=1&" + oversizedValue()} {
+		if _, err := parseContainerQuery(raw); err == nil {
+			t.Errorf("accepted invalid container query %q", raw)
+		}
+	}
+}
+
 func oversizedValue() string {
 	value := make([]byte, maxRawQueryBytes+1)
 	for index := range value {

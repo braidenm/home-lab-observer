@@ -27,6 +27,8 @@ type seriesQuery struct {
 	metrics    []history.MetricID
 }
 
+type containerQuery struct{ limit int }
+
 func parseCurrentQuery(raw string) (currentQuery, error) {
 	result := currentQuery{sections: make(map[string]bool), processLimit: 50, containerLimit: 100, logLimit: 50}
 	values, err := parseQuery(raw, map[string]bool{"section": true, "process_limit": true, "container_limit": true, "log_limit": true, "include_log_bodies": true})
@@ -88,6 +90,18 @@ func parseSeriesQuery(raw string) (seriesQuery, error) {
 		metrics = append(metrics, metric)
 	}
 	return seriesQuery{rangeValue: rangeValue, metrics: metrics}, nil
+}
+
+func parseContainerQuery(raw string) (containerQuery, error) {
+	values, err := parseQuery(raw, map[string]bool{"limit": true})
+	if err != nil {
+		return containerQuery{}, err
+	}
+	limit, err := scalarInt(values, "limit", 1, 500, 100)
+	if err != nil {
+		return containerQuery{}, err
+	}
+	return containerQuery{limit: limit}, nil
 }
 
 func parseQuery(raw string, allowed map[string]bool) (url.Values, error) {

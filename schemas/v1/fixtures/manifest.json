@@ -9,12 +9,18 @@
     { "schema": "schemas/v1/metric-series-v1.schema.json", "fixture": "schemas/v1/fixtures/valid/metric-series-6h.json", "valid": true },
     { "schema": "schemas/v1/metric-series-v1.schema.json", "fixture": "schemas/v1/fixtures/valid/metric-series-unsupported.json", "valid": true },
     { "schema": "schemas/v1/problem-details-v1.schema.json", "fixture": "schemas/v1/fixtures/valid/problem-invalid-query.json", "valid": true },
+    { "schema": "schemas/v1/container-inventory-v1.schema.json", "fixture": "schemas/v1/fixtures/valid/container-inventory-running-stopped.json", "valid": true },
+    { "schema": "schemas/v1/container-inventory-v1.schema.json", "fixture": "schemas/v1/fixtures/valid/container-inventory-disabled.json", "valid": true },
+    { "schema": "schemas/v1/container-inventory-v1.schema.json", "fixture": "schemas/v1/fixtures/valid/container-inventory-empty.json", "valid": true },
     { "schema": "schemas/v1/capabilities-v1.schema.json", "fixture": "schemas/v1/fixtures/invalid/capabilities-unknown-state.json", "valid": false },
     { "schema": "schemas/v1/current-snapshot-v1.schema.json", "fixture": "schemas/v1/fixtures/invalid/current-snapshot-unsupported-with-items.json", "valid": false },
     { "schema": "schemas/v1/current-snapshot-v1.schema.json", "fixture": "schemas/v1/fixtures/invalid/current-snapshot-uploadable-log-body.json", "valid": false },
     { "schema": "schemas/v1/metric-series-v1.schema.json", "fixture": "schemas/v1/fixtures/invalid/metric-series-arbitrary-query.json", "valid": false },
     { "schema": "schemas/v1/metric-series-v1.schema.json", "fixture": "schemas/v1/fixtures/invalid/metric-series-non-utc.json", "valid": false },
     { "schema": "schemas/v1/metric-series-v1.schema.json", "fixture": "schemas/v1/fixtures/invalid/metric-series-unbounded.json", "valid": false },
-    { "schema": "schemas/v1/problem-details-v1.schema.json", "fixture": "schemas/v1/fixtures/invalid/problem-stack-trace.json", "valid": false }
+    { "schema": "schemas/v1/problem-details-v1.schema.json", "fixture": "schemas/v1/fixtures/invalid/problem-stack-trace.json", "valid": false },
+    { "schema": "schemas/v1/container-inventory-v1.schema.json", "fixture": "schemas/v1/fixtures/invalid/container-inventory-stopped-metrics.json", "valid": false },
+    { "schema": "schemas/v1/container-inventory-v1.schema.json", "fixture": "schemas/v1/fixtures/invalid/container-inventory-unsafe-fields.json", "valid": false },
+    { "schema": "schemas/v1/container-inventory-v1.schema.json", "fixture": "schemas/v1/fixtures/invalid/container-inventory-partial-without-value.json", "valid": false }
   ]
 }

@@ -1,0 +1,22 @@
+{
+  "schema_version": "observer-container-inventory/v1",
+  "observed_at": "2026-09-09T12:00:00Z",
+  "support_state": "SUPPORTED",
+  "collection_state": "OK",
+  "freshness": "CURRENT",
+  "reason_code": null,
+  "total_count": 1,
+  "returned_count": 1,
+  "truncated": false,
+  "items": [{
+    "id_alias": "ctr_04b9f5917af02c1d",
+    "name": "stopped-worker",
+    "image": "example.invalid/stopped-worker:1.0",
+    "state": "exited",
+    "cpu_percent": 0,
+    "memory_bytes": 0,
+    "metrics_state": "AVAILABLE",
+    "reason_code": null
+  }],
+  "policy": { "read_only": true, "data_classification": "LOCAL_SENSITIVE", "remote_upload_eligible": false }
+}

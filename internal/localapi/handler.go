@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/braidenm/home-lab-observer/internal/containerobs"
 	"github.com/braidenm/home-lab-observer/internal/history"
 	"github.com/braidenm/home-lab-observer/internal/projection"
 	"github.com/braidenm/home-lab-observer/internal/scheduler"
@@ -26,13 +27,16 @@ type Source interface {
 	StoreHealth() history.Health
 }
 
+type ContainerSource interface{ Current() containerobs.Inventory }
+
 type Config struct {
-	Port    int
-	Token   string
-	Version string
-	Source  Source
-	History series.Reader
-	Now     func() time.Time
+	Port            int
+	Token           string
+	Version         string
+	Source          Source
+	History         series.Reader
+	ContainerSource ContainerSource
+	Now             func() time.Time
 }
 
 type handler struct {
@@ -94,6 +98,8 @@ func (h *handler) api(w http.ResponseWriter, r *http.Request) {
 		h.writeJSON(w, r, http.StatusOK, buildCapabilities(h.config.Version, h.config.Now(), current, ok), capabilitiesResponseLimit)
 	case "/api/v1/snapshots/current":
 		h.current(w, r)
+	case "/api/v1/containers":
+		h.containers(w, r)
 	case "/api/v1/metrics/series":
 		h.series(w, r)
 	default:

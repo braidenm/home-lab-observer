@@ -13,6 +13,7 @@ const schemaPaths = [
   "schemas/v1/capabilities-v1.schema.json",
   "schemas/v1/current-snapshot-v1.schema.json",
   "schemas/v1/metric-series-v1.schema.json",
+  "schemas/v1/container-inventory-v1.schema.json",
   "schemas/v1/problem-details-v1.schema.json"
 ];
 const schemas = schemaPaths.map(readJson);
@@ -46,9 +47,15 @@ for (const [route, pathItem] of Object.entries(api.paths)) {
 const caps = api.paths["/api/v1/capabilities"].get;
 const snapshot = api.paths["/api/v1/snapshots/current"].get;
 const series = api.paths["/api/v1/metrics/series"].get;
+const containers = api.paths["/api/v1/containers"].get;
 if (caps["x-max-response-bytes"] !== 131072) fail("Capabilities response cap must be 128 KiB");
 if (snapshot["x-max-response-bytes"] !== 1048576) fail("Snapshot response cap must be 1 MiB");
 if (series["x-max-response-bytes"] !== 1048576) fail("Metric series response cap must be 1 MiB");
+if (containers["x-max-response-bytes"] !== 1048576) fail("Container inventory response cap must be 1 MiB");
+if (containers.parameters.length !== 1 || containers.parameters[0].name !== "limit" || containers.parameters[0].in !== "query") fail("Container inventory accepts only the limit query parameter");
+for (const [key, value] of Object.entries({ minimum: 1, maximum: 500, default: 100 })) {
+  if (containers.parameters[0].schema[key] !== value) fail(`Container inventory limit.${key} must equal ${value}`);
+}
 const expectedQueries = {
   process_limit: { minimum: 1, maximum: 200, default: 50 },
   container_limit: { minimum: 1, maximum: 500, default: 100 },
@@ -120,6 +127,26 @@ function validateMetricSeriesFixture(fixture, fixturePath) {
   inspect(fixture);
 }
 
+function validateContainerInventoryFixture(fixture, fixturePath) {
+  if (fixture.returned_count !== fixture.items.length || fixture.returned_count > fixture.total_count) {
+    fail(`${fixturePath} has inconsistent container counts`);
+  }
+  if (!fixture.truncated && fixture.total_count > fixture.returned_count) {
+    fail(`${fixturePath} must expose container truncation`);
+  }
+  const aliases = fixture.items.map((item) => item.id_alias);
+  if (new Set(aliases).size !== aliases.length) fail(`${fixturePath} has duplicate container aliases`);
+  const prohibited = new Set(["id", "raw_id", "command", "commands", "environment", "env", "mount", "mounts", "label", "labels", "port", "ports", "daemon_error"]);
+  const inspect = (value, location = "$") => {
+    if (Array.isArray(value)) return value.forEach((item, index) => inspect(item, `${location}[${index}]`));
+    if (value && typeof value === "object") for (const [key, item] of Object.entries(value)) {
+      if (prohibited.has(key.toLowerCase())) fail(`Forbidden container field ${key} in ${fixturePath} at ${location}`);
+      inspect(item, `${location}.${key}`);
+    }
+  };
+  inspect(fixture);
+}
+
 const manifest = readJson("schemas/v1/fixtures/manifest.json");
 let validCount = 0;
 let invalidCount = 0;
@@ -133,8 +160,9 @@ for (const testCase of manifest.cases) {
     validCount += 1;
     scan(fixture);
     if (testCase.schema.includes("metric-series")) validateMetricSeriesFixture(fixture, testCase.fixture);
+    if (testCase.schema.includes("container-inventory")) validateContainerInventoryFixture(fixture, testCase.fixture);
     const bytes = fs.statSync(path.join(root, testCase.fixture)).size;
-    const ceiling = testCase.schema.includes("current-snapshot") || testCase.schema.includes("metric-series") ? 1048576 : 131072;
+    const ceiling = testCase.schema.includes("current-snapshot") || testCase.schema.includes("metric-series") || testCase.schema.includes("container-inventory") ? 1048576 : 131072;
     if (bytes > ceiling) fail(`${testCase.fixture} exceeds ${ceiling} bytes`);
   } else invalidCount += 1;
 }

@@ -77,6 +77,26 @@
         }
       }
     },
+    "/api/v1/containers": {
+      "get": {
+        "operationId": "getContainerInventory",
+        "summary": "Return the cached read-only container inventory",
+        "description": "Returns the dedicated nullable-metrics container view. It never contacts Docker during an HTTP request and does not change the legacy containers section in the current snapshot, which remains unsupported in v1.",
+        "x-max-response-bytes": 1048576,
+        "parameters": [
+          { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Container inventory, including an explicit disabled or unavailable state",
+            "content": { "application/json": { "schema": { "$ref": "..\/schemas\/v1\/container-inventory-v1.schema.json" } } }
+          },
+          "400": { "$ref": "#\/components\/responses\/Problem" },
+          "401": { "$ref": "#\/components\/responses\/Problem" },
+          "500": { "$ref": "#\/components\/responses\/Problem" }
+        }
+      }
+    },
     "/api/v1/metrics/series": {
       "get": {
         "operationId": "getMetricSeries",
