@@ -71,6 +71,90 @@ func TestExclusiveInstanceAndIdempotentClose(t *testing.T) {
 	}
 }
 
+func TestAbandonPreservesFailureEvidenceAndAllowsValidatedRecovery(t *testing.T) {
+	state := testStateDir(t)
+	first, err := New(Config{StateDir: state, Random: strings.NewReader(strings.Repeat("a", nonceBytes)), PollInterval: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(state, controlDirectory, instanceName)
+	old, err := readInstance(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Abandon(); err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Abandon(); err != nil {
+		t.Fatal(err)
+	}
+	retained, err := readInstance(path)
+	if err != nil || retained.Nonce != old.Nonce {
+		t.Fatalf("abandoned instance was not preserved: %+v, %v", retained, err)
+	}
+
+	second, err := New(Config{StateDir: state, Random: strings.NewReader(strings.Repeat("b", nonceBytes))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := readInstance(path)
+	if err != nil || current.Nonce == old.Nonce {
+		t.Fatalf("stale instance was not replaced: %+v, %v", current, err)
+	}
+	if err := second.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAbandonWinsRaceWithCloseWithoutDeletingPublication(t *testing.T) {
+	state := testStateDir(t)
+	endpoint, err := New(Config{StateDir: state})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := endpoint.Abandon(); err != nil {
+		t.Fatal(err)
+	}
+	if err := endpoint.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readInstance(filepath.Join(state, controlDirectory, instanceName)); err != nil {
+		t.Fatalf("Close after Abandon changed terminal outcome: %v", err)
+	}
+}
+
+func TestAbandonCannotAcknowledgeWaitingStopRequester(t *testing.T) {
+	state := testStateDir(t)
+	endpoint, err := New(Config{StateDir: state, PollInterval: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	result := make(chan error, 1)
+	go func() { result <- RequestStop(ctx, state) }()
+	requestPath := filepath.Join(state, controlDirectory, requestName)
+	deadline := time.Now().Add(100 * time.Millisecond)
+	for {
+		if _, err := os.Lstat(requestPath); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("stop request was not published")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if err := endpoint.Abandon(); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-result; !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("abandoned endpoint falsely acknowledged stop: %v", err)
+	}
+	if _, err := readInstance(filepath.Join(state, controlDirectory, instanceName)); err != nil {
+		t.Fatalf("abandoned instance evidence missing: %v", err)
+	}
+}
+
 func TestMalformedOversizedAndWrongInstanceRequestsNeverSignal(t *testing.T) {
 	tests := []struct {
 		name     string

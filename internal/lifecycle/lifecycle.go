@@ -181,13 +181,28 @@ func (e *Endpoint) watch() {
 }
 
 func (e *Endpoint) Close() error {
+	return e.finish(true)
+}
+
+// Abandon releases in-process resources after an unclean runtime shutdown but
+// deliberately preserves the instance publication. A stop requester therefore
+// times out instead of mistaking an incomplete history/listener drain for
+// success. The next exclusively locked New validates and replaces the stale
+// publication.
+func (e *Endpoint) Abandon() error {
+	return e.finish(false)
+}
+
+func (e *Endpoint) finish(clean bool) error {
 	e.closeOnce.Do(func() {
 		close(e.done)
 		<-e.stopped
-		err1 := removeOwnRequest(e.directory, e.nonce)
-		err2 := removeOwnInstance(e.directory, e.nonce)
-		err3 := e.lock.Close()
-		e.closeErr = errors.Join(err1, err2, err3)
+		if clean {
+			err1 := removeOwnRequest(e.directory, e.nonce)
+			err2 := removeOwnInstance(e.directory, e.nonce)
+			e.closeErr = errors.Join(err1, err2)
+		}
+		e.closeErr = errors.Join(e.closeErr, e.lock.Close())
 	})
 	return e.closeErr
 }
