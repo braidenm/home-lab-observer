@@ -99,6 +99,9 @@ try {
           await page.getByText('No records: collector support is UNSUPPORTED.', { exact: true }).waitFor();
         }
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${view} overflows at ${width}px`);
+        if ((view === 'Overview' || view === 'Trends') && width !== 768) {
+          await page.screenshot({ path: join(temporary, `${view.toLowerCase()}-${width}.png`), fullPage: true });
+        }
       }
       assert(!(await page.locator('body').innerText()).includes(token), 'token visible in page text');
       await page.screenshot({ path: join(temporary, `dashboard-${width}.png`), fullPage: true });
