@@ -1,7 +1,7 @@
 # Tasks: Local data plane and bounded history
 
 - [x] Accept the loopback service, bounded-history, authentication, and embedded-dashboard boundary.
-- [ ] Add the closed series API/schema, fixtures, compatibility notes, and traceability.
+- [x] Add the closed series API/schema, fixtures, compatibility notes, and traceability.
 - [x] Implement versioned SQLite migrations, low-cardinality samples/rollups, pruning, checkpointing, and quarantine.
 - [x] Implement the single-flight scheduler, monotonic sequencing, current cache, and graceful shutdown.
 - [ ] Implement authenticated handlers, health reads, validation middleware, Problem Details, and response ceilings.

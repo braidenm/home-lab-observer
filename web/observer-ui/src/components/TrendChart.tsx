@@ -1,6 +1,7 @@
 import { useId } from "react";
 import type { TrendSeries } from "../types";
 import { formatValue } from "./format";
+import { StateBadge } from "./StateBadge";
 
 export function TrendChart({ series }: { series: TrendSeries }) {
   const id = useId();
@@ -30,7 +31,7 @@ export function TrendChart({ series }: { series: TrendSeries }) {
           <p className="observer-eyebrow">{series.label}</p>
           <strong>{formatValue(current, series.unit)}</strong>
         </div>
-        <StateKey color={series.color} />
+        <div><StateBadge state={series.supportState} /><StateKey color={series.color} /></div>
       </div>
       <svg
         className={`observer-chart observer-chart--${series.color}`}
@@ -52,6 +53,7 @@ export function TrendChart({ series }: { series: TrendSeries }) {
         <span>Earlier</span>
         <span>Now</span>
       </div>
+      <p className="observer-muted">{series.pointCount} samples · {series.gapCount} gaps{series.truncated ? " · response truncated" : ""}{series.reasonCode ? ` · ${series.reasonCode.replaceAll("_", " ").toLowerCase()}` : ""}</p>
     </article>
   );
 }

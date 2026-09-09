@@ -5,7 +5,7 @@ transport-neutral component and normalized view contracts only. Consumers provid
 HTTP adapter and synthetic demo source are explicit subpath imports.
 
 The observer binary can use `LocalHttpObserverDataSource` against its loopback API. It reads only the accepted
-`GET /api/v1/capabilities` and `GET /api/v1/snapshots/current` contracts. Platform Demo provides its own authenticated
+capabilities, current-snapshot, and bounded metric-series `GET` contracts. Platform Demo provides its own authenticated
 adapter rather than trying to call or iframe another machine's loopback dashboard.
 
 ## Development
@@ -46,5 +46,6 @@ export function App() {
 The default origin is `http://127.0.0.1:9847`. Absolute URLs must use `localhost`, `127.0.0.1`, or `::1`; an explicit
 empty base URL selects same-origin embedding. The adapter sends no cookies, follows no redirects, keeps an optional
 bearer token only in memory, enforces the contract response ceilings, and parses Problem Details without exposing raw
-responses. Spec 002 has no historical-series endpoint, so the local adapter reports Trends as unsupported; the demo
-subpath supplies optional synthetic series.
+responses. Trends request the six code-owned metric identifiers at `/api/v1/metrics/series`; the adapter preserves null
+gaps, actual sample resolution, support state, and truncation metadata. The optional data-source method lets remote
+consumers omit local history rather than inventing it from snapshots.
