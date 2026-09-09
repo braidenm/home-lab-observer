@@ -2,7 +2,8 @@
 
 import { createHash } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
-import { chmod, lstat, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { createServer } from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -194,7 +195,7 @@ async function nativeSmoke(directory, version, commit, checksums) {
   const format = platform === "windows" ? "zip" : "tar.gz";
   const archiveName = `home-lab-observer_${version}_${platform}_${arch}.${format}`;
   const archive = path.join(directory, archiveName);
-  const temporary = await mkdtemp(path.join(os.tmpdir(), "observer native delivery "));
+  const temporary = await realpath(await mkdtemp(path.join(os.tmpdir(), "observer native delivery ")));
   try {
     execFileSync("tar", ["-xf", archive, "-C", temporary], { stdio: "inherit", timeout: 30_000 });
     const root = path.join(temporary, `home-lab-observer_${version}_${platform}_${arch}`);
@@ -202,6 +203,12 @@ async function nativeSmoke(directory, version, commit, checksums) {
     if (platform !== "windows") await chmod(executable, 0o755);
     verifyVersion(runObserver(executable, ["version", "--json"]), version, commit, platform, arch);
     await smokeAuthenticatedService(executable, temporary);
+    // Exercise the exact packaged binary on every native release architecture.
+    // This starts only temporary foreground children, never a login registration.
+    execFileSync(process.execPath, [fileURLToPath(new URL("./smoke-background-runtime.mjs", import.meta.url))], {
+      env: { ...process.env, OBSERVER_SMOKE_BINARY: executable },
+      stdio: "inherit", timeout: 180_000, windowsHide: true,
+    });
 
     const installRoot = path.join(temporary, "managed install root");
     const stateSentinel = path.join(temporary, "observer-state-must-survive.txt");

@@ -100,6 +100,8 @@ jobs:
         with:
           name: native-preview-${{ github.sha }}
           path: dist/release
+      - name: Install schema validators for packaged runtime smoke
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Test installer lifecycle on Unix
         if: runner.os != 'Windows'
         shell: bash

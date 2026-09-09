@@ -181,6 +181,8 @@ jobs:
         with:
           name: native-release-${{ needs.authorize.outputs.version }}
           path: dist/release
+      - name: Install schema validators for packaged runtime smoke
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Test installer lifecycle on Unix
         if: runner.os != 'Windows'
         shell: bash
@@ -263,7 +265,7 @@ jobs:
             }
           }
           gh release create "$tag" --verify-tag --title "Home Lab Observer ${VERSION}" \
-            --notes "Unsigned native preview. Verify SHA256SUMS and GitHub provenance before running. No production signing certificate is used in this preview." \
+            --notes-file docs/releases/native-preview.md \
             --draft --prerelease
           verify_tag
           gh release upload "$tag" dist/release/*
