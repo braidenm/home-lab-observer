@@ -81,6 +81,12 @@ order, preserving namespace, cardinality, attributes, values and nested action/t
 not justify accepting an unknown task or skipping saved-registration verification. Root independently verified the
 schema on 2026-09-09 against the sanitized diagnostic from hosted run `34408746316`.
 
+Run `34410120460` then exposed the same order-only difference inside `Settings`. A complete review of Microsoft's
+schema confirms `xs:all` for the emitted profile's `Task`, `RegistrationInfo`, `Settings`, `IdleSettings`,
+`RestartOnFailure` and `Principal` nodes. Those exact namespace-qualified paths can be compared without child-order
+significance; attributes, values, allowed children and multiplicity remain exact. Trigger, action and executable
+sequences are not included. This extends the initial top-level finding rather than making every XML subtree unordered.
+
 ## Acceptance and rollback
 
 Fake adapters verify exact arguments and manager states; native CI verifies syntax and isolated registrations when a
