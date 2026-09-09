@@ -19,6 +19,7 @@ func (f fixedClock) Now() time.Time { return f.t }
 type fakeProvider struct {
 	cpuErr, memoryErr, swapErr, partitionErr, networkErr, uptimeErr, processErr error
 	usageErr                                                                    map[string]error
+	processResult                                                               *ProcessResult
 }
 
 func (f fakeProvider) LogicalCPUCount(context.Context) (int, error) { return 8, f.cpuErr }
@@ -42,8 +43,12 @@ func (f fakeProvider) Network(context.Context) (NetStat, error) {
 	return NetStat{1, 2, 3, 4, 5, 6, 7, 8}, f.networkErr
 }
 func (f fakeProvider) Uptime(context.Context) (uint64, error) { return 99, f.uptimeErr }
-func (f fakeProvider) Processes(context.Context) ([]ProcessStat, int, error) {
-	return []ProcessStat{{PID: 3, Name: "small", State: "running", CPUPercent: 99, MemoryBytes: 10}, {PID: 2, Name: `C:\Users\secret\big` + "\x00name", State: "running", CPUPercent: 1, MemoryBytes: 100}, {PID: 1, Name: "medium", State: "sleeping", CPUPercent: 2, MemoryBytes: 50}}, 0, f.processErr
+func (f fakeProvider) Processes(context.Context) (ProcessResult, error) {
+	if f.processResult != nil {
+		return *f.processResult, f.processErr
+	}
+	items := []ProcessStat{{PID: 3, Name: "small", State: "running", CPUPercent: 99, MemoryBytes: 10}, {PID: 2, Name: `C:\Users\secret\big` + "\x00name", State: "running", CPUPercent: 1, MemoryBytes: 100}, {PID: 1, Name: "medium", State: "sleeping", CPUPercent: 2, MemoryBytes: 50}}
+	return ProcessResult{Processes: items, Discovered: len(items), Scanned: len(items)}, f.processErr
 }
 
 func TestCollectDeterministicSafeAndBounded(t *testing.T) {
@@ -125,5 +130,28 @@ func TestNoRawErrorsInJSON(t *testing.T) {
 	b, _ := json.Marshal(s)
 	if strings.Contains(string(b), "do-not-leak") || s.Network.ReasonCode != observation.ReasonCollectionFailed {
 		t.Fatalf("unsafe error contract: %s", b)
+	}
+}
+
+func TestAllProcessesPermissionDenied(t *testing.T) {
+	result := ProcessResult{Discovered: 4, Scanned: 4, PermissionDenied: 4}
+	s := New(fixedClock{time.Now().UTC()}, fakeProvider{processResult: &result}, DefaultConfig()).Collect(context.Background())
+	if s.Processes.State != observation.PermissionDenied || s.Processes.ReasonCode != observation.ReasonPermissionDenied || s.Processes.Quality.Total != 4 {
+		t.Fatalf("processes=%+v", s.Processes)
+	}
+}
+
+func TestMixedProcessAccessIsPartial(t *testing.T) {
+	result := ProcessResult{Processes: []ProcessStat{{PID: 7, Name: "worker", State: "running", CPUPercent: 1}}, Discovered: 3, Scanned: 3, PermissionDenied: 1, Unsupported: 1}
+	s := New(fixedClock{time.Now().UTC()}, fakeProvider{processResult: &result}, DefaultConfig()).Collect(context.Background())
+	if s.Processes.State != observation.Degraded || s.Processes.Quality.Errors != 2 || s.Processes.Quality.Total != 3 || !s.Processes.Quality.Truncated {
+		t.Fatalf("processes=%+v", s.Processes)
+	}
+}
+
+func TestUnsupportedErrorClassification(t *testing.T) {
+	s := New(fixedClock{time.Now().UTC()}, fakeProvider{processErr: errors.ErrUnsupported}, DefaultConfig()).Collect(context.Background())
+	if s.Processes.State != observation.Unsupported || s.Processes.ReasonCode != observation.ReasonUnsupported {
+		t.Fatalf("processes=%+v", s.Processes)
 	}
 }

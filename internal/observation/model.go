@@ -16,6 +16,7 @@ const (
 	Unavailable      SupportState = "UNAVAILABLE"
 	Disabled         SupportState = "DISABLED"
 	PermissionDenied SupportState = "PERMISSION_DENIED"
+	Unsupported      SupportState = "UNSUPPORTED"
 	Unknown          SupportState = "UNKNOWN"
 )
 
@@ -48,6 +49,7 @@ const (
 	ReasonPartialCollection ReasonCode = "partial_collection"
 	ReasonDisabled          ReasonCode = "disabled_by_configuration"
 	ReasonNoData            ReasonCode = "no_data"
+	ReasonUnsupported       ReasonCode = "unsupported"
 )
 
 type Source struct {

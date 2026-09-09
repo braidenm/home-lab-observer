@@ -213,14 +213,27 @@ func (c *Collector) processes(ctx context.Context) observation.Section[[]observa
 		return observation.Section[[]observation.Process]{State: observation.Disabled, ReasonCode: observation.ReasonDisabled}
 	}
 	start := c.clock.Now()
-	ps, skipped, e := c.provider.Processes(ctx)
+	result, e := c.provider.Processes(ctx)
 	if e != nil {
 		st, r := classify(e)
 		return observation.Section[[]observation.Process]{State: st, ReasonCode: r, Quality: sq(c.clock.Now().Sub(start), 0, 1)}
 	}
+	if len(result.Processes) == 0 && result.Scanned > 0 {
+		q := sq(c.clock.Now().Sub(start), 0, result.PermissionDenied+result.Unsupported+result.Failed)
+		q.Total = result.Discovered
+		switch {
+		case result.PermissionDenied == result.Scanned:
+			return observation.Section[[]observation.Process]{State: observation.PermissionDenied, ReasonCode: observation.ReasonPermissionDenied, Quality: q}
+		case result.Unsupported == result.Scanned:
+			return observation.Section[[]observation.Process]{State: observation.Unsupported, ReasonCode: observation.ReasonUnsupported, Quality: q}
+		default:
+			return observation.Section[[]observation.Process]{State: observation.Unavailable, ReasonCode: observation.ReasonCollectionFailed, Quality: q}
+		}
+	}
+	ps := result.Processes
 	now := c.clock.Now().UnixMilli()
 	out := make([]observation.Process, 0, len(ps))
-	errs := skipped
+	errs := result.PermissionDenied + result.Unsupported + result.Failed
 	if len(ps) > hardMaxProcessScan {
 		ps = ps[:hardMaxProcessScan]
 		errs++
@@ -258,7 +271,7 @@ func (c *Collector) processes(ctx context.Context) observation.Section[[]observa
 		r = observation.ReasonPartialCollection
 	}
 	q := sq(c.clock.Now().Sub(start), len(out), errs)
-	q.Total, q.Truncated = len(ps), len(ps) > len(out)
+	q.Total, q.Truncated = result.Discovered, result.Discovered > len(out)
 	return observation.Section[[]observation.Process]{State: st, ReasonCode: r, Quality: q, Data: &out}
 }
 
@@ -274,6 +287,9 @@ func classify(e error) (observation.SupportState, observation.ReasonCode) {
 	}
 	if errors.Is(e, ErrNoData) {
 		return observation.Unavailable, observation.ReasonNoData
+	}
+	if errors.Is(e, errors.ErrUnsupported) {
+		return observation.Unsupported, observation.ReasonUnsupported
 	}
 	return observation.Unavailable, observation.ReasonCollectionFailed
 }

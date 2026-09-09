@@ -18,6 +18,7 @@ conforms exactly to `observer-current-snapshot/v1` without starting a listener o
 - **R4 Quality:** Unavailable and permission-denied data MUST not be represented as healthy zeroes; total, returned, and truncated list counts MUST be explicit.
 - **R5 Portability:** The runtime MUST test on GitHub-hosted Windows, macOS, and Linux and cross-build amd64 and arm64 binaries for all three systems with pinned actions in less than 15 minutes. Linux CI MUST run the race detector.
 - **R6 Lockstep:** A deterministic Go projection fixture MUST be validated by both Go tests and the canonical AJV contract suite.
+- **R7 CLI semantics:** Help MUST exit 0. Invalid usage MUST exit 2. The command MUST emit a schema-valid snapshot and exit 1 when all implemented visible sections fail; `OK` and `PARTIAL` snapshots exit 0.
 
 ## Boundaries
 
@@ -27,4 +28,6 @@ The raw collector may retain safe metrics that the closed v1 schema cannot repre
 ## Acceptance evidence
 
 `go test ./...`, `go vet ./...`, and `npm test` pass. The fixture manifest validates the native preview, projection tests
-lock the Go result to that fixture, and runtime CI exercises native test jobs, the Linux race detector, and six no-CGO cross-builds.
+lock the Go result to that fixture, and every native runtime CI job validates a real `collect-once` snapshot through AJV.
+Tests also cover shared 16-filesystem/200-process projection caps, true truncation totals, access-denied process scans,
+projection-boundary name sanitization, projected collection quality, CLI help, and failed-snapshot exit behavior.

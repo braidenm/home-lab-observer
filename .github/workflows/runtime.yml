@@ -26,11 +26,18 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: go test ./...
       - name: Run race detector
         if: runner.os == 'Linux'
         run: go test -race ./...
       - run: go vet ./...
+      - name: Validate real native snapshot against JSON Schema
+        run: node scripts/validate-runtime-snapshot.mjs
 
   cross-build:
     runs-on: ubuntu-latest
