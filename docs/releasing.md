@@ -27,6 +27,8 @@ does not run on PR events and only its final jobs receive attestation or publica
 ## Owner preflight and dispatch
 
 1. Merge the reviewed delivery changes through required checks. Do not dispatch an unmerged branch.
+   Update `docs/releases/native-preview.md` in that reviewed change: publication uses that exact feature/compatibility
+   text for the release notes. It is not generated from an arbitrary preview number.
 2. In this repository's **Settings → General → Releases**, verify release immutability is enabled. An authenticated
    repository administrator can also check it with the command below. Require `enabled: true`.
 3. Choose a new `0.1.0-preview.N` version with a positive number and no existing release/tag. Do not reuse a failed
@@ -36,7 +38,8 @@ does not run on PR events and only its final jobs receive attestation or publica
 
 ```sh
 gh api -H 'X-GitHub-Api-Version: 2026-03-10' repos/braidenm/home-lab-observer/immutable-releases
-gh workflow run native-release.yml --ref main -f version=0.1.0-preview.1 -F immutability_confirmed=true
+read -r -p 'New unused preview version (0.1.0-preview.N): ' observer_version
+gh workflow run native-release.yml --ref main -f version="$observer_version" -F immutability_confirmed=true
 ```
 
 The settings API requires administrator-read permission, which the workflow deliberately does not have. Do not add an

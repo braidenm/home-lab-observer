@@ -12,11 +12,12 @@ opt-in container inventory and resource readings. See [build and run instruction
 and [connect a local Docker engine](docs/container-observations.md).
 The project remains pre-release. [Native delivery instructions](docs/install.md) describe the verified preview archives
 and per-user helpers; [GitHub Releases](https://github.com/braidenm/home-lab-observer/releases) lists published versions.
-Windows/macOS previews are explicitly not publisher-signed/notarized. Background services and remote sync remain separate milestones.
+Windows/macOS previews are explicitly not publisher-signed/notarized. Spec 008 adds optional user-session background
+operation; choose a release whose notes include that support. Remote sync remains a separate milestone.
 
 ## Try it without development tools
 
-1. [Download the verified native preview](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-preview.1)
+1. [Choose a verified native preview](https://github.com/braidenm/home-lab-observer/releases)
    for your Windows, Mac or Linux machine. No GitHub account/token, Docker, Go or Node is needed.
 2. Follow the [short OS-specific install guide](docs/install.md) to verify the archive and open its launch helper.
 3. Open `http://127.0.0.1:9847`, then unlock it with the local token file shown in the console.

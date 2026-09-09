@@ -8,6 +8,8 @@ package. Nothing is sent to Platform Demo by this preview.
 
 Open [GitHub Releases](https://github.com/braidenm/home-lab-observer/releases) and choose the explicitly labeled preview.
 The first published version is [0.1.0-preview.1](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-preview.1).
+The examples below target `0.1.0-preview.2`, which adds optional background operation. Confirm that version is listed
+before running them; preview 1 supports foreground operation only. Always use an installer from the chosen release.
 Choose your **host OS**, not Docker's virtual-machine OS:
 
 | Machine | Archive suffix |
@@ -57,13 +59,13 @@ version; there is no auto-update or moving `latest` execution target.
 Linux/macOS:
 
 ```sh
-bash ./install.sh --version 0.1.0-preview.1
+bash ./install.sh --version 0.1.0-preview.2
 ```
 
 Windows PowerShell:
 
 ```powershell
-.\install.ps1 -Version 0.1.0-preview.1
+.\install.ps1 -Version 0.1.0-preview.2
 ```
 
 The helper prints the installed launcher path. It does not start the observer, change your PATH, request administrator
@@ -85,7 +87,7 @@ An unmanaged nonempty directory is rejected rather than overwritten.
 For an offline installation, provide the downloaded archive and its independently verified SHA-256:
 
 ```sh
-bash ./install.sh --version 0.1.0-preview.1 --archive ./home-lab-observer_0.1.0-preview.1_linux_amd64.tar.gz --checksum YOUR_64_HEX_SHA256
+bash ./install.sh --version 0.1.0-preview.2 --archive ./home-lab-observer_0.1.0-preview.2_linux_amd64.tar.gz --checksum YOUR_64_HEX_SHA256
 ```
 
 PowerShell uses `-Version`, `-Archive`, and `-Checksum` with the same meaning. Replace the illustrative checksum; it is
@@ -96,8 +98,10 @@ retained. To select a previously installed version, use `--rollback VERSION` or 
 rollbacks, not database backups: check release compatibility notes before opening newer state with an older binary.
 
 `--uninstall` / `-Uninstall` removes only recognized managed program files. Observation history and the local token are
-preserved. This preview does not register background services. Background startup and log-rotation profiles will be
-separately documented and explicitly enabled, rather than installed as an unexpected side effect.
+preserved. Installation never enables background startup. If you explicitly enabled it afterward, use
+`observer background disable --install-root PATH` before uninstalling or rolling back to a foreground-only version.
+The installer refuses removal while a managed registration remains. See [background operation](background-operation.md)
+for login limitations, token locations, safe shutdown and bounded product diagnostics.
 
 ## Verify provenance and report problems
 
