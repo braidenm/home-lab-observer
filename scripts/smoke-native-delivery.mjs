@@ -135,6 +135,8 @@ async function smokeAuthenticatedService(executable, temporary) {
   const processHandle = spawn(executable, ["serve", "--listen", `127.0.0.1:${port}`, "--state-dir", state], {
     stdio: ["ignore", "pipe", "pipe"],
   });
+  let spawnError;
+  processHandle.once("error", (error) => { spawnError = error; });
   let output = "";
   for (const stream of [processHandle.stdout, processHandle.stderr]) {
     stream.on("data", (chunk) => { output = (output + chunk).slice(-16_384); });
@@ -143,6 +145,7 @@ async function smokeAuthenticatedService(executable, temporary) {
     const deadline = Date.now() + 45_000;
     let live = false;
     while (Date.now() < deadline && processHandle.exitCode === null) {
+      if (spawnError) fail(`packaged service could not start: ${spawnError.message}`);
       try {
         const response = await fetch(`http://127.0.0.1:${port}/health/live`, { signal: AbortSignal.timeout(2_000) });
         if (response.ok) { live = true; break; }
@@ -164,14 +167,22 @@ async function smokeAuthenticatedService(executable, temporary) {
     const capabilities = JSON.parse(body);
     if (capabilities.schema_version !== "observer-capabilities/v1") fail("packaged capabilities response used the wrong contract");
   } finally {
-    processHandle.kill("SIGTERM");
-    if (processHandle.exitCode === null) {
-      await Promise.race([
-        new Promise((resolve) => processHandle.once("exit", resolve)),
-        delay(5_000),
-      ]);
+    if (processHandle.pid !== undefined && processHandle.exitCode === null) {
+      processHandle.kill("SIGTERM");
+      if (!(await waitForExit(processHandle, 5_000))) {
+        processHandle.kill("SIGKILL");
+        if (!(await waitForExit(processHandle, 5_000))) fail("packaged service did not stop after forced termination");
+      }
     }
   }
+}
+
+async function waitForExit(processHandle, timeoutMilliseconds) {
+  if (processHandle.exitCode !== null) return true;
+  return Promise.race([
+    new Promise((resolve) => processHandle.once("exit", () => resolve(true))),
+    delay(timeoutMilliseconds).then(() => false),
+  ]);
 }
 
 async function nativeSmoke(directory, version, commit, checksums) {
