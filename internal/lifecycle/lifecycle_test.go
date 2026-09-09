@@ -172,6 +172,7 @@ func TestMalformedOversizedAndWrongInstanceRequestsNeverSignal(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			t.Cleanup(func() { _ = endpoint.Abandon() })
 			path := filepath.Join(state, controlDirectory, requestName)
 			if err := os.WriteFile(path, test.contents, 0o600); err != nil {
 				t.Fatal(err)
@@ -181,10 +182,11 @@ func TestMalformedOversizedAndWrongInstanceRequestsNeverSignal(t *testing.T) {
 				t.Fatal("unsafe request signaled stop")
 			case <-time.After(50 * time.Millisecond):
 			}
-			if err := os.Remove(path); err != nil {
+			// Join the watcher before removing a request it may be reading.
+			if err := endpoint.Abandon(); err != nil {
 				t.Fatal(err)
 			}
-			if err := endpoint.Close(); err != nil {
+			if err := os.Remove(path); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -197,6 +199,7 @@ func TestOldNonceReplayDoesNotStopNewInstance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = first.Abandon() })
 	old, err := readInstance(filepath.Join(state, controlDirectory, instanceName))
 	if err != nil {
 		t.Fatal(err)
@@ -208,6 +211,7 @@ func TestOldNonceReplayDoesNotStopNewInstance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = second.Abandon() })
 	path := filepath.Join(state, controlDirectory, requestName)
 	if err := os.WriteFile(path, requestJSON(t, old.Nonce), 0o600); err != nil {
 		t.Fatal(err)
@@ -217,10 +221,11 @@ func TestOldNonceReplayDoesNotStopNewInstance(t *testing.T) {
 		t.Fatal("replayed nonce signaled new instance")
 	case <-time.After(50 * time.Millisecond):
 	}
-	if err := os.Remove(path); err != nil {
+	// Join the watcher before removing a replay request it may be reading.
+	if err := second.Abandon(); err != nil {
 		t.Fatal(err)
 	}
-	if err := second.Close(); err != nil {
+	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
 }
