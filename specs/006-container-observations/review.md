@@ -13,6 +13,7 @@ not author; the integration owner verifies the packaged service and browser. Req
 | One-shot stats and engine minimum-version negotiation needed explicit handling | Fixed GET query, minimum/maximum intersection and fake-engine regressions |
 | Native Windows/unknown engine stats were not certified | Retain inventory, but omit running stats with ENGINE_OS_UNSUPPORTED unless the engine reports Linux |
 | Null engine inventory could appear as healthy empty | Reject null with INVALID_RESPONSE; valid empty arrays remain healthy zero |
+| Zero system CPU counter could seed an invalid next-poll baseline | Reject zero system counters; a three-poll regression proves recovery requires a valid nonzero baseline |
 | Privacy table implied container history/upload despite the preview policy | Container row now explicitly says current memory only and no upload; further projections require a reviewed spec |
 | Live Docker smoke could pass with permanently unavailable CPU | Wait for a valid bounded CPU reading and memory with AVAILABLE quality after warmup |
 | Container metric interpretation and phone scrolling were implicit | Visible host-capacity CPU/engine-memory explanation, unavailable stopped metrics and horizontal-scroll guidance |
@@ -20,6 +21,9 @@ not author; the integration owner verifies the packaged service and browser. Req
 | Client rejected known truncation when the larger total was unknown | Accept truncated=true with equal counts; keep legacy metric labels unqualified |
 | API row cap could lose a source's known count | Compute total before the cap; regression covers the defensive alternate-source case |
 | Native fixture paths could exceed macOS socket limits | Short private temporary socket directory, real named-pipe/Unix HTTP roundtrip, redirect rejection and cancellation tests |
+
+Final independent cross-slice review found no remaining release blocker after the corrections above. Required checks
+on the reviewed head remain mandatory; no bypass or paid GitHub AI review is used.
 
 The API consumes the collector's normalized typed cache, not arbitrary plug-in data. Alternate future sources must honor
 that contract; adding a generic source/plugin boundary requires a separate validation/threat-model decision.
@@ -42,7 +46,10 @@ that contract; adding a generic source/plugin boundary requires a separate valid
 The first [PR 9](https://github.com/braidenm/home-lab-observer/pull/9) runtime run passed on Linux (2m54s), Windows
 (2m7s), macOS (1m41s) and all six cross-build targets (2m32s). The final reviewed head must pass required checks again.
 The initial policy failure was a synthetic token/pattern literal, corrected without weakening the scanner. An unrelated
-Google apt repository checksum mismatch interrupted the browser dependency install; no integrity checks were bypassed.
+Google apt repository checksum mismatch interrupted browser setup. CI now downloads only the Playwright-pinned Chromium
+headless shell and uses the hosted Ubuntu browser libraries, avoiding unrelated vendor package-index refreshes. The
+required packaged-browser test still fails for missing libraries; no integrity or test checks were bypassed. See
+[Playwright's headless-shell guidance](https://playwright.dev/docs/browsers#chromium-headless-shell).
 Linux CI additionally creates isolated synthetic running/stopped Docker workloads,
 checks inventory and real CPU/memory, verifies privacy/authentication/limits and checks workloads remain unchanged.
 Windows/macOS native tests and cross-builds do not imply certification against live Desktop engines.

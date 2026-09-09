@@ -7,4 +7,7 @@
 - [x] Connect the Workloads container view and configuration guidance.
 - [x] Add fake-engine, native transport, contract and real Linux engine smoke tests.
 - [x] Update README/operator docs/ADR and verify mobile UI.
-- [ ] Complete independent review, required CI and auto-merge.
+- [x] Complete independent review and configure required CI-gated auto-merge.
+
+All required checks must pass on the final reviewed head before merge. See [review evidence](review.md) and
+[PR 9 checks](https://github.com/braidenm/home-lab-observer/pull/9/checks) for the hosted acceptance and merge record.
