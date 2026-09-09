@@ -53,6 +53,7 @@ type Scheduler struct {
 	config       Config
 	trigger      chan struct{}
 	started      atomic.Bool
+	lifecycleMu  sync.Mutex
 	cancel       context.CancelFunc
 	done         chan struct{}
 	mu           sync.RWMutex
@@ -87,12 +88,14 @@ func New(collect func(context.Context) observation.Snapshot, store Store, config
 }
 
 func (s *Scheduler) Start(parent context.Context) error {
-	ctx, cancel := context.WithCancel(parent)
-	s.cancel = cancel
-	if !s.started.CompareAndSwap(false, true) {
-		cancel()
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	if s.started.Load() {
 		return errors.New("scheduler already started")
 	}
+	ctx, cancel := context.WithCancel(parent)
+	s.cancel = cancel
+	s.started.Store(true)
 	go s.loop(ctx)
 	return nil
 }
@@ -167,12 +170,17 @@ func (s *Scheduler) Trigger() bool {
 }
 
 func (s *Scheduler) Stop(ctx context.Context) error {
+	s.lifecycleMu.Lock()
 	if !s.started.Load() {
+		s.lifecycleMu.Unlock()
 		return nil
 	}
-	s.cancel()
+	cancel := s.cancel
+	done := s.done
+	s.lifecycleMu.Unlock()
+	cancel()
 	select {
-	case <-s.done:
+	case <-done:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()

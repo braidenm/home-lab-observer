@@ -143,6 +143,41 @@ func TestSingleFlightCoalescesTriggers(t *testing.T) {
 	}
 }
 
+func TestConcurrentStartKeepsTheWinningCancellationFunction(t *testing.T) {
+	ticker := &fakeTicker{channel: make(chan time.Time)}
+	store := &fakeStore{}
+	at := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
+	scheduler, err := New(
+		func(context.Context) observation.Snapshot { return completeSnapshot(at) },
+		store,
+		Config{Interval: time.Hour, CollectionTimeout: time.Second, NewTicker: func(time.Duration) Ticker { return ticker }},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var successes atomic.Int32
+	var attempts sync.WaitGroup
+	for range 16 {
+		attempts.Add(1)
+		go func() {
+			defer attempts.Done()
+			if scheduler.Start(context.Background()) == nil {
+				successes.Add(1)
+			}
+		}()
+	}
+	attempts.Wait()
+	if successes.Load() != 1 {
+		t.Fatalf("successful starts=%d", successes.Load())
+	}
+	waitFor(t, func() bool { _, ok := scheduler.Current(); return ok })
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := scheduler.Stop(ctx); err != nil {
+		t.Fatalf("winning scheduler was not canceled: %v", err)
+	}
+}
+
 func waitFor(t *testing.T, condition func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)

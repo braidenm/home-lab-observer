@@ -13,11 +13,11 @@ const ExpectedSQLiteVersion = "3.53.4"
 type MetricID string
 
 const (
-	CPUUtilization        MetricID = "cpu.utilization_percent"
-	MemoryUtilization     MetricID = "memory.utilization_percent"
-	FilesystemUtilization MetricID = "filesystem.aggregate_utilization_percent"
-	NetworkReceiveRate    MetricID = "network.receive_bytes_per_second"
-	NetworkTransmitRate   MetricID = "network.transmit_bytes_per_second"
+	CPUUtilization        MetricID = "cpu.utilization.percent"
+	MemoryUtilization     MetricID = "memory.utilization.percent"
+	FilesystemUtilization MetricID = "filesystem.aggregate.utilization.percent"
+	NetworkReceiveRate    MetricID = "network.receive.bytes_per_second"
+	NetworkTransmitRate   MetricID = "network.transmit.bytes_per_second"
 	ProcessCount          MetricID = "process.count"
 )
 
