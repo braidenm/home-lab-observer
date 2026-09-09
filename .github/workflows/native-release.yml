@@ -1,0 +1,289 @@
+name: Publish native preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact preview version (0.1.0-preview.N)
+        required: true
+        type: string
+      immutability_confirmed:
+        description: I verified release immutability is enabled in repository Settings immediately before dispatch
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-preview-publication
+  cancel-in-progress: false
+
+env:
+  GOFLAGS: -buildvcs=false
+
+jobs:
+  authorize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      commit: ${{ steps.release.outputs.commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: release
+        name: Validate the immutable release identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          RELEASE_OWNER: ${{ github.repository_owner }}
+          RELEASE_ACTOR: ${{ github.actor }}
+          RELEASE_TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REPOSITORY" == "braidenm/home-lab-observer" ]] || { echo "Publication is limited to the canonical repository" >&2; exit 1; }
+          [[ "$RELEASE_ACTOR" == "$RELEASE_OWNER" && "$RELEASE_TRIGGERING_ACTOR" == "$RELEASE_OWNER" ]] || { echo "Only the repository owner may dispatch or rerun publication" >&2; exit 1; }
+          [[ "${{ inputs.immutability_confirmed }}" == "true" ]] || { echo "Owner confirmation of release immutability is required" >&2; exit 1; }
+          git fetch --no-tags origin main
+          [[ "$GITHUB_SHA" == "$(git rev-parse origin/main)" ]] || { echo "Dispatch SHA is not current main" >&2; exit 1; }
+          node scripts/release-validate-input.mjs --version "$VERSION" --commit "$GITHUB_SHA" --ref "$GITHUB_REF"
+          tag="v${VERSION}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "Tag ${tag} already exists; releases are never overwritten" >&2
+            exit 1
+          fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release ${tag} already exists; releases are never overwritten" >&2
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "commit=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: authorize
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.authorize.outputs.commit }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Validate release schemas and workflow scripts
+        run: |
+          npm run test:contracts
+          node --test scripts/release-workflow.test.mjs
+      - name: Cross-build six versioned binaries
+        env:
+          VERSION: ${{ needs.authorize.outputs.version }}
+          COMMIT: ${{ needs.authorize.outputs.commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/binaries
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            platform="${target%/*}"
+            architecture="${target#*/}"
+            suffix=""
+            if [[ "$platform" == "windows" ]]; then suffix=".exe"; fi
+            CGO_ENABLED=0 GOOS="$platform" GOARCH="$architecture" go build \
+              -trimpath \
+              -ldflags "-s -w -buildid= -X main.version=${VERSION} -X main.commit=${COMMIT}" \
+              -o "dist/binaries/observer_${platform}_${architecture}${suffix}" \
+              ./cmd/observer
+          done
+      - name: Create archives and the closed release manifest
+        env:
+          VERSION: ${{ needs.authorize.outputs.version }}
+          COMMIT: ${{ needs.authorize.outputs.commit }}
+        run: go run ./cmd/releasepack --version "$VERSION" --commit "$COMMIT" --binaries dist/binaries --output dist/release --resources packaging/resources
+      - name: Generate SPDX dependency SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: .
+          syft-version: v1.51.1
+          format: spdx-json
+          output-file: dist/release/observer.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+          dependency-snapshot: false
+      - name: Finalize the exact release payload and checksums
+        env:
+          VERSION: ${{ needs.authorize.outputs.version }}
+          COMMIT: ${{ needs.authorize.outputs.commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp packaging/install.sh dist/release/install.sh
+          cp packaging/install.ps1 dist/release/install.ps1
+          node scripts/release-finalize.mjs --version "$VERSION" --commit "$COMMIT" --directory dist/release --schema schemas/release-v1.schema.json
+          node scripts/smoke-native-delivery.mjs --mode bundle --version "$VERSION" --directory dist/release
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: native-release-${{ needs.authorize.outputs.version }}
+          path: dist/release/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  vulnerability-scan:
+    needs: authorize
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.authorize.outputs.commit }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Scan reachable Go code for known vulnerabilities
+        shell: bash
+        run: |
+          set -euo pipefail
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+          "$(go env GOPATH)/bin/govulncheck" ./...
+
+  native-verify:
+    needs: [authorize, build]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+          - runner: ubuntu-24.04-arm
+          - runner: macos-15-intel
+          - runner: macos-15
+          - runner: windows-2025
+          - runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.authorize.outputs.commit }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: native-release-${{ needs.authorize.outputs.version }}
+          path: dist/release
+      - name: Test installer lifecycle on Unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: bash packaging/tests/install-sh.test.sh
+      - name: Test installer lifecycle on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File packaging/tests/install-ps1.test.ps1
+      - name: Execute the native artifact and offline installer on Windows
+        if: runner.os == 'Windows'
+        env:
+          VERSION: ${{ needs.authorize.outputs.version }}
+          COMMIT: ${{ needs.authorize.outputs.commit }}
+        run: node scripts/smoke-native-delivery.mjs --mode native --version "$env:VERSION" --commit "$env:COMMIT" --directory dist/release
+      - name: Execute the native artifact and offline installer on Unix
+        if: runner.os != 'Windows'
+        env:
+          VERSION: ${{ needs.authorize.outputs.version }}
+          COMMIT: ${{ needs.authorize.outputs.commit }}
+        run: node scripts/smoke-native-delivery.mjs --mode native --version "$VERSION" --commit "$COMMIT" --directory dist/release
+
+  attest:
+    if: github.repository == 'braidenm/home-lab-observer' && github.ref == 'refs/heads/main' && github.actor == github.repository_owner && github.triggering_actor == github.repository_owner
+    needs: [authorize, build, vulnerability-scan, native-verify]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: native-release-${{ needs.authorize.outputs.version }}
+          path: dist/release
+      - name: Attest every final downloadable byte
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: dist/release/*
+          show-summary: true
+
+  publish:
+    if: github.repository == 'braidenm/home-lab-observer' && github.ref == 'refs/heads/main' && github.actor == github.repository_owner && github.triggering_actor == github.repository_owner
+    needs: [authorize, build, attest]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.authorize.outputs.commit }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: native-release-${{ needs.authorize.outputs.version }}
+          path: dist/release
+      - name: Reverify final bytes, create draft, and upload the exact allowlist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.authorize.outputs.version }}
+          COMMIT: ${{ needs.authorize.outputs.commit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/smoke-native-delivery.mjs --mode bundle --version "$VERSION" --directory dist/release
+          tag="v${VERSION}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1 || gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release identity appeared after authorization; refusing to overwrite it" >&2
+            exit 1
+          fi
+          created_commit="$(gh api --method POST /repos/${GITHUB_REPOSITORY}/git/refs -f ref="refs/tags/${tag}" -f sha="$COMMIT" --jq .object.sha)"
+          [[ "$created_commit" == "$COMMIT" ]] || { echo "Tag creation did not select the verified commit" >&2; exit 1; }
+          verify_tag() {
+            [[ "$(gh api /repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag} --jq '.object.type + ":" + .object.sha')" == "commit:${COMMIT}" ]] || {
+              echo "Release tag no longer selects the verified commit" >&2
+              exit 1
+            }
+          }
+          gh release create "$tag" --verify-tag --title "Home Lab Observer ${VERSION}" \
+            --notes "Unsigned native preview. Verify SHA256SUMS and GitHub provenance before running. No production signing certificate is used in this preview." \
+            --draft --prerelease
+          verify_tag
+          gh release upload "$tag" dist/release/*
+          expected="$(find dist/release -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)"
+          actual="$(gh release view "$tag" --json assets --jq '.assets[].name' | LC_ALL=C sort)"
+          [[ "$actual" == "$expected" ]] || { echo "Draft release asset allowlist mismatch" >&2; exit 1; }
+          [[ "$(gh release view "$tag" --json isDraft --jq .isDraft)" == "true" ]] || exit 1
+          [[ "$(gh release view "$tag" --json isPrerelease --jq .isPrerelease)" == "true" ]] || exit 1
+          mkdir dist/draft-download
+          gh release download "$tag" --dir dist/draft-download
+          node scripts/smoke-native-delivery.mjs --mode bundle --version "$VERSION" --directory dist/draft-download
+          verify_tag
+          gh release edit "$tag" --draft=false --prerelease
+          verify_tag
+          [[ "$(gh api -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2026-03-10' /repos/${GITHUB_REPOSITORY}/releases/tags/${tag} --jq .immutable)" == "true" ]] || {
+            echo "Published release is not marked immutable by GitHub" >&2
+            exit 1
+          }
+      - name: Verify anonymous immutable downloads
+        env:
+          VERSION: ${{ needs.authorize.outputs.version }}
+        shell: bash
+        run: node scripts/smoke-native-delivery.mjs --mode anonymous --version "$VERSION" --repository "$GITHUB_REPOSITORY"

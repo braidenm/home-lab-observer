@@ -11,4 +11,5 @@
 - [x] Split core/local/demo exports and scope CSS to the dashboard component.
 - [x] Test the adapter against accepted Spec 002 fixtures and trigger UI CI for API/schema changes.
 - [x] Add strict typecheck, component/adapter/fixture tests, library/demo builds, and bounded CI.
-- [ ] Embed compiled assets and add packaged browser accessibility checks in a runtime integration specification.
+- [x] Embed compiled assets and add packaged browser accessibility checks in
+  [Spec 005](../005-local-data-plane/tasks.md), extended for optional Docker data in Spec 006.

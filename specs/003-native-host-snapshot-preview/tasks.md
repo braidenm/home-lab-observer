@@ -10,4 +10,6 @@
 - [x] Preserve categorized process scan failures and distinguish unsupported and permission-denied results.
 - [x] Validate a real native snapshot through AJV on Windows, macOS, and Linux.
 - [x] Document and test CLI help, usage, and failed-snapshot exit semantics.
-- [ ] Add HTTP, storage, UI, services, containers, and logs only in later accepted specifications.
+- [x] Add HTTP, storage and the embedded UI in [Spec 005](../005-local-data-plane/tasks.md).
+- [x] Add optional containers in [Spec 006](../006-container-observations/tasks.md).
+- [ ] Add OS services and opt-in logs only in later accepted specifications.

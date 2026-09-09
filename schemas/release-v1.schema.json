@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:home-lab-observer:schema:release:v1",
+  "title": "Home Lab Observer release manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "version", "tag", "repository", "commit_sha", "signing_policy", "assets"],
+  "properties": {
+    "schema_version": { "const": "observer-release/v1" },
+    "version": { "type": "string", "minLength": 7, "maxLength": 64, "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)-(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*$" },
+    "tag": { "type": "string", "minLength": 8, "maxLength": 65, "pattern": "^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)-(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*$" },
+    "repository": { "const": "braidenm/home-lab-observer" },
+    "commit_sha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "signing_policy": { "const": "UNSIGNED_PREVIEW_WITH_CHECKSUMS_AND_PROVENANCE" },
+    "assets": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/asset" },
+      "allOf": [
+        { "$ref": "#/$defs/oneLinuxAMD64" },
+        { "$ref": "#/$defs/oneLinuxARM64" },
+        { "$ref": "#/$defs/oneDarwinAMD64" },
+        { "$ref": "#/$defs/oneDarwinARM64" },
+        { "$ref": "#/$defs/oneWindowsAMD64" },
+        { "$ref": "#/$defs/oneWindowsARM64" }
+      ]
+    }
+  },
+  "$defs": {
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "arch", "filename", "sha256", "size_bytes", "format", "download_url"],
+      "properties": {
+        "os": { "enum": ["linux", "darwin", "windows"] },
+        "arch": { "enum": ["amd64", "arm64"] },
+        "filename": { "type": "string", "pattern": "^home-lab-observer_(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)-(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*_(linux|darwin|windows)_(amd64|arm64)\\.(tar\\.gz|zip)$" },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "size_bytes": { "type": "integer", "minimum": 1, "maximum": 230686720 },
+        "format": { "enum": ["tar.gz", "zip"] },
+        "download_url": { "type": "string", "pattern": "^https://github\\.com/braidenm/home-lab-observer/releases/download/v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)-(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*/home-lab-observer_(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)-(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*_(linux|darwin|windows)_(amd64|arm64)\\.(tar\\.gz|zip)$" }
+      },
+      "allOf": [
+        { "if": { "properties": { "os": { "const": "windows" } }, "required": ["os"] }, "then": { "properties": { "format": { "const": "zip" }, "filename": { "pattern": "_windows_(amd64|arm64)\\.zip$" } } } },
+        { "if": { "properties": { "os": { "enum": ["linux", "darwin"] } }, "required": ["os"] }, "then": { "properties": { "format": { "const": "tar.gz" }, "filename": { "pattern": "_(linux|darwin)_(amd64|arm64)\\.tar\\.gz$" } } } }
+      ]
+    },
+    "oneLinuxAMD64": { "contains": { "type": "object", "properties": { "os": { "const": "linux" }, "arch": { "const": "amd64" } }, "required": ["os", "arch"] }, "minContains": 1, "maxContains": 1 },
+    "oneLinuxARM64": { "contains": { "type": "object", "properties": { "os": { "const": "linux" }, "arch": { "const": "arm64" } }, "required": ["os", "arch"] }, "minContains": 1, "maxContains": 1 },
+    "oneDarwinAMD64": { "contains": { "type": "object", "properties": { "os": { "const": "darwin" }, "arch": { "const": "amd64" } }, "required": ["os", "arch"] }, "minContains": 1, "maxContains": 1 },
+    "oneDarwinARM64": { "contains": { "type": "object", "properties": { "os": { "const": "darwin" }, "arch": { "const": "arm64" } }, "required": ["os", "arch"] }, "minContains": 1, "maxContains": 1 },
+    "oneWindowsAMD64": { "contains": { "type": "object", "properties": { "os": { "const": "windows" }, "arch": { "const": "amd64" } }, "required": ["os", "arch"] }, "minContains": 1, "maxContains": 1 },
+    "oneWindowsARM64": { "contains": { "type": "object", "properties": { "os": { "const": "windows" }, "arch": { "const": "arm64" } }, "required": ["os", "arch"] }, "minContains": 1, "maxContains": 1 }
+  }
+}

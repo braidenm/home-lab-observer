@@ -45,24 +45,3 @@ jobs:
       - name: Verify read-only observations against a real isolated Docker workload
         if: runner.os == 'Linux'
         run: node scripts/smoke-docker-service.mjs
-
-  cross-build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 8
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Cross-build native binaries
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p build
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o build/observer-linux-amd64 ./cmd/observer
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o build/observer-linux-arm64 ./cmd/observer
-          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -o build/observer-windows-amd64.exe ./cmd/observer
-          CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -trimpath -o build/observer-windows-arm64.exe ./cmd/observer
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -o build/observer-darwin-amd64 ./cmd/observer
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -o build/observer-darwin-arm64 ./cmd/observer

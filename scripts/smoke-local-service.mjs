@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,9 +11,15 @@ import addFormats from 'ajv-formats';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const temporary = await mkdtemp(join(tmpdir(), 'observer-smoke-'));
-const binary = join(temporary, process.platform === 'win32' ? 'observer.exe' : 'observer');
-const built = spawnSync('go', ['build', '-o', binary, './cmd/observer'], { cwd: root, encoding: 'utf8', timeout: 180000 });
-assert.equal(built.status, 0, `observer build failed: ${built.stderr}`);
+const binary = process.env.OBSERVER_SMOKE_BINARY
+  ? resolve(process.env.OBSERVER_SMOKE_BINARY)
+  : join(temporary, process.platform === 'win32' ? 'observer.exe' : 'observer');
+if (process.env.OBSERVER_SMOKE_BINARY) {
+  assert((await stat(binary)).isFile(), 'packaged smoke binary must be an existing file');
+} else {
+  const built = spawnSync('go', ['build', '-o', binary, './cmd/observer'], { cwd: root, encoding: 'utf8', timeout: 180000 });
+  assert.equal(built.status, 0, `observer build failed: ${built.stderr}`);
+}
 const port = await freePort();
 const origin = `http://127.0.0.1:${port}`;
 const state = join(temporary, 'state');
