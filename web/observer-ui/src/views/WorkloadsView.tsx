@@ -92,7 +92,7 @@ export function WorkloadsView({ workloads }: { workloads: WorkloadSnapshot }) {
 
 function WorkloadRow({ item }: { item: Workload }) {
   const detail = item.kind === "process"
-    ? `PID ${item.processId} · ${item.account}`
+    ? `PID ${item.processId}`
     : item.kind === "service"
       ? `${item.manager} · ${item.startup}${item.restartCount === null ? "" : ` · ${item.restartCount} restarts`}`
       : `${item.health ?? "health unavailable"} · ${item.restartCount} restarts`;

@@ -87,7 +87,6 @@ interface WorkloadBase {
 export interface ProcessWorkload extends WorkloadBase {
   kind: "process";
   processId: number;
-  account: string;
 }
 
 export interface ServiceWorkload extends WorkloadBase {
@@ -133,6 +132,7 @@ export interface LogEvent {
   sourceLabel: string;
   unit: string;
   code: string;
+  /** Code-owned, sanitized metadata; never text copied from a raw log or message body. */
   summary: string;
   structuredFields: Record<string, string | number | boolean | null>;
   body?: string;

@@ -6,7 +6,10 @@ The project is intentionally public and self-contained. It does not contain, bui
 
 ## Project status
 
-The repository foundation and architecture are being established in [Spec 001](specs/001-repository-foundation/spec.md). The executable observer is planned in [Spec 002](specs/002-cross-platform-observer/spec.md). Until Spec 002 is complete, this repository does not publish an installable agent.
+The foundation is accepted in [Spec 001](specs/001-repository-foundation/spec.md), the local API contract in
+[Spec 002](specs/002-cross-platform-observer/spec.md), and the reusable dashboard in
+[Spec 004](specs/004-reusable-dashboard/spec.md). Runtime, native collection, and distribution remain separate slices;
+this repository does not yet publish an installable agent.
 
 ## Product shape
 

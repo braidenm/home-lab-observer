@@ -35,8 +35,8 @@ export function LogsView({ logs }: { logs: LogSnapshot }) {
         <div>
           <strong id="body-policy-title">Message bodies are off by default</strong>
           <p>
-            This view stores metadata only. Bodies require an explicit allowlist and are redacted before persistence.
-            No source has bodies enabled.
+            Summaries are code-owned, sanitized labels—not source message text. Bodies require an explicit allowlist
+            and are redacted before persistence. No source has bodies enabled.
           </p>
         </div>
         <span className="observer-policy-chip">0 enabled</span>

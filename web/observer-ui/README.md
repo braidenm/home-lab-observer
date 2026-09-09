@@ -18,6 +18,12 @@ npm run check
 The demo uses deterministic synthetic data and makes no network requests. The production package emits an ES module,
 TypeScript declarations, and `observer-ui.css`.
 
+## Data boundary
+
+The view model excludes process accounts, owners, user identifiers, arguments, and environment variables. A log event
+`summary` is a short, code-owned, sanitized metadata label; adapters must never populate it from a raw log or message
+body. Bodies remain a separate opt-in field, and the included local adapter expects them to be omitted by default.
+
 ## Use
 
 ```tsx
@@ -33,4 +39,4 @@ export function App() {
 
 Absolute local HTTP URLs must use `localhost`, `127.0.0.1`, or `::1`. A relative base URL is accepted for the embedded
 same-origin dashboard. The adapter sends no cookies, follows no redirects, and keeps an optional bearer token only in
-memory.
+memory. It transports an already-sanitized view model and does not turn source messages into display summaries.

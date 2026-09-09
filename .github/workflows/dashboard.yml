@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "web/observer-ui/**"
+      - "specs/004-reusable-dashboard/**"
       - ".github/workflows/dashboard.yml"
       - ".github/dependabot.yml"
   push:
@@ -11,6 +12,7 @@ on:
       - main
     paths:
       - "web/observer-ui/**"
+      - "specs/004-reusable-dashboard/**"
       - ".github/workflows/dashboard.yml"
       - ".github/dependabot.yml"
 

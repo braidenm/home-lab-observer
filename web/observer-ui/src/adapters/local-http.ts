@@ -26,6 +26,11 @@ export class ObserverTransportError extends Error {
   }
 }
 
+/**
+ * Fetches an already-sanitized dashboard projection from a loopback API. The
+ * transport does not derive display summaries from source messages:
+ * LogEvent.summary remains code-owned metadata and is never a raw log body.
+ */
 export class LocalHttpObserverDataSource implements ObserverDataSource {
   private readonly baseUrl: string;
   private readonly fetcher: typeof fetch;
