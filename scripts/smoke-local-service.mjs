@@ -24,6 +24,7 @@ const port = await freePort();
 const origin = `http://127.0.0.1:${port}`;
 const state = join(temporary, 'state');
 const processHandle = spawn(binary, ['serve', '--listen', `127.0.0.1:${port}`, '--state-dir', state], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+const processExited = new Promise(resolveExit => processHandle.once('exit', resolveExit));
 let output = '';
 for (const stream of [processHandle.stdout, processHandle.stderr]) stream.on('data', chunk => { output = (output + chunk).slice(-16384); });
 let browser;
@@ -34,7 +35,7 @@ try {
   const ajv = new Ajv({ allErrors: true, strict: false });
   addFormats(ajv);
   const validators = {};
-  for (const name of ['capabilities', 'current-snapshot', 'metric-series', 'container-inventory', 'problem-details']) {
+  for (const name of ['capabilities', 'current-snapshot', 'metric-series', 'container-inventory', 'diagnostics-health', 'problem-details']) {
     validators[name] = ajv.compile(JSON.parse(await readFile(join(root, `schemas/v1/${name}-v1.schema.json`), 'utf8')));
   }
   async function validated(path, name, status = 200, requestHeaders = headers) {
@@ -54,6 +55,10 @@ try {
   assert.equal(containers.policy.remote_upload_eligible, false);
   await validated('/api/v1/containers?limit=501', 'problem-details', 400);
   await validated('/api/v1/containers', 'problem-details', 401, {});
+  const diagnostics = await validated('/api/v1/diagnostics/health', 'diagnostics-health');
+  assert.equal(diagnostics.state, 'DISABLED', 'foreground unexpectedly retained diagnostics');
+  await validated('/api/v1/diagnostics/health', 'problem-details', 401, {});
+  await validated('/api/v1/diagnostics/health?path=not-a-file-reader', 'problem-details', 400);
   let current;
   await until(async () => {
     const response = await fetch(`${origin}/api/v1/snapshots/current`, { headers });
@@ -141,6 +146,37 @@ try {
       await page.screenshot({ path: join(temporary, `containers-${width}.png`), fullPage: true });
     }
     await page.unroute('**/api/v1/containers?limit=500');
+    // Synthetic health states exercise presentation without altering diagnostic files or host startup.
+    const availableDiagnostics = JSON.parse(await readFile(join(root, 'schemas/v1/fixtures/valid/diagnostics-health-available.json'), 'utf8'));
+    const unavailableDiagnostics = structuredClone(availableDiagnostics);
+    unavailableDiagnostics.available = false;
+    unavailableDiagnostics.state = 'UNAVAILABLE';
+    unavailableDiagnostics.reason_code = 'DIAGNOSTICS_UNAVAILABLE';
+    unavailableDiagnostics.usage = { total_bytes: 0, file_count: 0 };
+    for (const fixture of [availableDiagnostics, unavailableDiagnostics]) {
+      assert(validators['diagnostics-health'](fixture), 'diagnostics browser fixture violates contract');
+    }
+    let displayedDiagnostics = availableDiagnostics;
+    await page.route('**/api/v1/diagnostics/health', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(displayedDiagnostics) }));
+    for (const width of [390, 768, 1440]) {
+      await page.setViewportSize({ width, height: 1000 });
+      displayedDiagnostics = availableDiagnostics;
+      await page.reload();
+      await page.getByRole('button', { name: 'Observer & privacy', exact: true }).click();
+      await page.getByRole('heading', { name: 'Self-diagnostics', exact: true }).waitFor();
+      const storage = page.locator('article').filter({ has: page.getByText('Storage used', { exact: true }) });
+      await storage.waitFor();
+      assert(!(await storage.innerText()).includes('Unavailable'), 'available diagnostics usage was hidden');
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `Diagnostics overflows at ${width}px`);
+      await page.screenshot({ path: join(temporary, `diagnostics-available-${width}.png`), fullPage: true });
+      displayedDiagnostics = unavailableDiagnostics;
+      await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+      await storage.getByText('Unavailable', { exact: true }).waitFor();
+      assert(!(await storage.innerText()).includes('0 B'), 'unavailable disk usage was presented as measured zero');
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `Unavailable diagnostics overflows at ${width}px`);
+      await page.screenshot({ path: join(temporary, `diagnostics-unavailable-${width}.png`), fullPage: true });
+    }
+    await page.unroute('**/api/v1/diagnostics/health');
     await page.getByRole('button', { name: 'Lock dashboard', exact: true }).click();
     await page.getByRole('button', { name: 'Unlock dashboard', exact: true }).waitFor();
     assert(!(await page.evaluate(() => JSON.stringify(sessionStorage))).includes(token), 'lock retained the token');
@@ -150,7 +186,12 @@ try {
   console.log('Native local service passed real snapshot, history, authentication and schema smoke checks.');
 } finally {
   await browser?.close();
-  processHandle.kill('SIGTERM');
+  if (processHandle.exitCode === null && processHandle.signalCode === null) {
+    processHandle.kill('SIGTERM');
+    const stopped = await Promise.race([processExited.then(() => true), delay(5000, false, { ref: false })]);
+    if (!stopped) processHandle.kill('SIGKILL');
+  }
+  await processExited;
 }
 
 async function until(test) {

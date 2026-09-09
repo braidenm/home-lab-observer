@@ -32,6 +32,11 @@ inspect, stop, restart and disable the registration. Disable preserves observati
 - [systemd login control](https://www.freedesktop.org/software/systemd/man/252/loginctl.html) documents lingering as
   a separate user-manager lifetime choice. Do not enable it automatically. Missing user manager/session bus is an
   actionable unavailable state. The primary page was independently checked during design; a later root fetch failed.
+- [systemd termination policy](https://github.com/systemd/systemd/blob/main/man/systemd.kill.xml) and
+  [service semantics](https://github.com/systemd/systemd/blob/main/man/systemd.service.xml), independently checked from
+  upstream source on the same date, show why a stop timeout alone is insufficient: automatic final killing must be
+  disabled for the normal stop path. Explicit force must not accidentally restart the service through failure policy.
+  Generated arguments also need systemd's own quoting/expansion rules, not merely shell quoting.
 
 Sources were checked against the existing foreground implementation and independently reviewed across runtime and
 packaging responsibilities. Native tests, not documentation alone, must establish executable behavior.
