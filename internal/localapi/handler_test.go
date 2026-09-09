@@ -28,6 +28,15 @@ func (s fakeSource) Current() (projection.CurrentSnapshot, bool) { return s.curr
 func (s fakeSource) Stats() scheduler.Stats                      { return s.stats }
 func (s fakeSource) StoreHealth() history.Health                 { return s.health }
 
+type fakeMetricSource struct {
+	fakeSource
+	statuses map[history.MetricID]projection.SectionStatus
+}
+
+func (s fakeMetricSource) MetricStatuses() map[history.MetricID]projection.SectionStatus {
+	return s.statuses
+}
+
 type handlerReader struct {
 	samples map[history.MetricID][]history.Sample
 	err     error
@@ -67,7 +76,18 @@ func TestNewHandlerValidatesDependencies(t *testing.T) {
 
 func TestHealthIsPublicMinimalAndReadinessReflectsSource(t *testing.T) {
 	now := time.Date(2026, 9, 9, 18, 0, 0, 0, time.UTC)
-	ready := newTestHandler(t, fakeSource{current: snapshotAt(now), ok: true, health: history.Health{State: "AVAILABLE"}}, handlerReader{}, now)
+	ready := newTestHandler(t, fakeSource{
+		current: snapshotAt(now),
+		ok:      true,
+		stats: scheduler.Stats{
+			Collections:           12,
+			CollectionFailures:    2,
+			StoreFailures:         1,
+			LatestCollectionState: "OK",
+			LatestCollectionAt:    now,
+		},
+		health: history.Health{State: "AVAILABLE"},
+	}, handlerReader{}, now)
 	for _, test := range []struct {
 		path   string
 		status int
@@ -85,6 +105,22 @@ func TestHealthIsPublicMinimalAndReadinessReflectsSource(t *testing.T) {
 	}
 	if strings.Contains(response.Body.String(), "DEGRADED") {
 		t.Fatal("readiness leaked store details")
+	}
+	for name, source := range map[string]fakeSource{
+		"failed current": {current: func() projection.CurrentSnapshot {
+			value := snapshotAt(now)
+			value.CollectionState = "FAILED"
+			return value
+		}(), ok: true, health: history.Health{State: "AVAILABLE"}},
+		"latest failed": {current: snapshotAt(now), ok: true, stats: scheduler.Stats{LatestCollectionState: "FAILED", LatestCollectionAt: now}, health: history.Health{State: "AVAILABLE"}},
+		"stale current": {current: snapshotAt(now.Add(-snapshotStaleAfter - time.Second)), ok: true, stats: scheduler.Stats{LatestCollectionState: "OK"}, health: history.Health{State: "AVAILABLE"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			response := serve(newTestHandler(t, source, handlerReader{}, now), http.MethodGet, "/health/ready", "", "")
+			if response.Code != http.StatusServiceUnavailable || strings.TrimSpace(response.Body.String()) != `{"status":"NOT_READY"}` {
+				t.Fatalf("response=%d/%q", response.Code, response.Body.String())
+			}
+		})
 	}
 }
 
@@ -137,7 +173,7 @@ func TestCurrentSelectionLimitsStalenessAndObserverSignals(t *testing.T) {
 	}
 	snapshot.Sections.Processes.TotalCount = 60
 	snapshot.Sections.Processes.ReturnedCount = 60
-	source := fakeSource{current: snapshot, ok: true, stats: scheduler.Stats{Collections: 5, CollectionFailures: 1}, health: history.Health{State: "DEGRADED", ReasonCode: "STORAGE_PRESSURE", DatabaseBytes: 99, SizeDropped: 3}}
+	source := fakeSource{current: snapshot, ok: true, stats: scheduler.Stats{Collections: 5, CollectionFailures: 1, LatestCollectionState: "FAILED", LatestCollectionAt: old}, health: history.Health{State: "DEGRADED", ReasonCode: "STORAGE_PRESSURE", DatabaseBytes: 99, SizeDropped: 3}}
 	handler := newTestHandler(t, source, handlerReader{}, now)
 	response := serve(handler, http.MethodGet, "/api/v1/snapshots/current?section=processes&section=observer", testToken, "")
 	if response.Code != http.StatusOK {
@@ -159,8 +195,27 @@ func TestCurrentSelectionLimitsStalenessAndObserverSignals(t *testing.T) {
 	if current.Sections.Services.SupportState != "DISABLED" || current.Sections.Services.Items == nil || current.Sections.Services.ObservedAt != nil {
 		t.Fatalf("unselected service envelope=%+v", current.Sections.Services)
 	}
-	if current.Sections.Observer.CollectionState != "PARTIAL" || current.Sections.Observer.ReasonCode == nil || *current.Sections.Observer.ReasonCode != "STORAGE_PRESSURE" || len(current.Sections.Observer.Items) != 10 {
+	if current.Sections.Observer.CollectionState != "PARTIAL" || current.Sections.Observer.Freshness != "CURRENT" || current.Sections.Observer.ReasonCode == nil || *current.Sections.Observer.ReasonCode != "STORAGE_PRESSURE" || len(current.Sections.Observer.Items) != 11 {
 		t.Fatalf("observer section=%+v", current.Sections.Observer)
+	}
+	for _, signal := range current.Sections.Observer.Items {
+		if signal.Name == "collection_failures" && signal.State != "OK" {
+			t.Fatalf("historical counter latched health state: %+v", signal)
+		}
+		if signal.Name == "latest_collection" && signal.State != "ERROR" {
+			t.Fatalf("latest collection state missing: %+v", signal)
+		}
+	}
+}
+
+func TestMarkStaleUsesEachSectionTimestamp(t *testing.T) {
+	now := time.Date(2026, 9, 9, 18, 0, 0, 0, time.UTC)
+	current := snapshotAt(now)
+	old := now.Add(-snapshotStaleAfter - time.Second)
+	current.Sections.Processes.ObservedAt = &old
+	markStale(&current, now)
+	if current.Sections.Processes.Freshness != "STALE" || current.Sections.Overview.Freshness != "CURRENT" {
+		t.Fatalf("section freshness processes=%s overview=%s", current.Sections.Processes.Freshness, current.Sections.Overview.Freshness)
 	}
 }
 
@@ -182,6 +237,19 @@ func TestSeriesUsesBuilderAndConvertsFailuresToSafeProblems(t *testing.T) {
 	failure := serve(failing, http.MethodGet, "/api/v1/metrics/series?range=1h&metric=process.count", testToken, "")
 	if failure.Code != http.StatusInternalServerError || strings.Contains(failure.Body.String(), "secret database path") {
 		t.Fatalf("unsafe failure=%d %s", failure.Code, failure.Body.String())
+	}
+}
+
+func TestSeriesUsesLatestMetricSupportWhenSourceProvidesIt(t *testing.T) {
+	now := time.Date(2026, 9, 9, 18, 0, 0, 0, time.UTC)
+	reason := "PERMISSION_DENIED"
+	source := fakeMetricSource{fakeSource: fakeSource{}, statuses: map[history.MetricID]projection.SectionStatus{
+		history.ProcessCount: {SupportState: "PERMISSION_DENIED", CollectionState: "NOT_RUN", Freshness: "UNKNOWN", ReasonCode: &reason},
+	}}
+	handler := newTestHandler(t, source, handlerReader{}, now)
+	response := serve(handler, http.MethodGet, "/api/v1/metrics/series?range=1h&metric=process.count", testToken, "")
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"support_state":"PERMISSION_DENIED"`) || !strings.Contains(response.Body.String(), `"points":[]`) {
+		t.Fatalf("series support=%d %s", response.Code, response.Body.String())
 	}
 }
 

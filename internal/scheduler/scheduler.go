@@ -47,22 +47,27 @@ func DefaultConfig() Config {
 	return Config{Interval: 15 * time.Second, CollectionTimeout: 10 * time.Second, StorageTimeout: 5 * time.Second, System: projection.NativeSystemInfo(), Clock: realClock{}, NewTicker: func(d time.Duration) Ticker { return realTicker{time.NewTicker(d)} }}
 }
 
-type Stats struct{ Collections, CollectionFailures, StoreFailures, TriggersDropped uint64 }
+type Stats struct {
+	Collections, CollectionFailures, StoreFailures, TriggersDropped uint64
+	LatestCollectionState                                           string
+	LatestCollectionAt                                              time.Time
+}
 
 type Scheduler struct {
-	collect     func(context.Context) observation.Snapshot
-	store       Store
-	config      Config
-	trigger     chan struct{}
-	started     atomic.Bool
-	lifecycleMu sync.Mutex
-	cancel      context.CancelFunc
-	done        chan struct{}
-	mu          sync.RWMutex
-	current     projection.CurrentSnapshot
-	hasCurrent  bool
-	previous    *observation.Snapshot
-	stats       Stats
+	collect        func(context.Context) observation.Snapshot
+	store          Store
+	config         Config
+	trigger        chan struct{}
+	started        atomic.Bool
+	lifecycleMu    sync.Mutex
+	cancel         context.CancelFunc
+	done           chan struct{}
+	mu             sync.RWMutex
+	current        projection.CurrentSnapshot
+	hasCurrent     bool
+	metricStatuses map[history.MetricID]projection.SectionStatus
+	previous       *observation.Snapshot
+	stats          Stats
 }
 
 func New(collect func(context.Context) observation.Snapshot, store Store, config Config) (*Scheduler, error) {
@@ -127,12 +132,17 @@ func (s *Scheduler) collectOnce(parent context.Context) {
 	raw := s.collect(collectionCtx)
 	cancelCollection()
 	candidate := projection.Current(raw, s.config.System)
+	metricStatuses := projection.MetricStatuses(raw)
 	s.mu.Lock()
 	s.stats.Collections++
+	s.stats.LatestCollectionState = candidate.CollectionState
+	s.stats.LatestCollectionAt = candidate.ObservedAt.UTC()
+	s.metricStatuses = cloneMetricStatuses(metricStatuses)
 	if candidate.CollectionState == "FAILED" {
 		s.stats.CollectionFailures++
 		if s.hasCurrent {
 			s.mu.Unlock()
+			s.maintain(parent)
 			return
 		}
 	}
@@ -168,6 +178,16 @@ func (s *Scheduler) collectOnce(parent context.Context) {
 		s.mu.Unlock()
 	}
 	s.previous = previousSnapshot(raw)
+}
+
+func (s *Scheduler) maintain(parent context.Context) {
+	storageCtx, cancelStorage := context.WithTimeout(parent, s.config.StorageTimeout)
+	defer cancelStorage()
+	if err := s.store.Maintain(storageCtx, s.config.Clock.Now()); err != nil {
+		s.mu.Lock()
+		s.stats.StoreFailures++
+		s.mu.Unlock()
+	}
 }
 
 func (s *Scheduler) Trigger() bool {
@@ -207,6 +227,11 @@ func (s *Scheduler) Current() (projection.CurrentSnapshot, bool) {
 }
 func (s *Scheduler) Stats() Stats                { s.mu.RLock(); defer s.mu.RUnlock(); return s.stats }
 func (s *Scheduler) StoreHealth() history.Health { return s.store.Health() }
+func (s *Scheduler) MetricStatuses() map[history.MetricID]projection.SectionStatus {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return cloneMetricStatuses(s.metricStatuses)
+}
 
 func cloneSnapshot(value projection.CurrentSnapshot) projection.CurrentSnapshot {
 	clone := value
@@ -242,6 +267,17 @@ func cloneStatus(value projection.SectionStatus) projection.SectionStatus {
 		clone.ReasonCode = &reason
 	}
 	return clone
+}
+
+func cloneMetricStatuses(values map[history.MetricID]projection.SectionStatus) map[history.MetricID]projection.SectionStatus {
+	if values == nil {
+		return nil
+	}
+	result := make(map[history.MetricID]projection.SectionStatus, len(values))
+	for metric, status := range values {
+		result[metric] = cloneStatus(status)
+	}
+	return result
 }
 func previousSnapshot(raw observation.Snapshot) *observation.Snapshot {
 	result := &observation.Snapshot{ObservedAt: raw.ObservedAt, Network: raw.Network}

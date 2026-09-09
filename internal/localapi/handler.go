@@ -18,6 +18,7 @@ import (
 )
 
 const requestTimeout = 5 * time.Second
+const snapshotStaleAfter = 45 * time.Second
 
 type Source interface {
 	Current() (projection.CurrentSnapshot, bool)
@@ -107,9 +108,10 @@ func (h *handler) health(w http.ResponseWriter, r *http.Request, readiness bool)
 	}
 	status, code := "UP", http.StatusOK
 	if readiness {
-		_, available := h.config.Source.Current()
+		current, available := h.config.Source.Current()
 		health := h.config.Source.StoreHealth()
-		if !available || (health.State != "" && health.State != "AVAILABLE") {
+		stats := h.config.Source.Stats()
+		if !available || current.CollectionState == "FAILED" || stats.LatestCollectionState == "FAILED" || isStale(current.ObservedAt, h.config.Now()) || (health.State != "" && health.State != "AVAILABLE") {
 			status, code = "NOT_READY", http.StatusServiceUnavailable
 		}
 	}
@@ -131,6 +133,7 @@ func (h *handler) current(w http.ResponseWriter, r *http.Request) {
 	}
 	current = addObserverSignals(current, h.config.Now(), h.config.Source.Stats(), h.config.Source.StoreHealth())
 	current = selectSections(current, query)
+	current = projection.RecomputeCollectionState(current)
 	markStale(&current, h.config.Now())
 	h.writeJSON(w, r, http.StatusOK, current, currentResponseLimit)
 }
@@ -141,7 +144,14 @@ func (h *handler) series(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusBadRequest, "INVALID_QUERY", "Invalid query")
 		return
 	}
-	response, err := series.Build(r.Context(), h.config.History, h.config.Now(), query.rangeValue, query.metrics)
+	var response series.Response
+	if source, ok := h.config.Source.(interface {
+		MetricStatuses() map[history.MetricID]projection.SectionStatus
+	}); ok {
+		response, err = series.Build(r.Context(), h.config.History, h.config.Now(), query.rangeValue, query.metrics, source.MetricStatuses())
+	} else {
+		response, err = series.Build(r.Context(), h.config.History, h.config.Now(), query.rangeValue, query.metrics)
+	}
 	if err != nil {
 		writeProblem(w, http.StatusInternalServerError, "SERIES_UNAVAILABLE", "Metric series unavailable")
 		return
@@ -209,11 +219,8 @@ func notSelectedListStatus() projection.ListStatus {
 }
 
 func markStale(current *projection.CurrentSnapshot, now time.Time) {
-	if current.ObservedAt.IsZero() || now.UTC().Sub(current.ObservedAt.UTC()) <= 45*time.Second {
-		return
-	}
 	stale := func(status *projection.SectionStatus) {
-		if status.SupportState == "SUPPORTED" && status.ObservedAt != nil {
+		if status.SupportState == "SUPPORTED" && status.ObservedAt != nil && isStale(*status.ObservedAt, now) {
 			status.Freshness = "STALE"
 			if status.ReasonCode == nil {
 				status.ReasonCode = stringPointer("LATEST_SAMPLE_STALE")
@@ -229,38 +236,51 @@ func markStale(current *projection.CurrentSnapshot, now time.Time) {
 	stale(&current.Sections.Observer.SectionStatus)
 }
 
+func isStale(observedAt, now time.Time) bool {
+	return !observedAt.IsZero() && now.UTC().Sub(observedAt.UTC()) > snapshotStaleAfter
+}
+
 func addObserverSignals(current projection.CurrentSnapshot, now time.Time, stats scheduler.Stats, health history.Health) projection.CurrentSnapshot {
 	type signalInput struct {
 		name  string
 		value uint64
 		unit  string
-		warn  bool
+		state string
+	}
+	latestState := "OK"
+	if stats.LatestCollectionState == "PARTIAL" {
+		latestState = "WARN"
+	} else if stats.LatestCollectionState == "FAILED" {
+		latestState = "ERROR"
+	}
+	databaseState := "OK"
+	if health.State == "DEGRADED" {
+		databaseState = "WARN"
 	}
 	inputs := []signalInput{
-		{"collections", stats.Collections, "count", false},
-		{"collection_failures", stats.CollectionFailures, "count", stats.CollectionFailures > 0},
-		{"store_failures", stats.StoreFailures, "count", stats.StoreFailures > 0},
-		{"triggers_dropped", stats.TriggersDropped, "count", stats.TriggersDropped > 0},
-		{"history_database_bytes", nonnegativeUint64(health.DatabaseBytes), "bytes", health.State == "DEGRADED"},
-		{"history_retention_dropped", health.DroppedCount(), "count", health.DroppedCount() > 0},
-		{"history_checkpoint_failures", health.CheckpointFailures, "count", health.CheckpointFailures > 0},
-		{"history_write_failures", health.WriteFailures, "count", health.WriteFailures > 0},
-		{"history_sequence_failures", health.SequenceFailures, "count", health.SequenceFailures > 0},
-		{"history_maintenance_failures", health.MaintenanceFailures, "count", health.MaintenanceFailures > 0},
+		{"latest_collection", 1, "count", latestState},
+		{"collections", stats.Collections, "count", "OK"},
+		{"collection_failures", stats.CollectionFailures, "count", "OK"},
+		{"store_failures", stats.StoreFailures, "count", "OK"},
+		{"triggers_dropped", stats.TriggersDropped, "count", "OK"},
+		{"history_database_bytes", nonnegativeUint64(health.DatabaseBytes), "bytes", databaseState},
+		{"history_retention_dropped", health.DroppedCount(), "count", "OK"},
+		{"history_checkpoint_failures", health.CheckpointFailures, "count", "OK"},
+		{"history_write_failures", health.WriteFailures, "count", "OK"},
+		{"history_sequence_failures", health.SequenceFailures, "count", "OK"},
+		{"history_maintenance_failures", health.MaintenanceFailures, "count", "OK"},
 	}
 	signals := make([]projection.ObserverSignal, 0, len(inputs))
 	for _, input := range inputs {
-		state := "OK"
-		if input.warn {
-			state = "WARN"
-		}
-		signals = append(signals, projection.ObserverSignal{Name: input.name, State: state, Value: float64(input.value), Unit: input.unit})
+		signals = append(signals, projection.ObserverSignal{Name: input.name, State: input.state, Value: float64(input.value), Unit: input.unit})
 	}
 	reason := ""
 	if health.State != "" && health.State != "AVAILABLE" {
 		reason = boundedString(health.ReasonCode, "STORE_DEGRADED", 64)
-	} else if stats.CollectionFailures > 0 || stats.StoreFailures > 0 {
-		reason = "OBSERVER_DEGRADED"
+	} else if stats.LatestCollectionState == "FAILED" {
+		reason = "LATEST_COLLECTION_FAILED"
+	} else if stats.LatestCollectionState == "PARTIAL" {
+		reason = "LATEST_COLLECTION_PARTIAL"
 	}
 	return projection.WithObserverSignals(current, now.UTC(), signals, reason)
 }

@@ -33,6 +33,7 @@ type fakeStore struct {
 	closed             bool
 	health             history.Health
 	nextErr            error
+	maintainErr        error
 	requireLiveContext bool
 }
 
@@ -58,7 +59,7 @@ func (s *fakeStore) Maintain(context.Context, time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.maintains++
-	return nil
+	return s.maintainErr
 }
 func (s *fakeStore) Health() history.Health { return s.health }
 func (s *fakeStore) Close() error           { s.mu.Lock(); defer s.mu.Unlock(); s.closed = true; return nil }
@@ -207,6 +208,26 @@ func TestCurrentReturnsDeepCopy(t *testing.T) {
 	_ = scheduler.Stop(ctx)
 }
 
+func TestMetricStatusesReturnsDeepCopyOfLatestAttempt(t *testing.T) {
+	ticker := &fakeTicker{channel: make(chan time.Time)}
+	store := &fakeStore{}
+	at := time.Now().UTC()
+	scheduler, _ := New(func(context.Context) observation.Snapshot { return completeSnapshot(at) }, store, Config{Interval: time.Hour, NewTicker: func(time.Duration) Ticker { return ticker }})
+	_ = scheduler.Start(context.Background())
+	waitFor(t, func() bool { return len(scheduler.MetricStatuses()) == 6 })
+	first := scheduler.MetricStatuses()
+	status := first[history.ProcessCount]
+	*status.ObservedAt = time.Time{}
+	first[history.ProcessCount] = status
+	second := scheduler.MetricStatuses()
+	if second[history.ProcessCount].ObservedAt == nil || second[history.ProcessCount].ObservedAt.IsZero() {
+		t.Fatal("caller mutated cached metric status")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_ = scheduler.Stop(ctx)
+}
+
 func TestFailedCollectionRetainsUsefulCurrent(t *testing.T) {
 	ticker := &fakeTicker{channel: make(chan time.Time, 1)}
 	store := &fakeStore{}
@@ -227,6 +248,37 @@ func TestFailedCollectionRetainsUsefulCurrent(t *testing.T) {
 	if current.Sequence != 1 || current.CollectionState == "FAILED" {
 		t.Fatalf("current=%+v", current)
 	}
+	store.mu.Lock()
+	maintains := store.maintains
+	store.mu.Unlock()
+	stats := scheduler.Stats()
+	if maintains != 2 || stats.LatestCollectionState != "FAILED" || !stats.LatestCollectionAt.Equal(at.Add(time.Second)) {
+		t.Fatalf("maintenance/stats=%d/%+v", maintains, stats)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_ = scheduler.Stop(ctx)
+}
+
+func TestFailedCollectionMaintenanceFailureIsObserved(t *testing.T) {
+	ticker := &fakeTicker{channel: make(chan time.Time, 1)}
+	store := &fakeStore{}
+	at := time.Now().UTC()
+	var calls atomic.Int32
+	collect := func(context.Context) observation.Snapshot {
+		if calls.Add(1) == 1 {
+			return completeSnapshot(at)
+		}
+		return observation.Snapshot{ObservedAt: at.Add(time.Second), Quality: observation.Quality{State: observation.Failed}}
+	}
+	scheduler, _ := New(collect, store, Config{Interval: time.Hour, NewTicker: func(time.Duration) Ticker { return ticker }})
+	_ = scheduler.Start(context.Background())
+	waitFor(t, func() bool { _, ok := scheduler.Current(); return ok })
+	store.mu.Lock()
+	store.maintainErr = errors.New("maintenance unavailable")
+	store.mu.Unlock()
+	ticker.channel <- at
+	waitFor(t, func() bool { return scheduler.Stats().StoreFailures == 1 })
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	_ = scheduler.Stop(ctx)
