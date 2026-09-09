@@ -1,2 +1,56 @@
-# platform-demo-home-lab-observer
-Cross-platform, headless-first host and container observability agent for Platform Demo
+# Home Lab Observer
+
+Home Lab Observer is a cross-platform, headless-first observability service for a single machine. It collects host, process, service, container, and opt-in log signals; exposes them through a versioned local API; can show them in an optional local dashboard; and can securely upload normalized snapshots to a separate management application such as Platform Demo.
+
+The project is intentionally public and self-contained. It does not contain, build from, or grant access to the private home-lab infrastructure repository.
+
+## Project status
+
+The repository foundation and architecture are being established in [Spec 001](specs/001-repository-foundation/spec.md). The executable observer is planned in [Spec 002](specs/002-cross-platform-observer/spec.md). Until Spec 002 is complete, this repository does not publish an installable agent.
+
+## Product shape
+
+- One native binary for Windows, macOS, and Linux, with no runtime language installation.
+- Headless collection by default; an optional responsive dashboard is served on loopback only.
+- Host health, CPU, memory, disks, network, sensors when available, processes, services, Docker workloads, events, and bounded trends.
+- Logs from explicit sources such as journald, Windows Event Log, macOS unified logging, and Docker, with conservative privacy defaults.
+- Versioned JSON and OpenMetrics-compatible endpoints for local and remote clients.
+- Optional signed Linux container for container-oriented deployments; native installs remain the authoritative source for full host metrics on Windows and macOS.
+- Read-only in the initial release. Permissioned operational actions are a separately specified capability.
+
+## Architecture at a glance
+
+```text
+OS and workload adapters
+  -> normalized observations
+  -> bounded local history
+  -> versioned local API + optional embedded dashboard
+  -> optional authenticated snapshot uploader
+  -> Platform Demo or another compatible client
+```
+
+Platform Demo is a separate consumer of the observer contract. It does not iframe the local dashboard or require this repository to know about Platform Demo's UI.
+
+## Documentation
+
+- [Constitution](.specify/memory/constitution.md)
+- [Repository standards](docs/coding-standards.md)
+- [Architecture research](docs/architecture-research/001-cross-platform-observer.md)
+- [Architecture decisions](docs/adr/README.md)
+- [Specifications](specs/README.md)
+- [Security model](SECURITY.md)
+- [Threat model](docs/security/threat-model.md)
+- [Data policy](docs/privacy/data-policy.md)
+
+## Supported delivery targets
+
+| Target | Native binary | Background service | Local UI | Docker observations |
+| --- | --- | --- | --- | --- |
+| Linux amd64/arm64 | Planned | systemd | Planned | Planned |
+| macOS Intel/Apple silicon | Planned | launchd | Planned | Docker Desktop, when available |
+| Windows amd64/arm64 | Planned | Windows Service | Planned | Docker Desktop, when available |
+| Linux container amd64/arm64 | Planned | Container restart policy | Planned | Planned through a constrained proxy |
+
+## License
+
+[MIT](LICENSE)
