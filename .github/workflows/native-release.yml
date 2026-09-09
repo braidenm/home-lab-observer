@@ -194,6 +194,7 @@ jobs:
       - name: Execute the native artifact and offline installer on Windows
         if: runner.os == 'Windows'
         env:
+          OBSERVER_TEST_USER_MANAGER: '1'
           VERSION: ${{ needs.authorize.outputs.version }}
           COMMIT: ${{ needs.authorize.outputs.commit }}
         run: node scripts/smoke-native-delivery.mjs --mode native --version "$env:VERSION" --commit "$env:COMMIT" --directory dist/release

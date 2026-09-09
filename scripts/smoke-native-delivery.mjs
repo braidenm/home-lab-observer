@@ -220,6 +220,12 @@ async function nativeSmoke(directory, version, commit, checksums) {
       execFileSync(powershell, [...common, "-Version", version, "-Archive", archive, "-Checksum", checksums.get(archiveName), "-InstallRoot", installRoot], { stdio: "inherit", timeout: 60_000 });
       const launcher = path.join(installRoot, "bin", "observer.cmd");
       verifyVersion(runObserver(launcher, ["version", "--json"]), version, commit, platform, arch);
+      if (process.env.OBSERVER_TEST_USER_MANAGER === "1") {
+        execFileSync(process.execPath, [fileURLToPath(new URL("./smoke-windows-manager.mjs", import.meta.url))], {
+          env: { ...process.env, OBSERVER_SMOKE_BINARY: executable, OBSERVER_SMOKE_INSTALL_ROOT: installRoot },
+          stdio: "inherit", timeout: 150_000, windowsHide: true,
+        });
+      }
       execFileSync(powershell, [...common, "-Uninstall", "-InstallRoot", installRoot], { stdio: "inherit", timeout: 30_000 });
     } else {
       const installer = path.join(directory, "install.sh");
