@@ -68,10 +68,11 @@ func TestInvalidOrSensitiveLookingValuesAreDropped(t *testing.T) {
 	defer writer.Close()
 	secret := "github" + "_pat_" + strings.Repeat("A", 30)
 	writer.Record(Event{Kind: EventRuntimeStarted, Code: CodeOK, Version: secret})
+	writer.Record(Event{Kind: EventRuntimeStarted, Code: CodeOK, Version: strings.Repeat("A", 40)})
 	writer.Record(Event{Kind: "USER_MESSAGE", Code: CodeOK, Version: "dev"})
 	writer.Record(Event{Kind: EventRuntimeReady, Code: "TOKEN", Version: "dev"})
 	health := writer.Health()
-	if health.DroppedRecords != 3 || health.TotalBytes != 0 || health.FileCount != 0 {
+	if health.DroppedRecords != 4 || health.TotalBytes != 0 || health.FileCount != 0 {
 		t.Fatalf("unexpected health: %+v", health)
 	}
 }

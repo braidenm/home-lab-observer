@@ -101,7 +101,7 @@ type diskRecord struct {
 	DurationMS int64      `json:"duration_ms"`
 }
 
-var safeVersion = regexp.MustCompile(`^[0-9A-Za-z.+-]{1,64}$`)
+var safeVersion = regexp.MustCompile(`^(?:dev|(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?)$`)
 
 var eventKinds = map[EventKind]struct{}{
 	EventRuntimeStarted: {}, EventRuntimeReady: {}, EventStopRequested: {}, EventRuntimeStopped: {},
@@ -207,7 +207,7 @@ func (w *Writer) Record(event Event) {
 func validEvent(event Event) bool {
 	_, validKind := eventKinds[event.Kind]
 	_, validCode := resultCodes[event.Code]
-	return validKind && validCode && safeVersion.MatchString(event.Version) && event.Duration >= 0 && event.Duration <= time.Hour
+	return validKind && validCode && len(event.Version) <= 64 && safeVersion.MatchString(event.Version) && event.Duration >= 0 && event.Duration <= time.Hour
 }
 
 func (w *Writer) Health() Health {
@@ -337,7 +337,7 @@ func oldestRecordTime(path string, info os.FileInfo) (time.Time, error) {
 	if _, ok := eventKinds[record.Event]; !ok {
 		return time.Time{}, ownerfs.ErrUnsafePath
 	}
-	if _, ok := resultCodes[record.Code]; !ok || !safeVersion.MatchString(record.Version) || record.DurationMS < 0 || record.DurationMS > time.Hour.Milliseconds() {
+	if _, ok := resultCodes[record.Code]; !ok || len(record.Version) > 64 || !safeVersion.MatchString(record.Version) || record.DurationMS < 0 || record.DurationMS > time.Hour.Milliseconds() {
 		return time.Time{}, ownerfs.ErrUnsafePath
 	}
 	at, err := time.Parse(time.RFC3339Nano, record.ObservedAt)
