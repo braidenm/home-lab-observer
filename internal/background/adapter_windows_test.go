@@ -33,7 +33,7 @@ func TestWindowsTaskTemplateIsAcceptedInMemoryWithoutRegistration(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := `$xml=[IO.File]::ReadAllText($args[0]); $service=New-Object -ComObject 'Schedule.Service'; $service.Connect(); $task=$service.NewTask(0); $task.XmlText=$xml; if ($task.Principal.LogonType -ne 3 -or $task.Principal.RunLevel -ne 0 -or $task.Settings.ExecutionTimeLimit -ne 'PT0S') { exit 9 }; [IO.File]::WriteAllText($args[1],$task.XmlText,(New-Object Text.UTF8Encoding($false)))`
+	script := `$xml=[IO.File]::ReadAllText($args[0]); $service=New-Object -ComObject 'Schedule.Service'; $service.Connect(); $task=$service.NewTask(0); $task.XmlText=$xml; $task.RegistrationInfo.URI='\Home Lab Observer'; if ($task.Principal.LogonType -ne 3 -or $task.Principal.RunLevel -ne 0 -or $task.Settings.ExecutionTimeLimit -ne 'PT0S') { exit 9 }; [IO.File]::WriteAllText($args[1],$task.XmlText,(New-Object Text.UTF8Encoding($false)))`
 	scriptPath := filepath.Join(t.TempDir(), "verify-task.ps1")
 	if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
 		t.Fatal(err)
@@ -55,6 +55,22 @@ func TestWindowsTaskTemplateIsAcceptedInMemoryWithoutRegistration(t *testing.T) 
 			}
 		}
 		t.Fatalf("canonical matcher rejected Task Scheduler XML token lengths: want %d got %d", len(want), len(got))
+	}
+	registered := string(normalized)
+	if !strings.Contains(registered, `<URI>\Home Lab Observer</URI>`) {
+		t.Fatal("Task Scheduler in-memory round trip did not expose registration URI metadata")
+	}
+	if !validTaskXML(registered, definition.content) {
+		t.Fatal("registered task URI metadata was not normalized")
+	}
+	for _, changed := range []string{
+		strings.Replace(registered, `\Home Lab Observer</URI>`, `\Another Task</URI>`, 1),
+		strings.Replace(registered, "</RegistrationInfo>", `<URI>\Home Lab Observer</URI></RegistrationInfo>`, 1),
+		strings.Replace(registered, "</RegistrationInfo>", `<Author>unexpected</Author></RegistrationInfo>`, 1),
+	} {
+		if validTaskXML(changed, definition.content) {
+			t.Fatal("unknown or mismatched registration metadata was accepted as owned")
+		}
 	}
 	malicious := strings.Replace(string(definition.content), "</Actions>", "<Exec><Command>cmd.exe</Command></Exec></Actions>", 1)
 	if validTaskXML(malicious, definition.content) {

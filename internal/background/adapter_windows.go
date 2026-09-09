@@ -19,6 +19,8 @@ import (
 
 const managerIdentity = `\Home Lab Observer`
 
+const taskXMLNamespace = "http://schemas.microsoft.com/windows/2004/02/mit/task"
+
 type windowsAdapter struct {
 	runner commandRunner
 	root   string
@@ -100,6 +102,8 @@ func canonicalTaskXML(value []byte) ([]string, error) {
 	}
 	decoder := xml.NewDecoder(bytes.NewReader(normalized))
 	var tokens []string
+	var elements []xml.Name
+	registrationURISeen := false
 	for {
 		token, err := decoder.Token()
 		if err != nil {
@@ -110,20 +114,44 @@ func canonicalTaskXML(value []byte) ([]string, error) {
 		}
 		switch typed := token.(type) {
 		case xml.StartElement:
+			if isTaskRegistrationURI(elements, typed.Name) {
+				if registrationURISeen {
+					return nil, errors.New("task XML contains duplicate registration URI metadata")
+				}
+				var uri string
+				if err := decoder.DecodeElement(&uri, &typed); err != nil || strings.TrimSpace(uri) != managerIdentity {
+					return nil, errors.New("task XML registration URI does not match the managed task")
+				}
+				registrationURISeen = true
+				continue
+			}
 			attributes := make([]string, 0, len(typed.Attr))
 			for _, attr := range typed.Attr {
 				attributes = append(attributes, attr.Name.Space+"|"+attr.Name.Local+"="+attr.Value)
 			}
 			sort.Strings(attributes)
 			tokens = append(tokens, "<"+typed.Name.Space+"|"+typed.Name.Local+" "+strings.Join(attributes, " ")+">")
+			elements = append(elements, typed.Name)
 		case xml.EndElement:
+			if len(elements) == 0 || elements[len(elements)-1] != typed.Name {
+				return nil, errors.New("task XML element nesting is invalid")
+			}
 			tokens = append(tokens, "</"+typed.Name.Space+"|"+typed.Name.Local+">")
+			elements = elements[:len(elements)-1]
 		case xml.CharData:
 			if text := strings.TrimSpace(string(typed)); text != "" {
 				tokens = append(tokens, "="+text)
 			}
 		}
 	}
+}
+
+func isTaskRegistrationURI(parents []xml.Name, current xml.Name) bool {
+	if current.Space != taskXMLNamespace || current.Local != "URI" || len(parents) != 2 {
+		return false
+	}
+	return parents[0].Space == taskXMLNamespace && parents[0].Local == "Task" &&
+		parents[1].Space == taskXMLNamespace && parents[1].Local == "RegistrationInfo"
 }
 
 func normalizeTaskXMLBytes(value []byte) ([]byte, error) {
