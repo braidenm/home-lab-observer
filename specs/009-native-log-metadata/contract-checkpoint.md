@@ -13,7 +13,7 @@ Ranges use half-open `[window_start, window_end)` UTC windows. `window_end` is t
 not after `generated_at`; `window_start` is exactly one requested range earlier. Storage rollups remain one minute;
 the response aggregates them into this fixed presentation grid:
 
-| range | interval | expected buckets per supported source |
+| range | interval | expected buckets per configured source |
 | --- | ---: | ---: |
 | `1h` | 60 seconds | 60 |
 | `6h` | 300 seconds | 72 |
@@ -22,8 +22,10 @@ the response aggregates them into this fixed presentation grid:
 
 ## Closed v1 wire shape
 
-All timestamps are UTC RFC 3339 values ending in `Z`. All counts are non-negative safe JSON integers. Reasons are
-code-owned `^[A-Z0-9_]{1,64}$` values; clients format them as labels and never treat them as log text.
+All timestamps are UTC RFC 3339 values ending in `Z`. All counts are non-negative integers no greater than
+`Number.MAX_SAFE_INTEGER` (9007199254740991); acquisition and persistence reject an overflowing increment before
+commit rather than wrap or project an imprecise number. Reasons are code-owned `^[A-Z0-9_]{1,64}$` values; clients
+format them as labels and never treat them as log text.
 The following structural illustration shortens one 72-bucket array to two entries; executable fixtures must contain
 the exact bucket count required below.
 
@@ -83,7 +85,11 @@ the exact bucket count required below.
           "coverage_state": "GAP",
           "covered_seconds": 0,
           "reason_code": "CHECKPOINT_RESET",
-          "counts": null
+          "counts": {
+            "captured": 1,
+            "discarded": 0,
+            "severity": { "trace": 0, "debug": 0, "info": 0, "warn": 1, "error": 0, "critical": 0, "unknown": 0 }
+          }
         }
       ]
     }
@@ -98,30 +104,44 @@ configuration. macOS performs no native call and reports a configured source as 
 Top-level support, collection, freshness, observed time, and reason use the existing generic enums. With no configured
 source they are `DISABLED/NOT_RUN/UNKNOWN/null/LOG_SOURCES_DISABLED`, `sources` is empty, `coverage_state` is `UNKNOWN`,
 and `counts` is null. Mixed source outcomes aggregate as `SUPPORTED/PARTIAL`; retained useful data after a later failure
-is `STALE` and keeps its last-success `observed_at`. `attempted_at` describes the latest attempt independently, while
-`coverage_through` is the last contiguous time reached by a successful caught-up read; either is null when absent.
+is `STALE` and keeps its last-success `observed_at`. `attempted_at` describes the latest attempt independently. The
+`coverage_through` value is the query-start watermark from the latest successful caught-up read, not a claim that all
+earlier time is contiguous; bucket coverage remains authoritative for historical gaps. Either timestamp is null when
+absent.
 
 Coverage states have exact meanings:
 
-- `FULL`: every second of the interval is covered; `covered_seconds` equals the interval, counts are present, and
-  reason is null.
+- `FULL`: every second of the interval is covered; `covered_seconds` equals the interval, counts are present (including
+  a proven zero when empty), and reason is null.
 - `PARTIAL`: some but not all seconds are covered; `covered_seconds` is between 1 and interval minus 1, counts are
-  present and describe only captured/known-discarded observations in that partial coverage, and reason is non-null.
+  present (including a proven zero for the covered portion), do not claim completeness for the rest, and reason is
+  non-null.
 - `GAP`: a code-owned known gap exists (for example timeout, missed poll, or checkpoint reset); covered seconds are 0,
-  reason is non-null, and counts are null.
-- `UNKNOWN`: no trustworthy coverage evidence exists; covered seconds are 0, reason is non-null, and counts are null.
+  reason is non-null, and independently known captured/discarded counts may still be present.
+- `UNKNOWN`: no trustworthy coverage evidence exists; covered seconds are 0, reason is non-null, and independently
+  known captured/discarded counts may still be present.
 
-A supported source always returns exactly `expected_bucket_count` ascending epoch-aligned buckets, including explicit
-gaps. A non-supported source returns no buckets, null counts, zero covered seconds, and `UNKNOWN` coverage. Source
-coverage is `FULL` only when every bucket is full, `UNKNOWN` when all are unknown, `GAP` when no seconds are covered
-and at least one bucket is a gap, and `PARTIAL` otherwise. Top-level coverage uses the same aggregation across configured
-sources. A count of zero therefore means zero captured or known-discarded observations in at least some real coverage;
-unknown loss is represented by coverage, never an estimated count.
+Every configured source always returns exactly `expected_bucket_count` ascending epoch-aligned buckets, including an
+unsupported or permission-denied latest state. A source with no historical evidence returns all `UNKNOWN` buckets with
+null counts; the UI may hide its empty histogram but must show its status. A later failure never removes retained
+historical bucket counts or coverage. Source coverage is `FULL` only when every bucket is full, `UNKNOWN` when all are
+unknown, `GAP` when no seconds are covered and at least one bucket is a gap, and `PARTIAL` otherwise. Thus a mixture of
+full/partial/gap/unknown buckets aggregates to `PARTIAL` whenever it has some but not full coverage. Top-level coverage
+uses the same aggregation across configured sources.
+
+Counts and coverage are orthogonal. A bucket count is present whenever at least one committed captured/discarded record
+is known, regardless of `FULL/PARTIAL/GAP/UNKNOWN`. It is also present as all zeroes when positive coverage proves an
+empty observed portion. It is null only when the bucket has no known record and zero coverage. Therefore numeric zero
+never substitutes for unknown, while a gap does not hide a captured backlog event.
 
 For every non-null bucket count, `captured` equals the sum of the seven severity values. Source counts equal the sums
-of non-null buckets in the requested window; top-level counts equal the sums of non-null source counts. Captured means
-normalized committed observations. Discarded means known examined rows intentionally skipped in a committed batch.
-Deferred lookahead, retention expiry, ring eviction, failed/uncommitted attempts, and unknown loss are not discarded.
+of non-null buckets in the requested window and are null only when every bucket count is null; top-level counts use the
+same rule across sources. Captured observations are bucketed by event time. A discarded row with a valid event time is
+bucketed by event time; one whose timestamp is missing or invalid is bucketed by its attempt query-start time. Discarded
+source/window totals therefore describe known rows attributed to the requested window, not exclusively event-time
+records. Captured means normalized committed observations. Discarded means known examined rows intentionally skipped
+in a committed batch. Deferred lookahead, retention expiry, ring eviction, failed/uncommitted attempts, and unknown
+loss are not discarded.
 
 ## Transport-neutral UI DTO
 
@@ -197,14 +217,16 @@ remain valid; native production is narrower than the existing bounded generic sc
 Load summary independently from current observations. Render aggregate captured/discarded cards (use “Unavailable”,
 not zero, for null), then at most two source panels with status, last attempt/coverage-through, and a keyboard-readable
 stacked severity histogram. Gap/unknown buckets remain visually distinct and expose time, coverage, reason and safe
-counts in accessible text. Source panels stack at 390 px and may form two columns at 768/1440 px; legends wrap.
+known counts in accessible text; a positive bar may coexist with a gap overlay because counts do not prove coverage.
+Hide an unsupported source's all-unknown/null chart while retaining its status. Source panels stack at 390 px and may
+form two columns at 768/1440 px; legends wrap.
 
 Summary loading, disabled, unsupported, permission-denied, empty-covered, partial, gap, stale,
 and request-error states must not blank or modify the existing source/severity/event-code filters and context list.
 No body drawer, raw JSON, live tail, arbitrary query/facet, install action, or cross-platform parity claim is added.
-Fixtures and tests include additive unknown metadata, malformed known fields, inconsistent count/coverage invariants,
-all-null gaps, zero-with-full-coverage, secret/body/path canaries, optional-method fallback, keyboard access, and
-390/768/1440 layouts.
+Fixtures and tests include additive unknown metadata, malformed known fields, safe-integer overflow, inconsistent
+count/coverage invariants, all-null gaps, positive-count gaps, zero-with-full-coverage, latest-failure history retention,
+secret/body/path canaries, optional-method fallback, keyboard access, and 390/768/1440 layouts.
 
 Collection remains scheduler-owned at an independent 60-second cadence with an immediate first attempt; those native,
 checkpoint-CAS, coalesced-coverage, fixed-minute-rollup, retention, and process-reaping contracts stay outside this DTO.
