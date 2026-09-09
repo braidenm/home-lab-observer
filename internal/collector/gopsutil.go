@@ -87,7 +87,7 @@ func (GopsutilProvider) Processes(ctx context.Context) (ProcessResult, error) {
 		}
 		result.Scanned++
 		name, e1 := p.NameWithContext(ctx)
-		statuses, e2 := p.StatusWithContext(ctx)
+		status, e2 := readProcessStatus(ctx, p)
 		cpuPct, e3 := p.CPUPercentWithContext(ctx)
 		mi, e4 := p.MemoryInfoWithContext(ctx)
 		ct, e5 := p.CreateTimeWithContext(ctx)
@@ -103,11 +103,14 @@ func (GopsutilProvider) Processes(ctx context.Context) (ProcessResult, error) {
 			}
 			continue
 		}
-		status := "unknown"
-		if len(statuses) > 0 {
-			status = statuses[0]
-		}
 		result.Processes = append(result.Processes, ProcessStat{PID: p.Pid, Name: name, State: status, CPUPercent: cpuPct, MemoryBytes: mi.RSS, CreateTimeMS: ct})
 	}
 	return result, nil
+}
+
+func normalizedProcessStatus(statuses []string) string {
+	if len(statuses) == 0 || statuses[0] == "" {
+		return "unknown"
+	}
+	return statuses[0]
 }
