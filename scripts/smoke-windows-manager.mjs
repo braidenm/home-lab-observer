@@ -72,35 +72,179 @@ console.log("Windows user-manager smoke passed enable, status, graceful stop, re
 function fixedTaskXMLShapeScript() {
   return String.raw`
 $ErrorActionPreference='Stop'
+function New-Comparison([string]$Kind,[string]$Path,[string]$Field) {
+  return [ordered]@{kind=$Kind;path=$Path;field=$Field}
+}
+function Get-DirectText($Node) {
+  $text=''
+  foreach ($child in @($Node.ChildNodes)) {
+    if ($child.NodeType -eq [Xml.XmlNodeType]::Text -or $child.NodeType -eq [Xml.XmlNodeType]::CDATA) { $text += [string]$child.Value }
+  }
+  return $text.Trim()
+}
+function Test-NormalizedElement($Node,[string]$LogicalPath) {
+  if ([string]$Node.NamespaceURI -cne 'http://schemas.microsoft.com/windows/2004/02/mit/task') { return $false }
+  if (@($Node.Attributes).Count -ne 0 -or @($Node.ChildNodes | Where-Object {$_.NodeType -eq [Xml.XmlNodeType]::Element}).Count -ne 0) { return $false }
+  $expected=$null
+  switch -CaseSensitive ($LogicalPath) {
+    'Task/Triggers/LogonTrigger/Enabled' {$expected='true'}
+    'Task/Principals/Principal/RunLevel' {$expected='LeastPrivilege'}
+    'Task/Settings/AllowHardTerminate' {$expected='true'}
+    'Task/Settings/RunOnlyIfNetworkAvailable' {$expected='false'}
+    'Task/Settings/AllowStartOnDemand' {$expected='true'}
+    'Task/Settings/Enabled' {$expected='true'}
+    'Task/Settings/Hidden' {$expected='false'}
+    'Task/Settings/RunOnlyIfIdle' {$expected='false'}
+    'Task/Settings/DisallowStartOnRemoteAppSession' {$expected='false'}
+    'Task/Settings/WakeToRun' {$expected='false'}
+    'Task/Settings/Priority' {$expected='7'}
+    'Task/RegistrationInfo/URI' {$expected='\Home Lab Observer'}
+    default {return $false}
+  }
+  return (Get-DirectText $Node) -ceq $expected
+}
+function Get-ComparableChildren($Node,[string]$LogicalPath) {
+  foreach ($child in @($Node.ChildNodes)) {
+    if ($child.NodeType -ne [Xml.XmlNodeType]::Element) { continue }
+    $childPath=$LogicalPath+'/'+[string]$child.LocalName
+    if (-not (Test-NormalizedElement $child $childPath)) { Write-Output $child }
+  }
+}
+function Get-SafeName([string]$Name) {
+  if ($Name -cmatch '^[A-Za-z][A-Za-z0-9._-]{0,63}$') { return $Name }
+  return 'UNSAFE'
+}
+function Compare-TaskElement($Expected,$Actual,[string]$LogicalPath,[string]$DisplayPath) {
+  if ([string]$Expected.LocalName -cne [string]$Actual.LocalName) { return New-Comparison 'ELEMENT_NAME' $DisplayPath '' }
+  if ([string]$Expected.NamespaceURI -cne [string]$Actual.NamespaceURI) { return New-Comparison 'ELEMENT_NAMESPACE' $DisplayPath '' }
+  $expectedAttributes=@($Expected.Attributes | Sort-Object @{Expression={([string]$_.NamespaceURI)+'|'+([string]$_.LocalName)}})
+  $actualAttributes=@($Actual.Attributes | Sort-Object @{Expression={([string]$_.NamespaceURI)+'|'+([string]$_.LocalName)}})
+  if ($expectedAttributes.Count -ne $actualAttributes.Count) { return New-Comparison 'ATTRIBUTE_COUNT' $DisplayPath '' }
+  for ($index=0; $index -lt $expectedAttributes.Count; $index++) {
+    $field=Get-SafeName ([string]$expectedAttributes[$index].LocalName)
+    if ([string]$expectedAttributes[$index].LocalName -cne [string]$actualAttributes[$index].LocalName) { return New-Comparison 'ATTRIBUTE_NAME' $DisplayPath $field }
+    if ([string]$expectedAttributes[$index].NamespaceURI -cne [string]$actualAttributes[$index].NamespaceURI) { return New-Comparison 'ATTRIBUTE_NAMESPACE' $DisplayPath $field }
+    if ([string]$expectedAttributes[$index].Value -cne [string]$actualAttributes[$index].Value) { return New-Comparison 'ATTRIBUTE_VALUE' $DisplayPath $field }
+  }
+  if ((Get-DirectText $Expected) -cne (Get-DirectText $Actual)) { return New-Comparison 'TEXT_VALUE' $DisplayPath '' }
+  $expectedChildren=@(Get-ComparableChildren $Expected $LogicalPath)
+  $actualChildren=@(Get-ComparableChildren $Actual $LogicalPath)
+  $shared=[Math]::Min($expectedChildren.Count,$actualChildren.Count)
+  for ($index=0; $index -lt $shared; $index++) {
+    $safeName=Get-SafeName ([string]$expectedChildren[$index].LocalName)
+    $childPath=$DisplayPath+'/'+$safeName+'['+($index+1)+']'
+    if ([string]$expectedChildren[$index].LocalName -cne [string]$actualChildren[$index].LocalName) { return New-Comparison 'CHILD_SEQUENCE' $childPath '' }
+    $difference=Compare-TaskElement $expectedChildren[$index] $actualChildren[$index] ($LogicalPath+'/'+[string]$expectedChildren[$index].LocalName) $childPath
+    if ($null -ne $difference) { return $difference }
+  }
+  if ($expectedChildren.Count -gt $actualChildren.Count) {
+    $safeName=Get-SafeName ([string]$expectedChildren[$shared].LocalName)
+    return New-Comparison 'MISSING_CHILD' ($DisplayPath+'/'+$safeName+'['+($shared+1)+']') ''
+  }
+  if ($actualChildren.Count -gt $expectedChildren.Count) { return New-Comparison 'EXTRA_CHILD' $DisplayPath '' }
+  return $null
+}
+function Compare-TaskDocuments($Expected,$Actual) {
+  if ($null -eq $Expected -or $null -eq $Actual) { return New-Comparison 'PARSE_UNAVAILABLE' '' '' }
+  $difference=Compare-TaskElement $Expected.DocumentElement $Actual.DocumentElement 'Task' '/Task[1]'
+  if ($null -eq $difference) { return New-Comparison 'MATCH' '' '' }
+  return $difference
+}
+function Get-TaskVersion($Document) {
+  if ($null -eq $Document -or $null -eq $Document.DocumentElement) { return 'UNAVAILABLE' }
+  $attribute=$Document.DocumentElement.GetAttributeNode('version')
+  if ($null -eq $attribute) { return 'MISSING' }
+  switch -CaseSensitive ([string]$attribute.Value) {
+    '1.1' {return 'V1_1'}
+    '1.2' {return 'V1_2'}
+    '1.3' {return 'V1_3'}
+    '1.4' {return 'V1_4'}
+    default {return 'OTHER'}
+  }
+}
+function Decode-TaskBytes([byte[]]$Bytes) {
+  if ($Bytes.Length -eq 0) { return [pscustomobject]@{encoding='EMPTY';decode='FAILED';text=$null} }
+  $encoding='UTF8_NO_BOM';$offset=0;$decoder=$null
+  if ($Bytes.Length -ge 3 -and $Bytes[0] -eq 0xef -and $Bytes[1] -eq 0xbb -and $Bytes[2] -eq 0xbf) {
+    $encoding='UTF8_BOM';$offset=3;$decoder=New-Object Text.UTF8Encoding($false,$true)
+  } elseif ($Bytes.Length -ge 2 -and $Bytes[0] -eq 0xff -and $Bytes[1] -eq 0xfe) {
+    $encoding='UTF16LE_BOM';$offset=2;$decoder=New-Object Text.UnicodeEncoding($false,$true,$true)
+  } elseif ($Bytes.Length -ge 2 -and $Bytes[0] -eq 0xfe -and $Bytes[1] -eq 0xff) {
+    $encoding='UTF16BE_BOM';$offset=2;$decoder=New-Object Text.UnicodeEncoding($true,$true,$true)
+  } else {
+    $sample=[Math]::Min($Bytes.Length,128);$evenNull=0;$oddNull=0
+    for ($index=0; $index -lt $sample; $index++) { if ($Bytes[$index] -eq 0) { if (($index % 2) -eq 0) {$evenNull++} else {$oddNull++} } }
+    if ($oddNull -ge 4 -and $evenNull -eq 0) {$encoding='UTF16LE_NO_BOM';$decoder=New-Object Text.UnicodeEncoding($false,$false,$true)}
+    elseif ($evenNull -ge 4 -and $oddNull -eq 0) {$encoding='UTF16BE_NO_BOM';$decoder=New-Object Text.UnicodeEncoding($true,$false,$true)}
+    else {$decoder=New-Object Text.UTF8Encoding($false,$true)}
+  }
+  try { return [pscustomobject]@{encoding=$encoding;decode='OK';text=$decoder.GetString($Bytes,$offset,$Bytes.Length-$offset)} }
+  catch { return [pscustomobject]@{encoding=$encoding;decode='FAILED';text=$null} }
+}
+function Convert-TaskDocument($Decoded) {
+  if ($Decoded.decode -cne 'OK') { return $null }
+  try {
+    $document=New-Object Xml.XmlDocument
+    $document.PreserveWhitespace=$false
+    $document.LoadXml([string]$Decoded.text)
+    if ($document.DocumentElement.LocalName -cne 'Task' -or $document.DocumentElement.NamespaceURI -cne 'http://schemas.microsoft.com/windows/2004/02/mit/task') { return $null }
+    return $document
+  } catch { return $null }
+}
+function Read-SchtasksBytes {
+  $start=New-Object Diagnostics.ProcessStartInfo
+  $start.FileName=[IO.Path]::Combine([Environment]::GetFolderPath('System'),'schtasks.exe')
+  $start.Arguments='/Query /TN "\Home Lab Observer" /XML'
+  $start.UseShellExecute=$false;$start.CreateNoWindow=$true;$start.RedirectStandardOutput=$true
+  $process=[Diagnostics.Process]::Start($start)
+  $memory=New-Object IO.MemoryStream
+  try {
+    $buffer=New-Object byte[] 4096
+    while (($count=$process.StandardOutput.BaseStream.Read($buffer,0,$buffer.Length)) -gt 0) {
+      if ($memory.Length+$count -gt 131072) { throw 'bounded query output exceeded' }
+      $memory.Write($buffer,0,$count)
+    }
+    $process.WaitForExit()
+    return [pscustomobject]@{exit=if($process.ExitCode -eq 0){'ZERO'}else{'NONZERO'};bytes=[Convert]::ToBase64String($memory.ToArray())}
+  } finally { $memory.Dispose();$process.Dispose() }
+}
 try {
+  $expectedPath=[IO.Path]::Combine($env:OBSERVER_SMOKE_INSTALL_ROOT,'background','task.xml')
+  $expectedItem=Get-Item -LiteralPath $expectedPath -Force
+  if ($expectedItem.PSIsContainer -or ($expectedItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $expectedItem.Length -gt 131072) { throw 'unsafe expected task file' }
+  $expectedDecoded=Decode-TaskBytes ([IO.File]::ReadAllBytes($expectedPath))
+  $expectedDocument=Convert-TaskDocument $expectedDecoded
   $service=New-Object -ComObject 'Schedule.Service'
   $service.Connect()
   $task=$service.GetFolder('\').GetTask('\Home Lab Observer')
-  $raw=[string]$task.Xml
-  $hasDeclaration=$raw.TrimStart().StartsWith('<?xml')
-  [xml]$document=$raw
-  $elementCounts=@{}
-  $attributeCounts=@{}
-  $nodes=@($document.SelectNodes('//*'))
-  foreach ($node in $nodes) {
-    $elementName=[string]$node.LocalName
-    if ($elementName -notmatch '^[A-Za-z][A-Za-z0-9._-]{0,63}$') { throw 'unsafe element name' }
-    if ($elementCounts.ContainsKey($elementName)) { $elementCounts[$elementName]++ } else { $elementCounts[$elementName]=1 }
-    foreach ($attribute in @($node.Attributes)) {
-      $attributeName=[string]$attribute.LocalName
-      if ($attributeName -notmatch '^[A-Za-z][A-Za-z0-9._-]{0,63}$') { throw 'unsafe attribute name' }
-      $key=$elementName+'|'+$attributeName
-      if ($attributeCounts.ContainsKey($key)) { $attributeCounts[$key]++ } else { $attributeCounts[$key]=1 }
+  $comDecoded=[pscustomobject]@{encoding='DOTNET_STRING';decode='OK';text=[string]$task.Xml}
+  $comDocument=Convert-TaskDocument $comDecoded
+  $queryExit='START_FAILED';$queryDecoded=[pscustomobject]@{encoding='UNKNOWN';decode='NOT_RUN';text=$null};$queryDocument=$null
+  try {
+    $query=Read-SchtasksBytes
+    $queryExit=$query.exit
+    if ($queryExit -ceq 'ZERO') {
+      $queryDecoded=Decode-TaskBytes ([Convert]::FromBase64String([string]$query.bytes))
+      $queryDocument=Convert-TaskDocument $queryDecoded
     }
-  }
-  $elements=@($elementCounts.GetEnumerator() | Sort-Object Name | ForEach-Object { [ordered]@{name=[string]$_.Name; count=[int]$_.Value} })
-  $attributes=@($attributeCounts.GetEnumerator() | Sort-Object Name | ForEach-Object {
-    $parts=([string]$_.Name).Split('|',2)
-    [ordered]@{element=$parts[0]; name=$parts[1]; count=[int]$_.Value}
-  })
-  [ordered]@{code='TASK_XML_SHAPE_AVAILABLE'; xml_declaration=[bool]$hasDeclaration; element_count=[int]$nodes.Count; elements=$elements; attributes=$attributes} | ConvertTo-Json -Compress -Depth 4
+  } catch {}
+  [ordered]@{
+    code='TASK_XML_DIAGNOSTIC_AVAILABLE'
+    expected_encoding=$expectedDecoded.encoding
+    expected_parse=if($null -ne $expectedDocument){'OK'}else{'FAILED'}
+    com_parse=if($null -ne $comDocument){'OK'}else{'FAILED'}
+    query_exit=$queryExit
+    query_encoding=$queryDecoded.encoding
+    query_decode=$queryDecoded.decode
+    query_parse=if($null -ne $queryDocument){'OK'}else{'FAILED'}
+    expected_version=Get-TaskVersion $expectedDocument
+    com_version=Get-TaskVersion $comDocument
+    query_version=Get-TaskVersion $queryDocument
+    expected_vs_com=Compare-TaskDocuments $expectedDocument $comDocument
+    com_vs_query=Compare-TaskDocuments $comDocument $queryDocument
+  } | ConvertTo-Json -Compress -Depth 4
 } catch {
-  $code=if (($_.Exception.HResult -band 0xffff) -eq 2) {'TASK_XML_TASK_MISSING'} else {'TASK_XML_QUERY_FAILED'}
+  $code=if (($_.Exception.HResult -band 0xffff) -eq 2) {'TASK_XML_TASK_MISSING'} else {'TASK_XML_DIAGNOSTIC_FAILED'}
   [ordered]@{code=$code} | ConvertTo-Json -Compress
 }
 `;
@@ -114,40 +258,46 @@ function queryFixedTaskXMLShape() {
       timeout: 15_000,
       windowsHide: true,
     });
-    assert(Buffer.byteLength(output, "utf8") <= 16_384, "task XML shape output exceeded its fixed bound");
+    assert(Buffer.byteLength(output, "utf8") <= 16_384, "task XML diagnostic output exceeded its fixed bound");
     return validateTaskXMLShape(JSON.parse(output));
   } catch {
-    return { code: "TASK_XML_QUERY_FAILED" };
+    return { code: "TASK_XML_DIAGNOSTIC_FAILED" };
   }
 }
 
 function validateTaskXMLShape(value) {
-  assert(value && typeof value === "object" && !Array.isArray(value), "task XML shape must be an object");
-  const allowedCodes = new Set(["TASK_XML_SHAPE_AVAILABLE", "TASK_XML_TASK_MISSING", "TASK_XML_QUERY_FAILED"]);
-  assert(allowedCodes.has(value.code), "task XML shape returned an unknown code");
-  if (value.code !== "TASK_XML_SHAPE_AVAILABLE") {
-    assert.deepEqual(Object.keys(value), ["code"], "unavailable task XML shape returned extra data");
+  assert(value && typeof value === "object" && !Array.isArray(value), "task XML diagnostic must be an object");
+  const allowedCodes = new Set(["TASK_XML_DIAGNOSTIC_AVAILABLE", "TASK_XML_TASK_MISSING", "TASK_XML_DIAGNOSTIC_FAILED"]);
+  assert(allowedCodes.has(value.code), "task XML diagnostic returned an unknown code");
+  if (value.code !== "TASK_XML_DIAGNOSTIC_AVAILABLE") {
+    assert.deepEqual(Object.keys(value), ["code"], "unavailable task XML diagnostic returned extra data");
     return { code: value.code };
   }
-  assert.deepEqual(Object.keys(value).sort(), ["attributes", "code", "element_count", "elements", "xml_declaration"], "task XML shape changed");
-  assert.equal(typeof value.xml_declaration, "boolean", "task XML declaration flag must be boolean");
-  assert(Number.isInteger(value.element_count) && value.element_count >= 1 && value.element_count <= 4096, "task XML element count is out of bounds");
-  assert(Array.isArray(value.elements) && value.elements.length <= 128, "task XML element summary is out of bounds");
-  assert(Array.isArray(value.attributes) && value.attributes.length <= 128, "task XML attribute summary is out of bounds");
+  const expectedKeys = ["code", "com_parse", "com_version", "com_vs_query", "expected_encoding", "expected_parse", "expected_version", "expected_vs_com", "query_decode", "query_encoding", "query_exit", "query_parse", "query_version"];
+  assert.deepEqual(Object.keys(value).sort(), expectedKeys.sort(), "task XML diagnostic shape changed");
+  const parseStates = new Set(["OK", "FAILED"]);
+  assert(parseStates.has(value.expected_parse) && parseStates.has(value.com_parse) && parseStates.has(value.query_parse), "task XML parse state is invalid");
+  assert(new Set(["ZERO", "NONZERO", "START_FAILED"]).has(value.query_exit), "task XML query exit state is invalid");
+  assert(new Set(["OK", "FAILED", "NOT_RUN"]).has(value.query_decode), "task XML query decode state is invalid");
+  const encodings = new Set(["UTF8_NO_BOM", "UTF8_BOM", "UTF16LE_BOM", "UTF16BE_BOM", "UTF16LE_NO_BOM", "UTF16BE_NO_BOM", "EMPTY", "UNKNOWN"]);
+  assert(encodings.has(value.expected_encoding) && encodings.has(value.query_encoding), "task XML encoding state is invalid");
+  const versions = new Set(["V1_1", "V1_2", "V1_3", "V1_4", "MISSING", "OTHER", "UNAVAILABLE"]);
+  assert(versions.has(value.expected_version) && versions.has(value.com_version) && versions.has(value.query_version), "task XML version state is invalid");
   const namePattern = /^[A-Za-z][A-Za-z0-9._-]{0,63}$/;
-  const summarize = (entry, keys) => {
-    assert(entry && typeof entry === "object" && !Array.isArray(entry), "task XML summary entry must be an object");
-    assert.deepEqual(Object.keys(entry).sort(), [...keys].sort(), "task XML summary entry changed");
-    for (const key of keys.filter((key) => key !== "count")) assert(namePattern.test(entry[key]), "task XML summary name is unsafe");
-    assert(Number.isInteger(entry.count) && entry.count >= 1 && entry.count <= 4096, "task XML summary count is out of bounds");
-    return Object.fromEntries(keys.map((key) => [key, entry[key]]));
+  const pathPattern = /^(?:|\/(?:[A-Za-z][A-Za-z0-9._-]{0,63})\[[1-9][0-9]{0,3}\](?:\/(?:[A-Za-z][A-Za-z0-9._-]{0,63})\[[1-9][0-9]{0,3}\])*)$/;
+  const comparisonKinds = new Set(["MATCH", "PARSE_UNAVAILABLE", "ELEMENT_NAME", "ELEMENT_NAMESPACE", "ATTRIBUTE_COUNT", "ATTRIBUTE_NAME", "ATTRIBUTE_NAMESPACE", "ATTRIBUTE_VALUE", "TEXT_VALUE", "CHILD_SEQUENCE", "MISSING_CHILD", "EXTRA_CHILD"]);
+  const validateComparison = (entry) => {
+    assert(entry && typeof entry === "object" && !Array.isArray(entry), "task XML comparison must be an object");
+    assert.deepEqual(Object.keys(entry).sort(), ["field", "kind", "path"], "task XML comparison shape changed");
+    assert(comparisonKinds.has(entry.kind), "task XML comparison kind is invalid");
+    assert(typeof entry.path === "string" && entry.path.length <= 512 && pathPattern.test(entry.path), "task XML comparison path is unsafe");
+    assert(entry.field === "" || (typeof entry.field === "string" && namePattern.test(entry.field)), "task XML comparison field is unsafe");
+    return entry;
   };
   return {
-    code: value.code,
-    xml_declaration: value.xml_declaration,
-    element_count: value.element_count,
-    elements: value.elements.map((entry) => summarize(entry, ["name", "count"])),
-    attributes: value.attributes.map((entry) => summarize(entry, ["element", "name", "count"])),
+    ...value,
+    expected_vs_com: validateComparison(value.expected_vs_com),
+    com_vs_query: validateComparison(value.com_vs_query),
   };
 }
 
