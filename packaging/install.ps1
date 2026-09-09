@@ -109,7 +109,16 @@ function New-PrivateStage {
 }
 
 function Get-Sha256([string] $Path) {
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    # Get-FileHash is a module function that may be absent when a parent process
+    # inherits PowerShell 7's module path into Windows PowerShell 5.1.
+    $stream = [IO.File]::OpenRead($Path)
+    $algorithm = [Security.Cryptography.SHA256]::Create()
+    try {
+        return ([BitConverter]::ToString($algorithm.ComputeHash($stream))).Replace('-', '').ToLowerInvariant()
+    } finally {
+        $algorithm.Dispose()
+        $stream.Dispose()
+    }
 }
 
 function Invoke-Download([string] $Uri, [string] $Destination, [Int64] $MaximumBytes) {

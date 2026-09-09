@@ -101,7 +101,11 @@ function platformTuple() {
 
 function runObserver(executable, args) {
   if (process.platform === "win32" && executable.endsWith(".cmd")) {
-    return execFileSync("cmd.exe", ["/d", "/s", "/c", `"${executable}" ${args.join(" ")}`], { encoding: "utf8", timeout: 15_000 });
+    // cmd.exe consumes its own outer quotes; Node's usual C-runtime argument
+    // escaping would turn the quoted path into literal backslash-quote bytes.
+    return execFileSync("cmd.exe", ["/d", "/s", "/c", `""${executable}" ${args.join(" ")}"`], {
+      encoding: "utf8", timeout: 15_000, windowsVerbatimArguments: true,
+    });
   }
   return execFileSync(executable, args, { encoding: "utf8", timeout: 15_000 });
 }

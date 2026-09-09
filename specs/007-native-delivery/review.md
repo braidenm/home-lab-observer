@@ -29,6 +29,9 @@
 - Require both the original dispatcher and rerun actor to be the repository owner. Create the release tag atomically
   against the tested commit and recheck its exact target before and after immutable publication.
 - Pin the SBOM generator version as well as its enclosing action; an action SHA alone does not pin downloaded tools.
+- Native Windows CI exposed inherited PowerShell module-path behavior: use direct .NET SHA-256 hashing rather than
+  depending on the `Get-FileHash` module function. The Node smoke launcher also needs explicit cmd.exe quoting for
+  paths with spaces. Both failures were reproduced locally and the repaired real-binary installer smoke passes.
 
 ## Evidence recorded so far
 
@@ -47,6 +50,10 @@
 - Windows PowerShell 5.1 installer lifecycle/security tests pass, including a real versioned Windows archive install,
   identity check, managed launch and removal. Bash scripts pass syntax checks; Linux/macOS runtime coverage is gated
   by their native CI jobs, not inferred from Windows results.
+- Hosted Linux/macOS installer lifecycle and real-archive service/authentication smoke tests pass. Initial six-platform
+  archive/SBOM build completed in 2m36s; native Linux and macOS installation checks took 15s and 31s. Windows regression
+  fixes require a fresh hosted run before merge. Dependency graph/vulnerability alerts were enabled as the dependency
+  review prerequisite; automatic dependency-update PRs remain disabled.
 - Installer independent review covered ancestor-junction containment, lock ownership, interrupted-install recovery,
   private-stage cleanup and marker-only partial uninstall. Findings were revised before integration.
 - Hosted installer results, independent final reviews and first-release download verification are recorded below
