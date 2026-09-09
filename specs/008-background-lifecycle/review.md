@@ -40,7 +40,25 @@ and repository policy check. Its focused tests cover oldest-record age with an i
 failure, hard links/ancestor links, stale/wrong/malformed stop requests and instance locking. Linux/macOS test binaries
 cross-compile; hosted native execution and race detection remain pending. UI author checks and root's independent
 rerun pass 35 tests and package builds. This is partial evidence, not a claim that the integrated feature or release
-has passed. Final manager/runtime/browser checks, reviewer decisions and publication evidence are still required.
+has passed.
+
+### Integrated evidence, before final CI acceptance
+
+Root reran the full Go test suite and static analysis, PowerShell 5.1 installer lifecycle/safety tests, closed API
+contracts, 35 UI tests, deterministic embedded assets and packaged-style runtime smoke. The actual local binary
+passed two nonce-controlled starts/stops with durable history sequence recovery. Browser checks passed at
+390/768/1440 widths, including available and unavailable diagnostics; root visually reviewed mobile unavailable and
+desktop available states. Tests did not register startup on the developer machine.
+
+Independent review approved CLI/API/UI boundaries and graceful shutdown ordering, including durable-close failure
+propagation and private token ownership. Review also found a shared installer/background mutation race: the common
+guard and under-lock identity revalidation must both be verified before acceptance. Windows hosted saved-task
+normalization remains a failing required check; the in-memory native template round trip is not a substitute for
+that real manager lifecycle test. Linux/macOS native runtime and packaged tests pass on the current PR candidate.
+
+The process-exit smoke helper now clears completed deadlines: a successful background smoke completes in roughly
+two seconds locally rather than waiting for an unused 45-second timer. A regression test verifies timer/listener
+cleanup. Final independent guard sign-off, all required CI checks and publication evidence are still pending.
 
 ## Scope safeguards
 

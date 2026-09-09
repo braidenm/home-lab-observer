@@ -126,6 +126,7 @@ only the stable error code, version and OS in a support request—not your token
 | `BACKGROUND_MANAGER_UNAVAILABLE` | Run in your normal signed-in session. On headless Linux, confirm a working user manager; the installer does not enable lingering. Foreground mode remains available. |
 | `BACKGROUND_UNREACHABLE` / `BACKGROUND_NOT_READY` | Allow startup to finish, then check again. Stop any foreground observer using the same port/data directory. Inspect available product diagnostics; do not change firewall settings. |
 | `BACKGROUND_REGISTRATION_MISMATCH` / `BACKGROUND_UNSAFE_MANAGED_STATE` | Keep the files and existing registration intact. Check that you used the original install root/account; do not delete ownership markers or overwrite another task. |
+| `BACKGROUND_OPERATION_ACTIVE` | Wait for another install or lifecycle operation to finish, then retry. Complete abandoned background guards can be recovered automatically; unknown or incomplete installer guards are deliberately preserved. Do not delete a guard while another operation might be running. |
 | `BACKGROUND_GRACEFUL_STOP_FAILED` | Check whether the process is still running. Retry normal stop; choose `--force` only if you accept interrupted work. No automatic force fallback runs. |
 | Diagnostics `UNKNOWN` | The CLI could not verify authenticated diagnostic health. This is not proof that diagnostics are healthy or empty. Check the local dashboard and token/data-directory access. |
 
