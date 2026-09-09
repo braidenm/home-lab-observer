@@ -1,6 +1,6 @@
 export function formatBytes(value: number | null): string {
   if (value === null) return "Unavailable";
-  if (value < 1_024) return `${value} B`;
+  if (value < 1_024) return `${Number(value.toFixed(1))} B`;
   const units = ["KB", "MB", "GB", "TB"];
   let amount = value;
   let unit = "B";
@@ -22,6 +22,7 @@ export function formatValue(value: number | null, unit: string): string {
 }
 
 export function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${Math.max(0, Math.round(seconds))}s`;
   const days = Math.floor(seconds / 86_400);
   const hours = Math.floor((seconds % 86_400) / 3_600);
   if (days > 0) return `${days}d ${hours}h`;

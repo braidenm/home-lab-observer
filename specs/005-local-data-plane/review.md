@@ -37,7 +37,7 @@ larger total. The integration owner verified the final diff, schema scenarios, a
 - Root OpenAPI/JSON Schema/fixture tests and actual native snapshot validation.
 - Actual service smoke: protected API, valid selected/degraded response envelopes, real metric history after successive
   collection sequences, no credential in API/process output, and graceful process/store reuse tests.
-- Embedded dashboard: TypeScript, 21 component/adapter tests, reusable-library/demo builds, deterministic embedded assets.
+- Embedded dashboard: TypeScript, 22 component/adapter tests, reusable-library/demo builds, deterministic embedded assets.
 - Packaged Playwright: unlock, session reuse/forget, real trends, five sections, keyboard workload navigation, explicit
   unsupported collectors, and no page overflow at 390, 768 and 1440 CSS pixels. Screenshots inspected locally; no real
   machine screenshots or state files are published to the repository.
