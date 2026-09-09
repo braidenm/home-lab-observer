@@ -33,7 +33,9 @@ time bucket; inventories, process names/PIDs, source text, log bodies, arbitrary
 
 Recent data remains at 15-second resolution. Rollups retain count, minimum, maximum, sum, and last value so the API can
 select meaningful aggregates without pretending gaps are observations. Age pruning runs in small batches. Size pressure
-prunes oldest raw rows first, checkpoints WAL, then oldest rollups, while incrementing visible eviction/drop counters.
+prunes oldest observations across raw rows and rollups, checkpoints WAL, and reclaims freed pages while incrementing
+visible eviction/drop counters. Maintenance continues during collector failure; recovery quarantines are deliberately
+preserved outside the active-history budget.
 
 ## Security and privacy
 

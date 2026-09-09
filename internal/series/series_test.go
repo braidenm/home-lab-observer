@@ -7,12 +7,28 @@ import (
 	"time"
 
 	"github.com/braidenm/home-lab-observer/internal/history"
+	"github.com/braidenm/home-lab-observer/internal/projection"
 )
 
 type fakeReader struct {
 	raw     map[history.MetricID][]history.Sample
 	rollups map[history.MetricID][]history.Rollup
 	err     error
+}
+
+func TestBuildHonorsLatestCollectorSupportBeforeReadingHistory(t *testing.T) {
+	for _, support := range []string{"UNSUPPORTED", "UNAVAILABLE", "PERMISSION_DENIED", "DISABLED"} {
+		reason := "COLLECTOR_UNAVAILABLE"
+		status := map[history.MetricID]projection.SectionStatus{history.ProcessCount: {SupportState: support, ReasonCode: &reason}}
+		result, err := Build(context.Background(), fakeReader{err: errors.New("must not read historical rows")}, time.Now(), Range1Hour, []history.MetricID{history.ProcessCount}, status)
+		if err != nil {
+			t.Fatal(err)
+		}
+		item := result.Series[0]
+		if item.SupportState != support || item.CollectionState != "NOT_RUN" || item.Points == nil || len(item.Points) != 0 {
+			t.Fatalf("invalid unavailable series: %+v", item)
+		}
+	}
 }
 
 func (r fakeReader) Samples(_ context.Context, metric history.MetricID, _, _ time.Time, _ int) ([]history.Sample, error) {

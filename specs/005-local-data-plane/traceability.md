@@ -8,7 +8,6 @@
 | R5 | Series-facing history excludes process identity and log bodies | explicit privacy constants and prohibited-key scan; physical SQLite retention tests |
 | R10 | Transport-neutral quality/gap fields and exact local adapter | real-fixture adapter tests and null preservation assertions |
 | R12 | Existing contract workflow is bounded to five minutes | root `npm run test:contracts` exercises OpenAPI, AJV, fixtures, semantics, privacy, and traceability |
-
 | R1, R7, R8 | Loopback listener, account-protected token, strict local boundary | `internal/localauth`, `internal/localapi` security tests; unsafe CLI bind tests |
 | R2, R11 | Single-flight collector and graceful ownership lifecycle | `internal/scheduler` tests; `cmd/observer/serve_test.go` drain/reopen integration |
 | R3 | Current/capabilities/Problem contract and bounded query envelopes | `internal/localapi` tests; actual-binary AJV smoke on three native CI hosts |

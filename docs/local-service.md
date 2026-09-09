@@ -38,7 +38,9 @@ system's user configuration directory. To choose a location, use a dedicated wri
 - Historical CPU/memory/filesystem utilization, network receive/transmit rates and process counts.
 - The observer's collection failures, drops and history storage pressure.
 
-CPU utilization appears in Trends; the original current-snapshot contract exposes CPU capacity. Services, containers,
+CPU utilization appears in Trends; the original current-snapshot contract exposes CPU capacity. Windows process status
+is explicitly `unknown` where the OS adapter cannot provide it; other available process readings remain useful.
+Services, containers,
 hardware sensors and native log sources appear as unsupported until their collector slices are implemented. Missing
 observations show gaps or an unavailable state. Native Windows/macOS collection describes the host; a Linux container
 running inside Docker Desktop cannot provide the same host visibility.
