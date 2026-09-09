@@ -2,27 +2,9 @@ name: Dashboard
 
 on:
   pull_request:
-    paths:
-      - "web/observer-ui/**"
-      - "internal/webui/**"
-      - "scripts/check-embedded-ui.mjs"
-      - "api/**"
-      - "schemas/**"
-      - "specs/004-reusable-dashboard/**"
-      - ".github/workflows/dashboard.yml"
-      - ".github/dependabot.yml"
   push:
     branches:
       - main
-    paths:
-      - "web/observer-ui/**"
-      - "internal/webui/**"
-      - "scripts/check-embedded-ui.mjs"
-      - "api/**"
-      - "schemas/**"
-      - "specs/004-reusable-dashboard/**"
-      - ".github/workflows/dashboard.yml"
-      - ".github/dependabot.yml"
 
 permissions:
   contents: read
@@ -61,3 +43,10 @@ jobs:
         run: npm run check:embedded
       - name: Verify embedded asset server
         run: go test ./internal/webui
+      - name: Install API validators
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install Chromium
+        working-directory: web/observer-ui
+        run: npx playwright install --with-deps chromium
+      - name: Check the packaged dashboard at phone, tablet and desktop sizes
+        run: node scripts/smoke-local-service.mjs --browser

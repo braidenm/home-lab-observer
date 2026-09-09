@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -209,13 +210,13 @@ func (s *Scheduler) StoreHealth() history.Health { return s.store.Health() }
 
 func cloneSnapshot(value projection.CurrentSnapshot) projection.CurrentSnapshot {
 	clone := value
-	clone.Privacy.ExcludedFields = append([]string(nil), value.Privacy.ExcludedFields...)
-	clone.Sections.Filesystems.Items = append([]projection.Filesystem(nil), value.Sections.Filesystems.Items...)
-	clone.Sections.Processes.Items = append([]projection.Process(nil), value.Sections.Processes.Items...)
-	clone.Sections.Services.Items = append([]any(nil), value.Sections.Services.Items...)
-	clone.Sections.Containers.Items = append([]any(nil), value.Sections.Containers.Items...)
-	clone.Sections.Logs.Items = append([]any(nil), value.Sections.Logs.Items...)
-	clone.Sections.Observer.Items = append([]any(nil), value.Sections.Observer.Items...)
+	clone.Privacy.ExcludedFields = slices.Clone(value.Privacy.ExcludedFields)
+	clone.Sections.Filesystems.Items = slices.Clone(value.Sections.Filesystems.Items)
+	clone.Sections.Processes.Items = slices.Clone(value.Sections.Processes.Items)
+	clone.Sections.Services.Items = slices.Clone(value.Sections.Services.Items)
+	clone.Sections.Containers.Items = slices.Clone(value.Sections.Containers.Items)
+	clone.Sections.Logs.Items = slices.Clone(value.Sections.Logs.Items)
+	clone.Sections.Observer.Items = slices.Clone(value.Sections.Observer.Items)
 	if value.Sections.Overview.Data != nil {
 		data := *value.Sections.Overview.Data
 		clone.Sections.Overview.Data = &data

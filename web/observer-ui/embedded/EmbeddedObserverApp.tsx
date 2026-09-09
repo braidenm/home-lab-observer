@@ -18,9 +18,14 @@ export interface EmbeddedObserverAppProps {
 const createLocalDataSource = (token: string): ObserverDataSource =>
   new LocalHttpObserverDataSource({ baseUrl: "", bearerToken: token });
 
+const memoryOnlyStorage = { getItem: () => null, setItem: () => undefined, removeItem: () => undefined };
+function sessionStorageOrMemoryOnly(): Pick<Storage, "getItem" | "setItem" | "removeItem"> {
+  try { return window.sessionStorage; } catch { return memoryOnlyStorage; }
+}
+
 export function EmbeddedObserverApp({
   createDataSource = createLocalDataSource,
-  tokenStorage = window.sessionStorage
+  tokenStorage = sessionStorageOrMemoryOnly()
 }: EmbeddedObserverAppProps) {
   const initialToken = useRef<string | null | undefined>(undefined);
   if (initialToken.current === undefined) initialToken.current = readToken(tokenStorage);
@@ -33,8 +38,8 @@ export function EmbeddedObserverApp({
   const validate = useCallback(async (token: string, saved: boolean) => {
     const currentAttempt = ++attempt.current;
     setState({ phase: "validating", saved });
-    const dataSource = createDataSource(token);
     try {
+      const dataSource = createDataSource(token);
       await dataSource.getCapabilities();
       if (attempt.current !== currentAttempt) return;
       writeToken(tokenStorage, token);

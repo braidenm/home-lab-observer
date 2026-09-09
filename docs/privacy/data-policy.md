@@ -2,6 +2,10 @@
 
 This policy defines first-release defaults. The effective local configuration and Platform upload projection must be visible in the product.
 
+The Spec 005 source preview has no uploader and sends no observations to Platform Demo. It implements host/process
+current reads and six aggregate numeric history metrics only. Service, container, and log collection below are planned
+capabilities, not active collectors. Process observations are local-sensitive and not upload-eligible in the preview.
+
 | Data class | Collected by default | Kept locally | Eligible for remote upload | Notes |
 | --- | --- | --- | --- | --- |
 | Aggregate CPU, memory, disk, network, uptime | Yes | Bounded trends | Yes | Base units, bounded dimensions |
@@ -14,6 +18,10 @@ This policy defines first-release defaults. The effective local configuration an
 | Observer health and upload status | Yes | Current + bounded events | Yes | No credentials or raw exception text |
 | Enrollment/connector credential | Required only for remote mode | OS-protected credential store | Authentication use only | Never returned by APIs/UI/logs/support bundle |
 
-Default local history is limited to seven days or 250 MiB, whichever is reached first. Users can reduce or disable history. Remote retention and deletion are owned by the receiving application and must be disclosed before enrollment.
+Default local history targets seven days or 250 MiB, whichever is reached first. Incremental maintenance reclaims old
+rows and physical SQLite pages; the budget includes the active database and its WAL/SHM files. Temporary overshoot can
+occur between bounded maintenance passes. Preserved corruption quarantines are not automatically deleted or counted as
+active history. User-facing reduced/disabled retention configuration is planned; the preview uses fixed defaults.
+Remote retention and deletion are owned by the receiving application and must be disclosed before enrollment.
 
 Redaction is defense in depth, not a guarantee that arbitrary text is anonymous. For that reason, arbitrary logs and attributes remain excluded even when common secret patterns can be filtered.

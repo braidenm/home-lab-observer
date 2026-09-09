@@ -38,6 +38,8 @@ jobs:
       - run: go vet ./...
       - name: Validate real native snapshot against JSON Schema
         run: node scripts/validate-runtime-snapshot.mjs
+      - name: Smoke-test the actual local service and history
+        run: node scripts/smoke-local-service.mjs
 
   cross-build:
     runs-on: ubuntu-latest

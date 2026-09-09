@@ -1,16 +1,16 @@
 # Home Lab Observer
 
-Home Lab Observer is a cross-platform, headless-first observability service for a single machine. It collects host, process, service, container, and opt-in log signals; exposes them through a versioned local API; can show them in an optional local dashboard; and can securely upload normalized snapshots to a separate management application such as Platform Demo.
+Home Lab Observer is a cross-platform, headless-first observability service for a single machine. The current source preview collects host and process signals, keeps bounded numeric history, and serves an authenticated local dashboard. Service/container observations, opt-in logs, downloadable installers, and secure upload to a management application such as Platform Demo are planned extensions.
 
 The project is intentionally public and self-contained. It does not contain, build from, or grant access to the private home-lab infrastructure repository.
 
 ## Project status
 
-The foundation, local API contract, native snapshot preview, and reusable dashboard are complete. Work is now tracked
-in [Spec 005](specs/005-local-data-plane/spec.md): a secure loopback service, bounded history, real trends, and an
-embedded local dashboard. The project remains pre-release and does not yet publish an installable agent.
+The source preview includes the [Spec 005](specs/005-local-data-plane/spec.md) loopback service, bounded history,
+real trends, and embedded local dashboard. See [build and run instructions](docs/local-service.md).
+The project remains pre-release and does not yet publish an installable agent.
 
-## Product shape
+## Target product shape
 
 - One native binary for Windows, macOS, and Linux, with no runtime language installation.
 - Headless collection by default; an optional responsive dashboard is served on loopback only.
@@ -53,14 +53,15 @@ exits 1 but cannot guarantee a complete JSON document.
 - [Threat model](docs/security/threat-model.md)
 - [Data policy](docs/privacy/data-policy.md)
 - [Reusable observer dashboard](web/observer-ui/README.md)
+- [Run and manage the local preview](docs/local-service.md)
 
 ## Supported delivery targets
 
 | Target | Native binary | Background service | Local UI | Docker observations |
 | --- | --- | --- | --- | --- |
-| Linux amd64/arm64 | Planned | systemd | Planned | Planned |
-| macOS Intel/Apple silicon | Planned | launchd | Planned | Docker Desktop, when available |
-| Windows amd64/arm64 | Planned | Windows Service | Planned | Docker Desktop, when available |
+| Linux amd64/arm64 | Source preview | Planned: systemd | Source preview | Planned |
+| macOS Intel/Apple silicon | Source preview | Planned: launchd | Source preview | Planned: Docker Desktop |
+| Windows amd64/arm64 | Source preview | Planned: Windows Service | Source preview | Planned: Docker Desktop |
 | Linux container amd64/arm64 | Planned | Container restart policy | Planned | Planned through a constrained proxy |
 
 ## License

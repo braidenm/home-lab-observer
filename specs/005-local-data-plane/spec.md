@@ -42,9 +42,10 @@ service, alerting, or remote action support. Those capabilities remain visibly `
   statements, a single migration owner, and a schema version. Default retention is seven days or 250 MiB, whichever
   is reached first. Recent 15-second samples MUST be downsampled for longer ranges; eviction MUST be incremental,
   deterministic, observable, and tested without retaining process identities or log bodies.
-- **R6 Safe recovery:** An unreadable or incompatible database MUST be preserved under a timestamped quarantine name;
+- **R6 Safe recovery:** A confirmed corrupt or incompatible database MUST be preserved under a collision-safe timestamped quarantine name;
   the observer MAY start a new store but MUST report degraded readiness and a stable reason code. It MUST never silently
-  delete or overwrite the failed store.
+  delete or overwrite the failed store. Busy/locked, permission, and transient I/O failures MUST fail safely without
+  quarantining an otherwise valid store. Only one process may own a state directory at a time.
 - **R7 Local authentication:** On first service start, the observer MUST generate at least 256 bits of cryptographic
   entropy, write the token to a user-owned state file with the strongest supported local permissions, and print its
   location—not the token—during ordinary startup. API credentials are accepted only through `Authorization: Bearer`.
