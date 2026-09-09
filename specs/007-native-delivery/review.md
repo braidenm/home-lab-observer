@@ -44,6 +44,11 @@
   boundary after targeted Go tests, AJV tests, actual six-archive manifest inspection and mobile screenshot review.
   Review confirmed fixed archive members, private/non-overlapping staging, bounded regular reads, truthful trust
   disclosures and no unexpected startup/privilege/Docker changes. Installer review is recorded separately.
+- Windows PowerShell 5.1 installer lifecycle/security tests pass, including a real versioned Windows archive install,
+  identity check, managed launch and removal. Bash scripts pass syntax checks; Linux/macOS runtime coverage is gated
+  by their native CI jobs, not inferred from Windows results.
+- Installer independent review covered ancestor-junction containment, lock ownership, interrupted-install recovery,
+  private-stage cleanup and marker-only partial uninstall. Findings were revised before integration.
 - Hosted installer results, independent final reviews and first-release download verification are recorded below
   when those checks complete. These pending checks are not represented as passed evidence.
 
