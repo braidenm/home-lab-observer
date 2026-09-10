@@ -71,6 +71,14 @@ function Wait-OwnedRecords([string] $Phase) {
         [OwnedEventFixtureMetadataProbe]::ApplicationAfterLogCount()
     }
     if ($systemLogCount -lt 0 -or $applicationLogCount -lt 0) {
+        foreach ($status in @($systemLogCount, $applicationLogCount)) {
+            switch ($status) {
+                -2 { Fail 'owned fixture channel metadata open failed' }
+                -3 { Fail 'owned fixture channel metadata native read failed' }
+                -4 { Fail 'owned fixture channel metadata size was invalid' }
+                -5 { Fail 'owned fixture channel metadata scalar type was invalid' }
+            }
+        }
         Fail 'owned fixture channel record-count metadata query failed'
     }
     if ($systemLogCount -gt $expected -or $applicationLogCount -gt $expected) {
@@ -315,14 +323,17 @@ public static class OwnedEventFixtureMetadataProbe
     private static int LogCount(string channel, int expected)
     {
         IntPtr log = EvtOpenLog(IntPtr.Zero, channel, EvtOpenChannelPath);
-        if (log == IntPtr.Zero) return -1;
+        if (log == IntPtr.Zero) return -2;
         int result = -1;
         try {
             EvtVariant value;
             int used;
-            if (!EvtGetLogInfo(log, EvtLogNumberOfLogRecords, 16, out value, out used)) return -1;
-            if (used != 16 || value.Count != 0 || value.Type != EvtVarTypeUInt64) return -1;
-            result = value.UInt64Value > (ulong)expected ? expected + 1 : (int)value.UInt64Value;
+            if (!EvtGetLogInfo(log, EvtLogNumberOfLogRecords, 16, out value, out used)) result = -3;
+            else if (used != 16) result = -4;
+            else if (value.Type != EvtVarTypeUInt64) result = -5;
+            // Count is meaningful only for array variants. Exact scalar type
+            // validation above rejects arrays without interpreting inactive fields.
+            else result = value.UInt64Value > (ulong)expected ? expected + 1 : (int)value.UInt64Value;
         } finally {
             if (!EvtClose(log)) result = -1;
         }
