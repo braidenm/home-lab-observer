@@ -3,6 +3,11 @@
 Research date: 2026-09-09. Decision preparation for the log-observation slice, after Spec 008.
 Versions: Go 1.27/CGO-disabled native builds, Windows Event Log WEVTAPI, systemd journalctl 242+; macOS OSLogStore.
 
+Decision update 2026-09-10: owner approved the optional separately bundled Linux native helper in
+[ADR 010](../adr/010-optional-linux-journal-helper.md). Earlier journalctl recommendations below are investigation
+history, not the accepted implementation. The main executable must not acquire the helper's dynamic-loader dependency.
+Exact native cursor proof, accessible-view limitations and initial-empty evidence are mandatory acceptance tests.
+
 ## Question and current implementation
 
 How can the dashboard correlate errors with resource pressure without becoming an unrestricted log reader?

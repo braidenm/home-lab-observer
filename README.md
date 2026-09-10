@@ -27,7 +27,8 @@ Docker readings require an explicit local socket/pipe option. Installation does 
 
 ## Target product shape
 
-- One native binary for Windows, macOS, and Linux, with no runtime language installation.
+- One native download for Windows, macOS, and Linux, with no runtime language installation. Planned Linux log
+  observations use an optional bundled helper so the main observer retains its portability.
 - Headless collection by default; an optional responsive dashboard is served on loopback only.
 - Host health, CPU, memory, disks, network, sensors when available, processes, services, Docker workloads, events, and bounded trends.
 - Logs from explicit sources such as journald, Windows Event Log, macOS unified logging, and Docker, with conservative privacy defaults.
@@ -54,6 +55,15 @@ permissions for named resources and fixed actions, plus authorization and an aud
 telemetry must not automatically grant control. Docker, operating-system services and Kubernetes workloads require
 their own adapters and permission models; none will be exposed through a generic shell-command endpoint.
 See the [threat model](docs/security/threat-model.md) for the separation between observation and future control.
+
+### Next: safe native log observations
+
+[Spec 009](specs/009-native-log-metadata/spec.md) is the active implementation plan, not a feature in preview 2.
+It adds opt-in Windows/Linux event metadata and meaningful severity trends without reading message bodies. The
+[Linux helper decision](docs/adr/010-optional-linux-journal-helper.md) keeps native-library failures separate from
+host/Docker monitoring. Charts distinguish captured counts, proven empty periods and missing coverage; Linux results
+describe only logs accessible to the running account. macOS native logs, raw bodies and remote log upload remain later
+work. No installation grants elevated permissions or enables log collection automatically.
 
 ## Native snapshot preview
 

@@ -1,7 +1,7 @@
 # Spec 009: Opt-in native log metadata and meaningful local summaries
 
-Status: Proposed contract checkpoint; Spec 008 is merged. Implementation follows preview verification and acceptance
-of the executable contracts. No native source is enabled by this document.
+Status: Accepted design; Spec 008 is merged and preview 2 is published. Executable contract tests precede feature
+implementation. Owner approved the optional bundled Linux native helper. No source is enabled by this document.
 
 ## Outcome
 
@@ -15,25 +15,28 @@ useful without Platform Demo, with honest cross-platform gaps.
   `--log-source application` enable them. No environment auto-enable, arbitrary files/channels/units/provider names,
   XPath/predicates, executable paths, remote machines or API-driven source changes. Persist approved source enums in
   explicitly enabled background configuration; never broaden an existing configuration automatically.
-- L2: Windows uses selected-property WEVTAPI reads of fixed System/Application channels. Linux uses a fixed approved
-  absolute journalctl 242+ path, JSON output with only severity/message-ID fields plus cursor/time addressing fields,
-  a controlled environment and no shell. Do not render full event XML, format Windows messages, request journald
+- L2: Windows uses selected-property WEVTAPI reads of fixed System/Application channels. Linux uses a fixed bundled
+  native helper loading the host's libsystemd, with only severity/message-ID, realtime and private cursor fields,
+  a minimal controlled environment and no shell. Do not render full event XML, format Windows messages, request journald
   MESSAGE or acquire bodies before trying to redact. macOS returns explicit unsupported without spawning `log show`.
 - L3: Native work runs in a scheduler-owned lane that is independent of the 15-second host snapshot cycle. It starts
   once immediately and then at fixed 60-second intervals and is single-flight. Native acquisition never runs in or
   reschedules the host lane; brief bounded serialization on the shared SQLite writer is expected. It is bounded to
   two sources maximum, a four-second overall deadline, two seconds per source, 512 accepted-plus-discarded records
-  plus one deferred lookahead (at most 513 examined), two MiB output per source, four KiB journal lines,
+  plus one deferred lookahead (at most 513 examined), two MiB output per source including protocol framing, four KiB
+  selected native fields (private cursors have their separate bound),
   16 KiB checkpoints and 200 recent in-memory records. Windows reads run in a fixed hidden helper process using the
   same verified executable, with bounded stdin/stdout and parent-enforced kill/wait on timeout; query handles stay on
-  their creating OS thread. Linux passes the opaque checkpoint value through a private per-attempt cursor file; the
-  fixed `--cursor-file=<code-owned-path>` option necessarily exposes only that non-observed temporary path in argv.
-  Fixed owner-only per-source cursor staging files are bounded and cleaned after attempts and at restart; random
-  crash-left cursor files must not accumulate. Cancellation closes/reaps all native resources. Intersecting byte/row
+  their creating OS thread. Linux uses the separately bundled, digest-verified helper in ADR 010; the main process must
+  still start on hosts without its loader/library. Both helpers exchange private checkpoints only through bounded
+  pipes, never argv/environment/staging files. Cancellation closes/reaps all native resources. Intersecting byte/row
   limits can stop work before 512 records. A nil cursor with reset-pending false is a normal five-minute initial read
   regardless of checkpoint revision. On a stale/invalid checkpoint, run one metadata-only tail probe:
-  Windows queries the fixed channel in reverse order and reads at most one event to produce a bookmark; Linux runs the
-  fixed selected-field journal query with `-n 1`, outside the five-minute filter, and accepts only its automatic cursor.
+  Windows queries the fixed channel in reverse order and reads at most one event to produce a bookmark; Linux uses
+  seek-tail/previous/get-cursor outside the five-minute filter. Normal Linux continuation must first prove exact cursor
+  presence with seek/next/test-cursor. Initial empty windows need a visible metadata-only tail proof; no visible tail
+  reports `NO_VISIBLE_JOURNAL`, without inventing coverage. All Linux coverage refers to the caller-accessible local
+  system-journal view, not every host event or inaccessible file.
   The probe uses the same source deadline, byte/checkpoint limits and field allowlist, never requests a message/body,
   and contributes neither captured nor discarded counts or covered-through advancement. Atomically persist the proved
   cursor with `CHECKPOINT_RESET` and a bounded attempt-window gap, without estimating unknown lost events. If the source
@@ -109,11 +112,11 @@ useful without Platform Demo, with honest cross-platform gaps.
 All counters are non-negative JSON-safe integers. Any increment, persisted value or aggregate greater than
 9,007,199,254,740,991 aborts the atomic batch without advancing its checkpoint; values never wrap or silently round.
 The executable contract checkpoint must encode these exact patterns rather than accept provider strings. This
-specification remains proposed until its executable contract checkpoint is accepted.
+specification requires its executable contract checkpoint to pass before independent feature slices are integrated.
 
 ## Initial platform gaps
 
-macOS native log metadata, non-systemd Linux/custom journalctl layouts, Windows Security channel, bodies, live tail,
+macOS native log metadata, Linux without the required optional helper/runtime/library, Windows Security channel, bodies, live tail,
 service-specific readers and remote rollups require later specs. Existing host/process/container observations continue
 to work where supported. Missing MESSAGE_ID uses a fixed severity-derived fallback code rather than reading a message.
 

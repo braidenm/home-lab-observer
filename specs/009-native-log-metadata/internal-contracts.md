@@ -1,6 +1,6 @@
 # Spec 009 internal Go contract proposal
 
-Status: Proposed for cross-slice acceptance after Spec 008. These are ports and invariants, not implementation.
+Status: Accepted design for executable contract validation. Spec 008 is merged; these are ports and invariants.
 
 ## Package boundary
 
@@ -115,7 +115,7 @@ const (
     MaxAcceptedEvents            = 512
     MaxExaminedEvents            = 513 // all accepted/discarded rows plus optional deferred lookahead
     MaxSourceBytes               = 2 << 20
-    MaxJournalLineBytes          = 4 << 10
+    MaxNativeFieldBytes          = 4 << 10
     MaxCheckpointBytes           = 16 << 10
     MaxRecentEvents              = 200
     MaxCoverageSegmentsPerCommit = 2
@@ -193,12 +193,11 @@ the loaded checkpoint was already pending, otherwise `NORMAL`; therefore a gener
 clear reset state or become a normal success. Shutdown cancellation joins the reader/native child and commits nothing,
 so it cannot race the shared Store closing.
 
-Adapter construction receives one validated observer-owned state root, not a request-selected path. Linux cursor
-staging uses fixed per-source bounded owner-only files beneath one dedicated staging directory, removes stale known
-filenames before an attempt, and cleans them after success, failure, cancellation, and restart. It never creates
-arbitrary/random cursor filenames that can accumulate after a crash, exposes cursor contents in argv, or returns a
-staging path through these ports. The Windows fixed helper continues to use bounded stdin/stdout pipes and discarded
-stderr, not staging files.
+Adapter construction receives only validated code-owned configuration, never a request-selected executable/path.
+Linux uses ADR 010's separately bundled helper and Windows its fixed same-binary helper. Both use bounded stdin/stdout
+pipes and discarded stderr, not cursor staging files. Private request framing is limited to 32 KiB, complete output to
+2 MiB including protocol overhead. Native helper identity and environment checks precede execution. Missing Linux
+loader/library/helper degrades only logs. No cursor contents enter argv or environment.
 
 Every batch has `ExaminedCount <= 513`; the cap applies to all examined rows, not accepted rows alone. For a normal
 batch, `len(Events) + DiscardedCount <= 512`, `DiscardedCount == sum(Discards.Count)`, and `ExaminedCount` equals that
@@ -223,7 +222,7 @@ pending, and each reset transition is legal. No caller-owned slice or timestamp 
 Reset recovery happens within the attempt that proves the ordinary checkpoint stale/invalid, not in an unconditional
 extra cycle. The adapter immediately switches to one bounded metadata-only newest-record tail probe outside the
 initial-read five-minute filter: Windows performs its fixed reverse-channel query for at most one event; Linux uses
-fixed `journalctl -n 1` selected fields and its automatic cursor. It requests no body; a returned record makes
+native seek-tail/previous/get-cursor after seek/next/test-cursor exactness validation. It requests no body; a returned record makes
 `ExaminedCount` one but contributes no captured or discarded count. If a cursor is proved, `RESET_ESTABLISHED`
 atomically commits that `NextOpaque`, clears `ResetPending`, records `CHECKPOINT_RESET` plus the bounded attempt-window
 gap, and advances no caught-up coverage. If the source is empty or the expected probe cannot prove a cursor,

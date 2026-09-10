@@ -5,6 +5,11 @@ metadata-only slice; they do not enable sources or expand authority. Incorporate
 executable contract before implementation begins, after Spec 008 merges. The authoritative exact checkpoint is
 [the wire contract](contract-checkpoint.md) and [the internal ports](internal-contracts.md); this document is rationale.
 
+Owner accepted the separate bundled Linux helper on 2026-09-10. The journalctl/cursor-file proposals in items 2 and 4
+below are retained as review history and superseded by [ADR 010](../../docs/adr/010-optional-linux-journal-helper.md):
+native exact-cursor testing, private pipes, no staging files, and caller-accessible journal-view semantics. The current
+spec/ports are authoritative. Native field caps replace journal-line caps; byte, row and deadline bounds still apply.
+
 1. **Windows hard deadlines:** use one hidden fixed helper process per enabled source (maximum two), executing the
    same verified observer binary in a code-owned internal mode. Pass the private checkpoint through bounded stdin,
    return a closed metadata batch through bounded stdout, discard stderr. The parent enforces two seconds and

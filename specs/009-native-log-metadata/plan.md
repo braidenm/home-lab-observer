@@ -4,13 +4,14 @@
    independent implementation using [the wire checkpoint](contract-checkpoint.md) and
    [the internal ports](internal-contracts.md). Put native reading, domain state, storage and HTTP/UI projection behind
    small interfaces.
-2. Native reader slice: fixed Windows WEVTAPI and Linux journalctl adapters, macOS unsupported adapter, bounded fake/native
+2. Native reader slice: fixed Windows WEVTAPI and bundled Linux libsystemd helper, macOS unsupported adapter, bounded fake/native
    tests. Run the log collector immediately and every 60 seconds in its own single-flight acquisition lane; it must
    not run inside or reschedule the 15-second host lane. Brief bounded shared-store contention is expected. Never run
    an unrestricted host-log query during development.
    Enforce Windows deadlines with a fixed same-executable helper process, preserving query-handle thread affinity and
-   cancellation-before-close ordering inside the child. Linux requires journalctl 242+ with private per-attempt cursor
-   files with fixed per-source names and restart cleanup. Bound accepted-plus-discarded records to 512 and one deferred
+   cancellation-before-close ordering inside the child. Linux uses private pipes, exact native cursor tests and the
+   caller-accessible journal view. No visible initial tail means unavailable, not zero. Keep loader imports outside the
+   main executable and test missing-helper/runtime fallback. Bound accepted-plus-discarded records to 512 and one deferred
    sentinel. Test actual child timeout/reaping, not only context-aware fakes.
 3. Store/domain slice: one bounded session-only current ring, compact minute source/severity rollups, coalesced coverage,
    latest-attempt metadata, atomic checkpoint transaction, coverage queries and bounded retention/migration tests.
@@ -25,7 +26,10 @@
 4. API/UI slice: explicit source startup settings, current/capability projection, closed summary schema, optional source,
    histogram/filter/status presentation and native service smoke. Extend background settings without enabling sources
    in older settings; maintain uninstall/upgrade behavior.
-5. Independently review native acquisition, persisted fields, count/coverage semantics and UX. Prove disabled and
+5. Package the Linux helper under ADR 010's closed manifest-v2 content profile. Embed its build digest in the main
+   binary; verify same-commit helper identity, exact archive entries, anonymous install, upgrade/rollback and core
+   startup without the helper's dynamic dependencies. Preserve v1 rollback and the existing total archive byte bounds.
+6. Independently review native acquisition, persisted fields, count/coverage semantics and UX. Prove disabled and
    degraded cases alongside successful fixtures. All required CI must pass before auto-merge and preview publication.
 
 ## Summary shape to finalize at the contract checkpoint

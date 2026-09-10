@@ -1,6 +1,6 @@
 # Spec 009 contract checkpoint: native log summary
 
-Status: Proposed for acceptance after Spec 008. This document defines contracts only; it does not enable a source.
+Status: Accepted design for executable contract validation. This document does not enable a source.
 
 ## Local endpoint
 
@@ -100,6 +100,8 @@ the exact bucket count required below.
 The only source aliases are `system` and `application`; sources appear in that order with no duplicates. `sources`
 contains only explicitly configured presets (maximum two). `application` is Windows-only and rejected in Linux
 configuration. macOS performs no native call and reports a configured source as `UNSUPPORTED/NOT_RUN`.
+Linux reports only the caller-accessible local system-journal view. A missing helper/runtime/library or no visible
+initial journal evidence is unavailable, not a healthy empty source; inaccessible files cannot be claimed covered.
 
 Top-level support, collection, freshness, observed time, and reason use the existing generic enums. With no configured
 source they are `DISABLED/NOT_RUN/UNKNOWN/null/LOG_SOURCES_DISABLED`, `sources` is empty, `coverage_state` is `UNKNOWN`,
