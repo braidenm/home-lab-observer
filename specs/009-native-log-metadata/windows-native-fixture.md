@@ -20,9 +20,10 @@ an unexported `_test.go`-only factory that accepts one already-validated owned E
 
 The test fixture is generated only on an ephemeral GitHub-hosted Windows runner. A checked-in synthetic manifest
 defines one fixed provider GUID and two owned custom channels representing the fixture's logical system and
-application cases. A tiny test-only C publisher registers that provider with `EventRegister` and writes the exact
-`EVENT_DESCRIPTOR` constants produced from the manifest by Message Compiler with `EventWrite`; it does not recreate
-compiler-assigned routing metadata. Manifest installation and removal use `wevtutil im` and `wevtutil um`. The manifest,
+application cases. A tiny test-only C publisher uses the registration, event-enabled, event-write and unregistration
+wrappers produced from the manifest by Message Compiler. Those wrappers retain the generated provider context and
+exact `EVENT_DESCRIPTOR` constants; the publisher does not recreate compiler-assigned routing metadata. Manifest
+installation and removal use `wevtutil im` and `wevtutil um`. The manifest,
 publisher and resource generation must follow Microsoft's supported manifest-provider process; no hand-authored EVTX
 writer or binary fixture copied from a real machine is acceptable.
 [developing a provider](https://learn.microsoft.com/en-us/windows/win32/wes/developing-a-provider),
@@ -30,9 +31,16 @@ writer or binary fixture copied from a real machine is acceptable.
 [`EVENT_DESCRIPTOR`](https://learn.microsoft.com/en-us/windows/win32/api/evntprov/ns-evntprov-event_descriptor),
 [wevtutil](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/wevtutil)
 
+Every fixture event has the same explicit provider-owned low-bit keyword (`0x1`). The publisher asserts that the
+generated descriptor contains that bit while permitting Message Compiler to add its own channel-routing bits. This
+follows Microsoft's recommendation that events use a meaningful nonzero keyword and avoids relying on sessions to
+accept keyword-zero events. It does not add a field to the selected read context.
+[defining keywords](https://learn.microsoft.com/en-us/windows/win32/wes/defining-keywords-used-to-classify-types-of-events)
+
 The publisher gives the event-log subscription one shared ten-second monotonic readiness window and writes only after
-[`EventEnabled`](https://learn.microsoft.com/en-us/windows/win32/api/evntprov/nf-evntprov-eventenabled) accepts every
-generated descriptor. It emits no event data or native error details while waiting.
+the Message Compiler-generated per-event enablement check accepts every generated descriptor. The generated wrappers
+ultimately use the documented [`EventEnabled`](https://learn.microsoft.com/en-us/windows/win32/api/evntprov/nf-evntprov-eventenabled)
+and event-writing APIs. It emits no event data or native error details while waiting.
 
 Before each private export, a test-only readiness probe queries only the two owned channel constants with the exact
 owned provider/event-ID XPath. It calls `EvtNext` with a zero timeout, closes every returned handle, counts at most one
