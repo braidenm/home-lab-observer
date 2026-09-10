@@ -2,7 +2,7 @@
 
 Background operation is optional. Downloading, unpacking or installing the observer never enables it.
 This guide describes Spec 008's native preview profile; the initial `0.1.0-preview.1` release is foreground-only.
-Use a preview whose release notes include background lifecycle support.
+Use [preview 2](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-preview.2) for background lifecycle support.
 
 ## What to expect
 

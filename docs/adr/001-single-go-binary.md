@@ -1,6 +1,6 @@
 # ADR 001: Use one Go artifact with separated runtime roles
 
-**Status:** Accepted  
+**Status:** Accepted; Linux log-reader artifact count partially superseded by [ADR 010](010-optional-linux-journal-helper.md)
 **Date:** 2026-09-09
 
 ## Context

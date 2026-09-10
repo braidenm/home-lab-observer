@@ -14,6 +14,9 @@
     { "schema": "schemas/v1/container-inventory-v1.schema.json", "fixture": "schemas/v1/fixtures/valid/container-inventory-empty.json", "valid": true },
     { "schema": "schemas/v1/diagnostics-health-v1.schema.json", "fixture": "schemas/v1/fixtures/valid/diagnostics-health-available.json", "valid": true },
     { "schema": "schemas/v1/diagnostics-health-v1.schema.json", "fixture": "schemas/v1/fixtures/valid/diagnostics-health-disabled.json", "valid": true },
+    { "schema": "schemas/v1/log-summary-v1.schema.json", "fixture": "schemas/v1/fixtures/valid/log-summary-disabled.json", "valid": true },
+    { "schema": "schemas/v1/log-summary-v1.schema.json", "fixture": "schemas/v1/fixtures/valid/log-summary-1h.json", "valid": true },
+    { "schema": "schemas/v1/log-summary-v1.schema.json", "fixture": "schemas/v1/fixtures/valid/log-summary-storage-unavailable.json", "valid": true },
     { "schema": "schemas/v1/capabilities-v1.schema.json", "fixture": "schemas/v1/fixtures/invalid/capabilities-unknown-state.json", "valid": false },
     { "schema": "schemas/v1/current-snapshot-v1.schema.json", "fixture": "schemas/v1/fixtures/invalid/current-snapshot-unsupported-with-items.json", "valid": false },
     { "schema": "schemas/v1/current-snapshot-v1.schema.json", "fixture": "schemas/v1/fixtures/invalid/current-snapshot-uploadable-log-body.json", "valid": false },
@@ -24,6 +27,8 @@
     { "schema": "schemas/v1/container-inventory-v1.schema.json", "fixture": "schemas/v1/fixtures/invalid/container-inventory-stopped-metrics.json", "valid": false },
     { "schema": "schemas/v1/container-inventory-v1.schema.json", "fixture": "schemas/v1/fixtures/invalid/container-inventory-unsafe-fields.json", "valid": false },
     { "schema": "schemas/v1/container-inventory-v1.schema.json", "fixture": "schemas/v1/fixtures/invalid/container-inventory-partial-without-value.json", "valid": false },
-    { "schema": "schemas/v1/diagnostics-health-v1.schema.json", "fixture": "schemas/v1/fixtures/invalid/diagnostics-health-secret-field.json", "valid": false }
+    { "schema": "schemas/v1/diagnostics-health-v1.schema.json", "fixture": "schemas/v1/fixtures/invalid/diagnostics-health-secret-field.json", "valid": false },
+    { "schema": "schemas/v1/log-summary-v1.schema.json", "fixture": "schemas/v1/fixtures/invalid/log-summary-secret-field.json", "valid": false },
+    { "schema": "schemas/v1/log-summary-v1.schema.json", "fixture": "schemas/v1/fixtures/invalid/log-summary-unsafe-privacy.json", "valid": false }
   ]
 }

@@ -129,6 +129,48 @@
         }
       }
     },
+    "/api/v1/logs/summary": {
+      "get": {
+        "operationId": "getLogSummary",
+        "summary": "Return bounded native log metadata summaries",
+        "description": "Returns fixed source and severity rollups with explicit coverage. It never returns log bodies, event codes, identities, paths, native payloads, or arbitrary query dimensions, and an HTTP request never invokes a native reader.",
+        "x-max-response-bytes": 262144,
+        "parameters": [
+          {
+            "name": "range", "in": "query", "required": true,
+            "schema": { "type": "string", "enum": ["1h", "6h", "24h", "7d"] }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fixed-grid log metadata summary with explicit count and coverage states",
+            "content": { "application/json": { "schema": { "$ref": "..\/schemas\/v1\/log-summary-v1.schema.json" } } }
+          },
+          "400": { "$ref": "#\/components\/responses\/Problem" },
+          "401": { "$ref": "#\/components\/responses\/Problem" },
+          "500": { "$ref": "#\/components\/responses\/Problem" },
+          "503": { "$ref": "#\/components\/responses\/Problem" }
+        }
+      },
+      "head": {
+        "operationId": "headLogSummary",
+        "summary": "Check the bounded native log summary response",
+        "description": "Uses the same validation, status, and headers as GET but returns no response body.",
+        "parameters": [
+          {
+            "name": "range", "in": "query", "required": true,
+            "schema": { "type": "string", "enum": ["1h", "6h", "24h", "7d"] }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Summary is available; no body is returned" },
+          "400": { "description": "Invalid fixed query; no body is returned" },
+          "401": { "description": "Authentication required; no body is returned" },
+          "500": { "description": "Summary projection failed; no body is returned" },
+          "503": { "description": "Summary source unavailable; no body is returned" }
+        }
+      }
+    },
     "/api/v1/diagnostics/health": {
       "get": {
         "operationId": "getDiagnosticsHealth",

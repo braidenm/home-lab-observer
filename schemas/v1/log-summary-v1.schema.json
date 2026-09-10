@@ -1,0 +1,475 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:home-lab-observer:schema:log-summary:v1",
+  "title": "Home Lab Observer native log summary v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "generated_at", "range", "window_start", "window_end",
+    "bucket_interval_seconds", "expected_bucket_count", "support_state", "collection_state",
+    "freshness", "observed_at", "reason_code", "coverage_state", "counts", "limits", "privacy", "sources"
+  ],
+  "properties": {
+    "schema_version": { "const": "observer-log-summary/v1" },
+    "generated_at": { "$ref": "#/$defs/timestamp" },
+    "range": { "enum": ["1h", "6h", "24h", "7d"] },
+    "window_start": { "$ref": "#/$defs/timestamp" },
+    "window_end": { "$ref": "#/$defs/timestamp" },
+    "bucket_interval_seconds": { "enum": [60, 300, 900, 3600] },
+    "expected_bucket_count": { "enum": [60, 72, 96, 168] },
+    "support_state": { "$ref": "#/$defs/supportState" },
+    "collection_state": { "$ref": "#/$defs/collectionState" },
+    "freshness": { "$ref": "#/$defs/freshness" },
+    "observed_at": { "$ref": "#/$defs/nullableTimestamp" },
+    "reason_code": { "$ref": "#/$defs/nullableStatusReason" },
+    "coverage_state": { "$ref": "#/$defs/coverageState" },
+    "counts": { "$ref": "#/$defs/nullableCounts" },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_sources", "max_buckets_per_source", "max_response_bytes"],
+      "properties": {
+        "max_sources": { "const": 2 },
+        "max_buckets_per_source": { "const": 168 },
+        "max_response_bytes": { "const": 262144 }
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["data_classification", "contains_log_bodies", "contains_event_codes", "contains_identity_fields", "remote_upload_eligible"],
+      "properties": {
+        "data_classification": { "const": "LOCAL_SENSITIVE" },
+        "contains_log_bodies": { "const": false },
+        "contains_event_codes": { "const": false },
+        "contains_identity_fields": { "const": false },
+        "remote_upload_eligible": { "const": false }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "maxItems": 2,
+      "items": { "$ref": "#/$defs/sourceSummary" }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "range": { "const": "1h" } }, "required": ["range"] },
+      "then": {
+        "properties": {
+          "bucket_interval_seconds": { "const": 60 },
+          "expected_bucket_count": { "const": 60 },
+          "sources": { "items": { "properties": { "buckets": { "minItems": 60, "maxItems": 60 } } } }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "range": { "const": "6h" } }, "required": ["range"] },
+      "then": {
+        "properties": {
+          "bucket_interval_seconds": { "const": 300 },
+          "expected_bucket_count": { "const": 72 },
+          "sources": { "items": { "properties": { "buckets": { "minItems": 72, "maxItems": 72 } } } }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "range": { "const": "24h" } }, "required": ["range"] },
+      "then": {
+        "properties": {
+          "bucket_interval_seconds": { "const": 900 },
+          "expected_bucket_count": { "const": 96 },
+          "sources": { "items": { "properties": { "buckets": { "minItems": 96, "maxItems": 96 } } } }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "range": { "const": "7d" } }, "required": ["range"] },
+      "then": {
+        "properties": {
+          "bucket_interval_seconds": { "const": 3600 },
+          "expected_bucket_count": { "const": 168 },
+          "sources": { "items": { "properties": { "buckets": { "minItems": 168, "maxItems": 168 } } } }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "sources": { "maxItems": 0 } }, "required": ["sources"] },
+      "then": {
+        "properties": {
+          "support_state": { "const": "DISABLED" },
+          "collection_state": { "const": "NOT_RUN" },
+          "freshness": { "const": "UNKNOWN" },
+          "observed_at": { "type": "null" },
+          "reason_code": { "const": "LOG_SOURCES_DISABLED" },
+          "coverage_state": { "const": "UNKNOWN" },
+          "counts": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "coverage_state": { "enum": ["FULL", "PARTIAL"] } }, "required": ["coverage_state"] },
+      "then": { "properties": { "counts": { "$ref": "#/$defs/counts" } } }
+    },
+    {
+      "if": { "properties": { "coverage_state": { "enum": ["GAP", "UNKNOWN"] } }, "required": ["coverage_state"] },
+      "then": { "properties": { "counts": { "$ref": "#/$defs/nullablePositiveCounts" } } }
+    }
+  ],
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?!0001-01-01T00:00:00(?:\\.0{1,9})?Z$)(?!0000)[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?Z$"
+    },
+    "nullableTimestamp": {
+      "oneOf": [
+        { "$ref": "#/$defs/timestamp" },
+        { "type": "null" }
+      ]
+    },
+    "safeInteger": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "supportState": {
+      "enum": ["SUPPORTED", "DISABLED", "UNAVAILABLE", "PERMISSION_DENIED", "UNSUPPORTED"]
+    },
+    "sourceSupportState": {
+      "enum": ["SUPPORTED", "UNAVAILABLE", "PERMISSION_DENIED", "UNSUPPORTED"]
+    },
+    "collectionState": {
+      "enum": ["OK", "PARTIAL", "FAILED", "NOT_RUN"]
+    },
+    "freshness": {
+      "enum": ["CURRENT", "STALE", "UNKNOWN"]
+    },
+    "coverageState": {
+      "enum": ["FULL", "PARTIAL", "GAP", "UNKNOWN"]
+    },
+    "statusReason": {
+      "enum": [
+        "LOG_SOURCES_DISABLED", "SOURCE_PARTIAL", "PLATFORM_UNSUPPORTED", "NO_VISIBLE_JOURNAL",
+        "LOG_STORAGE_UNAVAILABLE", "LOG_HELPER_UNAVAILABLE", "LOG_HELPER_MISMATCH",
+        "CHECKPOINT_RESET", "PERMISSION_DENIED",
+        "DEADLINE_EXCEEDED", "INVALID_RESPONSE", "RESPONSE_TOO_LARGE", "READER_FAILED",
+        "BACKLOG_DEFERRED", "MISSED_COLLECTION", "NOT_YET_OBSERVED"
+      ]
+    },
+    "nullableStatusReason": {
+      "oneOf": [
+        { "$ref": "#/$defs/statusReason" },
+        { "type": "null" }
+      ]
+    },
+    "historicalGapReason": {
+      "enum": [
+        "CHECKPOINT_RESET", "PERMISSION_DENIED", "DEADLINE_EXCEEDED", "INVALID_RESPONSE",
+        "RESPONSE_TOO_LARGE", "READER_FAILED", "BACKLOG_DEFERRED", "MISSED_COLLECTION"
+      ]
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["captured", "discarded"],
+      "properties": {
+        "captured": { "$ref": "#/$defs/safeInteger" },
+        "discarded": { "$ref": "#/$defs/safeInteger" }
+      }
+    },
+    "positiveCounts": {
+      "allOf": [
+        { "$ref": "#/$defs/counts" },
+        {
+          "anyOf": [
+            { "properties": { "captured": { "minimum": 1 } } },
+            { "properties": { "discarded": { "minimum": 1 } } }
+          ]
+        }
+      ]
+    },
+    "nullableCounts": {
+      "oneOf": [
+        { "$ref": "#/$defs/counts" },
+        { "type": "null" }
+      ]
+    },
+    "nullablePositiveCounts": {
+      "oneOf": [
+        { "$ref": "#/$defs/positiveCounts" },
+        { "type": "null" }
+      ]
+    },
+    "severityCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trace", "debug", "info", "warn", "error", "critical", "unknown"],
+      "properties": {
+        "trace": { "$ref": "#/$defs/safeInteger" },
+        "debug": { "$ref": "#/$defs/safeInteger" },
+        "info": { "$ref": "#/$defs/safeInteger" },
+        "warn": { "$ref": "#/$defs/safeInteger" },
+        "error": { "$ref": "#/$defs/safeInteger" },
+        "critical": { "$ref": "#/$defs/safeInteger" },
+        "unknown": { "$ref": "#/$defs/safeInteger" }
+      }
+    },
+    "bucketCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["captured", "discarded", "severity"],
+      "properties": {
+        "captured": { "$ref": "#/$defs/safeInteger" },
+        "discarded": { "$ref": "#/$defs/safeInteger" },
+        "severity": { "$ref": "#/$defs/severityCounts" }
+      }
+    },
+    "positiveBucketCounts": {
+      "allOf": [
+        { "$ref": "#/$defs/bucketCounts" },
+        {
+          "anyOf": [
+            { "properties": { "captured": { "minimum": 1 } } },
+            { "properties": { "discarded": { "minimum": 1 } } }
+          ]
+        }
+      ]
+    },
+    "nullableBucketCounts": {
+      "oneOf": [
+        { "$ref": "#/$defs/bucketCounts" },
+        { "type": "null" }
+      ]
+    },
+    "nullablePositiveBucketCounts": {
+      "oneOf": [
+        { "$ref": "#/$defs/positiveBucketCounts" },
+        { "type": "null" }
+      ]
+    },
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["support_state", "collection_state", "freshness", "observed_at", "attempted_at", "coverage_through", "reason_code"],
+      "properties": {
+        "support_state": { "$ref": "#/$defs/sourceSupportState" },
+        "collection_state": { "$ref": "#/$defs/collectionState" },
+        "freshness": { "$ref": "#/$defs/freshness" },
+        "observed_at": { "$ref": "#/$defs/nullableTimestamp" },
+        "attempted_at": { "$ref": "#/$defs/nullableTimestamp" },
+        "coverage_through": { "$ref": "#/$defs/nullableTimestamp" },
+        "reason_code": { "$ref": "#/$defs/nullableStatusReason" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "support_state": { "enum": ["PERMISSION_DENIED", "UNSUPPORTED"] } }, "required": ["support_state"] },
+          "then": {
+            "properties": {
+              "collection_state": { "const": "NOT_RUN" },
+              "freshness": { "const": "UNKNOWN" },
+              "observed_at": { "type": "null" },
+              "coverage_through": { "type": "null" },
+              "reason_code": { "$ref": "#/$defs/statusReason" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "support_state": { "const": "PERMISSION_DENIED" } }, "required": ["support_state"] },
+          "then": { "properties": { "reason_code": { "const": "PERMISSION_DENIED" } } }
+        },
+        {
+          "if": { "properties": { "support_state": { "const": "UNSUPPORTED" } }, "required": ["support_state"] },
+          "then": { "properties": { "reason_code": { "const": "PLATFORM_UNSUPPORTED" } } }
+        },
+        {
+          "if": { "properties": { "support_state": { "const": "UNAVAILABLE" } }, "required": ["support_state"] },
+          "then": {
+            "oneOf": [
+              {
+                "properties": {
+                  "collection_state": { "const": "NOT_RUN" },
+                  "freshness": { "const": "UNKNOWN" },
+                  "observed_at": { "type": "null" },
+                  "coverage_through": { "type": "null" },
+                  "reason_code": { "enum": ["NO_VISIBLE_JOURNAL", "LOG_HELPER_UNAVAILABLE", "LOG_HELPER_MISMATCH", "READER_FAILED"] }
+                }
+              },
+              {
+                "properties": {
+                  "collection_state": { "const": "FAILED" },
+                  "freshness": { "enum": ["STALE", "UNKNOWN"] },
+                  "reason_code": { "enum": ["LOG_STORAGE_UNAVAILABLE", "READER_FAILED"] }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "if": { "properties": { "collection_state": { "const": "OK" } }, "required": ["collection_state"] },
+          "then": {
+            "properties": {
+              "support_state": { "const": "SUPPORTED" },
+              "freshness": { "enum": ["CURRENT", "STALE"] },
+              "observed_at": { "$ref": "#/$defs/timestamp" },
+              "reason_code": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "collection_state": { "const": "PARTIAL" } }, "required": ["collection_state"] },
+          "then": {
+            "properties": {
+              "support_state": { "const": "SUPPORTED" },
+              "freshness": { "enum": ["CURRENT", "STALE", "UNKNOWN"] },
+              "reason_code": { "enum": ["CHECKPOINT_RESET", "INVALID_RESPONSE", "DEADLINE_EXCEEDED", "RESPONSE_TOO_LARGE", "BACKLOG_DEFERRED"] }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "collection_state": { "const": "FAILED" } }, "required": ["collection_state"] },
+          "then": {
+            "properties": {
+              "support_state": { "enum": ["SUPPORTED", "UNAVAILABLE"] },
+              "freshness": { "enum": ["STALE", "UNKNOWN"] },
+              "reason_code": { "$ref": "#/$defs/statusReason" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "support_state": { "const": "SUPPORTED" },
+              "collection_state": { "const": "FAILED" }
+            },
+            "required": ["support_state", "collection_state"]
+          },
+          "then": {
+            "properties": {
+              "reason_code": { "enum": ["DEADLINE_EXCEEDED", "INVALID_RESPONSE", "RESPONSE_TOO_LARGE", "READER_FAILED", "LOG_STORAGE_UNAVAILABLE"] }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "collection_state": { "const": "NOT_RUN" } }, "required": ["collection_state"] },
+          "then": {
+            "properties": {
+              "support_state": { "enum": ["UNAVAILABLE", "PERMISSION_DENIED", "UNSUPPORTED"] },
+              "freshness": { "const": "UNKNOWN" },
+              "observed_at": { "type": "null" },
+              "coverage_through": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "freshness": { "const": "UNKNOWN" } }, "required": ["freshness"] },
+          "then": { "properties": { "observed_at": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "freshness": { "enum": ["CURRENT", "STALE"] } }, "required": ["freshness"] },
+          "then": { "properties": { "observed_at": { "$ref": "#/$defs/timestamp" } } }
+        },
+        {
+          "if": { "properties": { "observed_at": { "type": "string" } }, "required": ["observed_at"] },
+          "then": { "properties": { "attempted_at": { "$ref": "#/$defs/timestamp" } } }
+        },
+        {
+          "if": { "properties": { "coverage_through": { "type": "string" } }, "required": ["coverage_through"] },
+          "then": { "properties": { "observed_at": { "$ref": "#/$defs/timestamp" } } }
+        }
+      ]
+    },
+    "bucket": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["at", "coverage_state", "covered_seconds", "reason_code", "counts"],
+      "properties": {
+        "at": { "$ref": "#/$defs/timestamp" },
+        "coverage_state": { "$ref": "#/$defs/coverageState" },
+        "covered_seconds": { "type": "integer", "minimum": 0, "maximum": 3600 },
+        "reason_code": {
+          "oneOf": [
+            { "$ref": "#/$defs/historicalGapReason" },
+            { "const": "NOT_YET_OBSERVED" },
+            { "type": "null" }
+          ]
+        },
+        "counts": { "$ref": "#/$defs/nullableBucketCounts" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "coverage_state": { "const": "FULL" } }, "required": ["coverage_state"] },
+          "then": {
+            "properties": {
+              "covered_seconds": { "minimum": 1 },
+              "reason_code": { "type": "null" },
+              "counts": { "$ref": "#/$defs/bucketCounts" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "coverage_state": { "const": "PARTIAL" } }, "required": ["coverage_state"] },
+          "then": {
+            "properties": {
+              "covered_seconds": { "minimum": 1 },
+              "reason_code": {
+                "oneOf": [
+                  { "$ref": "#/$defs/historicalGapReason" },
+                  { "const": "NOT_YET_OBSERVED" }
+                ]
+              },
+              "counts": { "$ref": "#/$defs/bucketCounts" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "coverage_state": { "const": "GAP" } }, "required": ["coverage_state"] },
+          "then": {
+            "properties": {
+              "covered_seconds": { "const": 0 },
+              "reason_code": { "$ref": "#/$defs/historicalGapReason" },
+              "counts": { "$ref": "#/$defs/nullablePositiveBucketCounts" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "coverage_state": { "const": "UNKNOWN" } }, "required": ["coverage_state"] },
+          "then": {
+            "properties": {
+              "covered_seconds": { "const": 0 },
+              "reason_code": { "const": "NOT_YET_OBSERVED" },
+              "counts": { "$ref": "#/$defs/nullablePositiveBucketCounts" }
+            }
+          }
+        }
+      ]
+    },
+    "sourceSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "status", "coverage_state", "covered_seconds", "counts", "buckets"],
+      "properties": {
+        "source": { "enum": ["system", "application"] },
+        "status": { "$ref": "#/$defs/status" },
+        "coverage_state": { "$ref": "#/$defs/coverageState" },
+        "covered_seconds": { "type": "integer", "minimum": 0, "maximum": 604800 },
+        "counts": { "$ref": "#/$defs/nullableCounts" },
+        "buckets": {
+          "type": "array",
+          "maxItems": 168,
+          "items": { "$ref": "#/$defs/bucket" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "coverage_state": { "enum": ["FULL", "PARTIAL"] } }, "required": ["coverage_state"] },
+          "then": { "properties": { "counts": { "$ref": "#/$defs/counts" } } }
+        },
+        {
+          "if": { "properties": { "coverage_state": { "enum": ["GAP", "UNKNOWN"] } }, "required": ["coverage_state"] },
+          "then": { "properties": { "counts": { "$ref": "#/$defs/nullablePositiveCounts" } } }
+        }
+      ]
+    }
+  }
+}
