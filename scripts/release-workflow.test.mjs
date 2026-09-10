@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { EventEmitter } from "node:events";
 import { waitForProcessExit } from "./wait-for-process-exit.mjs";
 import { managerSmokeFailure } from "./windows-manager-smoke-failure.mjs";
-import { verifyHelperFile, verifyManifest } from "./smoke-native-delivery.mjs";
+import { verifyArchivedHelper, verifyHelperFile, verifyManifest } from "./smoke-native-delivery.mjs";
 
 test("process exit waits release listeners and recognize signal termination", async () => {
   const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
@@ -168,6 +168,27 @@ test("delivery helper verification is bounded and matches manifest bytes", async
     await verifyHelperFile(helper, metadata);
     await assert.rejects(() => verifyHelperFile(helper, { ...metadata, sha256: "0".repeat(64) }), /helper bytes/u);
     await assert.rejects(() => verifyHelperFile(helper, { ...metadata, size_bytes: metadata.size_bytes + 1 }), /bounded regular file/u);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("delivery streams the exact helper member from a real archive", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "observer release helper archive "));
+  const root = "home-lab-observer_0.1.0-preview.7_linux_amd64";
+  const helperMember = `${root}/observer-journal-helper`;
+  const helper = path.join(directory, root, "observer-journal-helper");
+  const archive = path.join(directory, "helper.tar.gz");
+  try {
+    await mkdir(path.dirname(helper), { recursive: true });
+    await writeFile(helper, "synthetic-archived-helper", "utf8");
+    const packed = spawnSync("tar", ["-czf", archive, "-C", directory, helperMember], { encoding: "utf8" });
+    assert.equal(packed.status, 0, packed.stderr);
+    const metadata = await shaAndSize(helper);
+    await verifyArchivedHelper(archive, helperMember, metadata);
+    await assert.rejects(() => verifyArchivedHelper(archive, helperMember, { ...metadata, size_bytes: metadata.size_bytes - 1 }), /does not match/u);
+    await assert.rejects(() => verifyArchivedHelper(archive, helperMember, { ...metadata, sha256: "0".repeat(64) }), /does not match/u);
+    await assert.rejects(() => verifyArchivedHelper(archive, `${root}/missing-helper`, metadata), /does not match/u);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

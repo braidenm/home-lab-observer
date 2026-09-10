@@ -11,10 +11,12 @@ V2 requires exactly five files in each Linux archive, including
 
 Before any executable runs, bundle and anonymous-download smoke verify the exact
 release file allowlist, every checksum, the manifest schema and immutable asset
-identity, and every archive member name. For both Linux archives, smoke extracts
-only the already allowlisted package into an owned temporary directory and checks
-the helper's regular-file type, size, and SHA-256 against that archive's manifest
-record. It never starts the helper or queries a host journal.
+identity, and every archive member name. For both Linux archives, smoke streams
+the exact already allowlisted helper member from the archive and checks its size
+and SHA-256 against that archive's manifest record without writing or running it.
+Native Linux smoke separately checks that the installed helper is a bounded regular
+file with the same size and digest. It never starts the helper or queries a host
+journal.
 
 Native smoke continues to run the primary observer version, authenticated local
 service, dashboard, graceful background lifecycle, and supported Windows manager
