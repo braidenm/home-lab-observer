@@ -51,6 +51,14 @@ explicitly enables only its newly registered owned channels before publication. 
 individual non-cancelable native call remains the hosted job
 timeout. [EvtNext](https://learn.microsoft.com/en-us/windows/win32/api/winevt/nf-winevt-evtnext)
 
+If those fixed queries see no matching IDs at their deadline, the harness opens only the same two literal owned
+Operational channels with `EvtOpenLog` and requests only `EvtLogNumberOfLogRecords` through `EvtGetLogInfo`. It accepts
+one fixed 16-byte unsigned-integer variant, closes both handles, caps each result at the expected count plus one, and
+reports only a closed zero, partial, expected or over-bound outcome. It does not query or render an event. A zero count
+proves only that no fixture records had persisted in that owned channel at the check time; it does not identify why.
+[`EvtOpenLog`](https://learn.microsoft.com/en-us/windows/win32/api/winevt/nf-winevt-evtopenlog),
+[`EvtGetLogInfo`](https://learn.microsoft.com/en-us/windows/win32/api/winevt/nf-winevt-evtgetloginfo)
+
 The generator exports exact synthetic provider/event-ID selections into private EVTX files before and after clearing
 only an owned fixture channel. `EvtExportLog` is non-destructive and supports exact XPath selection; its target must
 be a new absolute path. Exported files are never uploaded or committed.

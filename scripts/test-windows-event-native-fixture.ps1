@@ -60,10 +60,32 @@ function Wait-OwnedRecords([string] $Phase) {
     if ($systemIDCount -eq $expected -and $applicationIDCount -eq $expected) {
         Fail 'owned fixture records were visible but the fixed provider filter did not match'
     }
+    $systemLogCount = if ($Phase -ceq 'before') {
+        [OwnedEventFixtureMetadataProbe]::SystemBeforeLogCount()
+    } else {
+        [OwnedEventFixtureMetadataProbe]::SystemAfterLogCount()
+    }
+    $applicationLogCount = if ($Phase -ceq 'before') {
+        [OwnedEventFixtureMetadataProbe]::ApplicationBeforeLogCount()
+    } else {
+        [OwnedEventFixtureMetadataProbe]::ApplicationAfterLogCount()
+    }
+    if ($systemLogCount -lt 0 -or $applicationLogCount -lt 0) {
+        Fail 'owned fixture channel record-count metadata query failed'
+    }
+    if ($systemLogCount -gt $expected -or $applicationLogCount -gt $expected) {
+        Fail 'owned fixture channel record-count metadata exceeded its fixed bound'
+    }
+    if ($systemLogCount -eq $expected -and $applicationLogCount -eq $expected) {
+        Fail 'owned fixture channels contained records outside the fixed event-ID queries'
+    }
+    if ($systemLogCount -gt 0 -or $applicationLogCount -gt 0) {
+        Fail 'owned fixture channel record-count metadata remained partial at the fixed deadline'
+    }
     if ($systemIDCount -gt 0 -or $applicationIDCount -gt 0) {
         Fail 'owned fixture record visibility remained partial at the fixed deadline'
     }
-    Fail 'owned fixture records did not become visible before the fixed deadline'
+    Fail 'owned fixture channel record-count metadata remained zero at the fixed deadline'
 }
 
 function Test-WevtMissing([string] $Kind, [string] $Name) {
@@ -139,6 +161,9 @@ public static class OwnedEventFixtureMetadataProbe
     private const int MaxPublisherCharacters = 2048;
     private const int ErrorNoMoreItems = 259;
     private const int MissingProvider = 15002;
+    private const int EvtOpenChannelPath = 0x1;
+    private const int EvtLogNumberOfLogRecords = 5;
+    private const uint EvtVarTypeUInt64 = 10;
     private const int EvtQueryChannelPath = 0x1;
     private const int EvtQueryForwardDirection = 0x100;
     private const string SystemBeforeQuery = "*[System[Provider[@Name='BraidenM-HomeLabObserver-NativeFixture'] and (EventID=101 or EventID=102)]]";
@@ -165,6 +190,16 @@ public static class OwnedEventFixtureMetadataProbe
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [DllImport("wevtapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
+    private static extern IntPtr EvtOpenLog(IntPtr session, string path, int flags);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("wevtapi.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EvtGetLogInfo(IntPtr log, int propertyId, int propertyValueBufferSize,
+        out EvtVariant propertyValueBuffer, out int propertyValueBufferUsed);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("wevtapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
     private static extern IntPtr EvtQuery(IntPtr session, string path, string query, int flags);
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
@@ -176,6 +211,14 @@ public static class OwnedEventFixtureMetadataProbe
     [DllImport("wevtapi.dll", ExactSpelling = true, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool EvtClose(IntPtr handle);
+
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct EvtVariant
+    {
+        [FieldOffset(0)] public ulong UInt64Value;
+        [FieldOffset(8)] public uint Count;
+        [FieldOffset(12)] public uint Type;
+    }
 
     public static int Publisher()
     {
@@ -216,6 +259,10 @@ public static class OwnedEventFixtureMetadataProbe
     public static int ApplicationBeforeIDCount() { return Count(ApplicationChannelName, ApplicationBeforeIDQuery, 2); }
     public static int SystemAfterIDCount() { return Count(SystemChannelName, SystemAfterIDQuery, 1); }
     public static int ApplicationAfterIDCount() { return Count(ApplicationChannelName, ApplicationAfterIDQuery, 1); }
+    public static int SystemBeforeLogCount() { return LogCount(SystemChannelName, 2); }
+    public static int ApplicationBeforeLogCount() { return LogCount(ApplicationChannelName, 2); }
+    public static int SystemAfterLogCount() { return LogCount(SystemChannelName, 1); }
+    public static int ApplicationAfterLogCount() { return LogCount(ApplicationChannelName, 1); }
 
     private static int Probe(IntPtr handle)
     {
@@ -263,6 +310,23 @@ public static class OwnedEventFixtureMetadataProbe
             if (!EvtClose(query)) count = -1;
         }
         return count;
+    }
+
+    private static int LogCount(string channel, int expected)
+    {
+        IntPtr log = EvtOpenLog(IntPtr.Zero, channel, EvtOpenChannelPath);
+        if (log == IntPtr.Zero) return -1;
+        int result = -1;
+        try {
+            EvtVariant value;
+            int used;
+            if (!EvtGetLogInfo(log, EvtLogNumberOfLogRecords, 16, out value, out used)) return -1;
+            if (used != 16 || value.Count != 0 || value.Type != EvtVarTypeUInt64) return -1;
+            result = value.UInt64Value > (ulong)expected ? expected + 1 : (int)value.UInt64Value;
+        } finally {
+            if (!EvtClose(log)) result = -1;
+        }
+        return result;
     }
 }
 '@
