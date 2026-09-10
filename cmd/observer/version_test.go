@@ -51,6 +51,14 @@ func TestVersionUsesAuthoritativeRecordWithoutChangingWire(t *testing.T) {
 	if json.Unmarshal([]byte(out.String()), &decoded) != nil || len(decoded) != 6 || decoded["version"] != i.Version || decoded["commit"] != i.Commit {
 		t.Fatal("record identity or closed wire changed")
 	}
+	out.Reset()
+	errOut.Reset()
+	if runVersion([]string{"--release-schema"}, &out, &errOut) != 0 || out.String() != "observer-release/v2\n" {
+		t.Fatal("v2 schema probe failed")
+	}
+	if runVersion([]string{"--release-schema", "--json"}, io.Discard, io.Discard) != 2 {
+		t.Fatal("conflicting schema mode accepted")
+	}
 	releaseIdentity = "private-canary-invalid"
 	out.Reset()
 	errOut.Reset()
@@ -74,9 +82,13 @@ func TestNoArgumentsUsesForegroundServe(t *testing.T) {
 }
 
 func TestVersionRejectsUnexpectedOptions(t *testing.T) {
-	for _, args := range [][]string{{"version", "private-extra"}, {"version", "--unknown"}} {
+	for _, args := range [][]string{{"version", "private-extra"}, {"version", "--unknown"}, {"version", "--release-manifest", "test"}, {"version", "--archive-size", "1"}, {"version", "--release-manifest", "test", "--archive-sha256", strings.Repeat("a", 64), "--archive-size", "1", "--json"}} {
 		if run(args, io.Discard, io.Discard, nil) != 2 {
 			t.Fatal("invalid version options were accepted")
 		}
+	}
+	var errorsOut strings.Builder
+	if runVersion([]string{"--archive-size", "private-path-canary"}, io.Discard, &errorsOut) != 2 || errorsOut.String() != "invalid version options\n" {
+		t.Fatal("argument parser leaked input")
 	}
 }

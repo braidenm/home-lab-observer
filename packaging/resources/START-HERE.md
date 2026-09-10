@@ -2,6 +2,13 @@
 
 This archive contains a self-contained Home Lab Observer binary. It does not need Go, Node.js, Docker, or a GitHub token.
 
+New Linux releases also include `observer-journal-helper`. Keep it beside
+`observer`; the release binds the pair by SHA-256 and build identity. Installation
+does not execute the helper or install native libraries. Explicit system-log
+observations may use the host's existing libsystemd; absent/incompatible support
+is reported unavailable while the portable host/Docker core continues working.
+The helper has no server, arbitrary-command or standalone UI role.
+
 ## Run in the foreground
 
 - Linux: run `./run-observer.sh` from a terminal.
@@ -23,6 +30,15 @@ https://github.com/braidenm/home-lab-observer/blob/main/docs/background-operatio
 Background enable is explicit and runs only in your user session. It does not enroll a remote account. The guide covers
 startup, status, graceful stop, restart, disable, your local token location and bounded product diagnostics. Disable
 background operation before program uninstall or a rollback to a foreground-only version.
+
+Use the installer from the selected release. Online installation verifies both
+archive and release-manifest checksums. Offline v2 installation requires the
+archive checksum plus `--manifest release-manifest.json --checksums SHA256SUMS`
+(PowerShell: `-Manifest` and `-Checksums`). Authenticate that checksum source
+against the release/provenance first. Older exact four-file offline archives and
+retained installed versions remain supported for rollback; older online releases
+need their own installer. Upgrades and rollback do not restart a running process:
+stop and explicitly restart it when ready. Observation/token state is preserved.
 
 ## Preview trust notice
 

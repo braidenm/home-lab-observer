@@ -9,6 +9,12 @@ param(
     [Parameter(ParameterSetName = 'Install')]
     [string] $Checksum,
 
+    [Parameter(ParameterSetName = 'Install')]
+    [string] $Manifest,
+
+    [Parameter(ParameterSetName = 'Install')]
+    [string] $Checksums,
+
     [Parameter(Mandatory = $true, ParameterSetName = 'Rollback')]
     [string] $Rollback,
 
@@ -340,6 +346,43 @@ function Assert-BinaryIdentity([string] $Binary, [string] $ExpectedVersion, [str
     if ($build.commit -cnotmatch '^[0-9a-f]{40}$' -or $build.go_version -cnotmatch '^go[0-9]+\.[0-9]+(\.[0-9]+)?([A-Za-z0-9.-]+)?$') { Fail 'observer binary build identity is invalid' }
 }
 
+function Assert-ReleaseManifest([string] $Binary, [string] $ManifestPath, [string] $ArchiveHash, [Int64] $ArchiveSize) {
+    $start = New-Object Diagnostics.ProcessStartInfo
+    $start.FileName = $Binary
+    if ($ManifestPath.Contains('"')) { Fail 'manifest path is invalid' }
+    $start.Arguments = 'version --release-manifest "' + $ManifestPath + '" --archive-sha256 ' + $ArchiveHash + ' --archive-size ' + $ArchiveSize.ToString([Globalization.CultureInfo]::InvariantCulture)
+    $start.UseShellExecute = $false
+    $start.CreateNoWindow = $true
+    $start.RedirectStandardOutput = $true
+    $start.RedirectStandardError = $true
+    $process = [Diagnostics.Process]::Start($start)
+    try {
+        if (-not $process.WaitForExit(10000)) { $process.Kill(); Fail 'manifest verification timed out' }
+        $stdout = $process.StandardOutput.ReadToEnd()
+        $stderr = $process.StandardError.ReadToEnd()
+        if ($process.ExitCode -ne 0 -or $stdout.TrimEnd("`r", "`n") -cne 'RELEASE_MANIFEST_VERIFIED' -or $stderr.Length -ne 0) {
+            Fail 'release manifest verification failed; legacy online releases require the installer from that release'
+        }
+    } finally { $process.Dispose() }
+}
+
+function Assert-LegacyOfflineProfile([string] $Binary) {
+    # The prior ordinary version check rejects malformed new identity records.
+    $start = New-Object Diagnostics.ProcessStartInfo
+    $start.FileName = $Binary
+    $start.Arguments = 'version --release-schema'
+    $start.UseShellExecute = $false
+    $start.CreateNoWindow = $true
+    $start.RedirectStandardOutput = $true
+    $start.RedirectStandardError = $true
+    $process = [Diagnostics.Process]::Start($start)
+    try {
+        if (-not $process.WaitForExit(10000)) { $process.Kill(); Fail 'release schema probe timed out' }
+        $stdout = $process.StandardOutput.ReadToEnd()
+        if ($process.ExitCode -eq 0 -and $stdout.TrimEnd("`r", "`n") -ceq 'observer-release/v2') { Fail 'v2 offline installation requires -Manifest and -Checksums' }
+    } finally { $process.Dispose() }
+}
+
 function Install-Launcher([string] $Root) {
     $content = @'
 @echo off
@@ -393,7 +436,7 @@ function Cleanup {
             }
             try { [IO.Directory]::Delete($extract, $false) } catch { }
         }
-        foreach ($name in @('archive.zip', 'SHA256SUMS')) { [IO.File]::Delete((Join-Path $script:StageDirectory $name)) }
+        foreach ($name in @('archive.zip', 'SHA256SUMS', 'release-manifest.json')) { [IO.File]::Delete((Join-Path $script:StageDirectory $name)) }
         try { [IO.Directory]::Delete($script:StageDirectory, $false) } catch { }
     }
 }
@@ -404,6 +447,13 @@ try {
         if (-not (Test-Version $Version)) { Fail '-Version must be an explicit SemVer prerelease without a leading v' }
         if ([string]::IsNullOrWhiteSpace($Archive) -xor [string]::IsNullOrWhiteSpace($Checksum)) { Fail 'offline installation requires both -Archive and -Checksum' }
         if (-not [string]::IsNullOrWhiteSpace($Checksum) -and -not (Test-Checksum $Checksum)) { Fail '-Checksum must be exactly 64 hexadecimal characters' }
+        if (-not [string]::IsNullOrWhiteSpace($Manifest) -or -not [string]::IsNullOrWhiteSpace($Checksums)) {
+            if ([string]::IsNullOrWhiteSpace($Archive) -or [string]::IsNullOrWhiteSpace($Manifest) -or [string]::IsNullOrWhiteSpace($Checksums)) { Fail 'offline manifest verification requires -Archive, -Manifest and -Checksums' }
+            foreach ($path in @($Manifest, $Checksums)) {
+                Assert-RegularFile $path 'offline manifest/checksum input'
+                if ((Get-Item -LiteralPath $path).Length -gt 1048576) { Fail 'offline manifest/checksum input exceeds its size limit' }
+            }
+        }
         $architecture = Get-PlatformArchitecture
         $rootName = "home-lab-observer_${Version}_windows_${architecture}"
         $archiveName = "$rootName.zip"
@@ -415,11 +465,16 @@ try {
             if ((Get-Item -LiteralPath $resolvedArchive).Length -gt $MaxArchiveBytes) { Fail 'offline archive exceeds the 220 MiB limit' }
             [IO.File]::Copy($resolvedArchive, $stagedArchive, $false)
             $expectedChecksum = $Checksum
+            if (-not [string]::IsNullOrWhiteSpace($Manifest)) {
+                [IO.File]::Copy([IO.Path]::GetFullPath($Manifest), (Join-Path $script:StageDirectory 'release-manifest.json'), $false)
+                [IO.File]::Copy([IO.Path]::GetFullPath($Checksums), (Join-Path $script:StageDirectory 'SHA256SUMS'), $false)
+            }
         } else {
             $baseUrl = "https://github.com/$Repository/releases/download/v$Version"
             Invoke-Download "$baseUrl/$archiveName" $stagedArchive $MaxArchiveBytes
             $sumPath = Join-Path $script:StageDirectory 'SHA256SUMS'
             Invoke-Download "$baseUrl/SHA256SUMS" $sumPath 1048576
+            Invoke-Download "$baseUrl/release-manifest.json" (Join-Path $script:StageDirectory 'release-manifest.json') 1048576
             if ((Get-Item -LiteralPath $sumPath).Length -gt 1048576) { Fail 'SHA256SUMS exceeds its size limit' }
             $escapedName = [Regex]::Escape($archiveName)
             $matches = @([IO.File]::ReadAllLines($sumPath) | Where-Object { $_ -match "^([0-9A-Fa-f]{64})[ `t]+\*?$escapedName$" })
@@ -427,8 +482,18 @@ try {
             $expectedChecksum = ([Regex]::Match($matches[0], '^([0-9A-Fa-f]{64})')).Groups[1].Value
         }
         if ((Get-Sha256 $stagedArchive) -cne $expectedChecksum.ToLowerInvariant()) { Fail 'archive checksum mismatch' }
+        $stagedManifest = Join-Path $script:StageDirectory 'release-manifest.json'
+        if (Test-Path -LiteralPath $stagedManifest) {
+            $manifestSums = @([IO.File]::ReadAllLines((Join-Path $script:StageDirectory 'SHA256SUMS')) | Where-Object { $_ -cmatch '^([0-9A-Fa-f]{64})[ \t]+\*?release-manifest\.json$' })
+            if ($manifestSums.Count -ne 1) { Fail 'checksum file must contain exactly one release-manifest.json entry' }
+            $manifestHash = ([Regex]::Match($manifestSums[0], '^([0-9A-Fa-f]{64})')).Groups[1].Value.ToLowerInvariant()
+            if ((Get-Sha256 $stagedManifest) -cne $manifestHash) { Fail 'manifest checksum mismatch' }
+        }
         $sourceDirectory = Expand-ValidatedArchive $stagedArchive $rootName
         Assert-BinaryIdentity (Join-Path $sourceDirectory 'observer.exe') $Version $architecture
+        if (Test-Path -LiteralPath $stagedManifest) {
+            Assert-ReleaseManifest (Join-Path $sourceDirectory 'observer.exe') $stagedManifest (Get-Sha256 $stagedArchive) (Get-Item -LiteralPath $stagedArchive).Length
+        } else { Assert-LegacyOfflineProfile (Join-Path $sourceDirectory 'observer.exe') }
 
         $resolvedRoot = Resolve-SafeInstallRoot $InstallRoot $true
         $existing = @(Get-ChildItem -LiteralPath $resolvedRoot -Force)

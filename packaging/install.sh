@@ -18,6 +18,9 @@ Install or upgrade (online):
 Install or upgrade from a verified local archive:
   install.sh --version VERSION --archive PATH --checksum SHA256 [--install-root PATH]
 
+V2 offline archives also require --manifest PATH --checksums PATH. Authenticate
+the checksum file using the matching release and provenance before installation.
+
 Switch to an installed version:
   install.sh --rollback VERSION [--install-root PATH]
 
@@ -140,7 +143,10 @@ validate_version_directory() {
   for name in observer LICENSE START-HERE.md run-observer.sh; do
     [ -f "$directory/$name" ] && [ ! -L "$directory/$name" ] || return 1
   done
-  [ -z "$(find "$directory" -mindepth 1 -maxdepth 1 ! -name observer ! -name LICENSE ! -name START-HERE.md ! -name run-observer.sh -print -quit)" ]
+  if [ -e "$directory/observer-journal-helper" ] || [ -L "$directory/observer-journal-helper" ]; then
+    [ "$(uname -s)" = Linux ] && [ -f "$directory/observer-journal-helper" ] && [ ! -L "$directory/observer-journal-helper" ] || return 1
+  fi
+  [ -z "$(find "$directory" -mindepth 1 -maxdepth 1 ! -name observer ! -name LICENSE ! -name START-HERE.md ! -name run-observer.sh ! -name observer-journal-helper -print -quit)" ]
 }
 
 validate_background_area() {
@@ -227,7 +233,7 @@ cleanup() {
   status=$?
   trap - EXIT HUP INT TERM
   if [ -n "${incoming_dir:-}" ] && [ -d "$incoming_dir" ] && [ ! -L "$incoming_dir" ]; then
-    rm -f "$incoming_dir/observer" "$incoming_dir/LICENSE" "$incoming_dir/START-HERE.md" "$incoming_dir/run-observer.sh" "$incoming_dir/Run-Observer.command"
+    rm -f "$incoming_dir/observer" "$incoming_dir/observer-journal-helper" "$incoming_dir/LICENSE" "$incoming_dir/START-HERE.md" "$incoming_dir/run-observer.sh" "$incoming_dir/Run-Observer.command"
     rmdir "$incoming_dir" 2>/dev/null || true
   fi
   if [ -n "${lock_dir:-}" ] && [ -d "$lock_dir" ] && [ ! -L "$lock_dir" ]; then
@@ -235,7 +241,7 @@ cleanup() {
     rmdir "$lock_dir" 2>/dev/null || true
   fi
   if [ -n "${stage_dir:-}" ] && [ -d "$stage_dir" ] && [ ! -L "$stage_dir" ]; then
-    rm -f "$stage_dir/archive" "$stage_dir/SHA256SUMS" "$stage_dir/plain.tar" "$stage_dir/list" "$stage_dir/types" "$stage_dir/version.stderr"
+    rm -f "$stage_dir/archive" "$stage_dir/SHA256SUMS" "$stage_dir/release-manifest.json" "$stage_dir/plain.tar" "$stage_dir/list" "$stage_dir/types" "$stage_dir/version.stderr"
     if [ -d "$stage_dir/extract" ] && [ ! -L "$stage_dir/extract" ]; then
       find "$stage_dir/extract" -type f -exec rm -f {} \;
       find "$stage_dir/extract" -depth -type d -exec rmdir {} \; 2>/dev/null || true
@@ -263,8 +269,15 @@ validate_archive() {
   tar -tf "$stage_dir/plain.tar" > "$stage_dir/list" || die "archive is not a readable tar file"
   tar -tvf "$stage_dir/plain.tar" | awk '{print substr($1,1,1) " " $NF}' > "$stage_dir/types" || die "archive metadata cannot be read"
   [ "$(awk -v name="$root_name/" '$0 == name { count += 1 } END { print count + 0 }' "$stage_dir/list")" -eq 1 ] || die "archive must contain exactly one root directory"
-  [ "$(wc -l < "$stage_dir/list" | tr -d ' ')" -eq 5 ] || die "archive must contain exactly one root directory and four files"
+  member_count=$(wc -l < "$stage_dir/list" | tr -d ' ')
+  archive_has_journal=false
+  if [ "$member_count" -eq 6 ] && [ "$observer_os" = linux ] && [ -f "$stage_dir/release-manifest.json" ]; then
+    archive_has_journal=true
+  else
+    [ "$member_count" -eq 5 ] || die "archive must match the verified four-file or Linux helper profile"
+  fi
   expected_files="$root_name/observer $root_name/LICENSE $root_name/START-HERE.md $root_name/$archive_helper"
+  [ "$archive_has_journal" = false ] || expected_files="$expected_files $root_name/observer-journal-helper"
   count=0
   for expected in $expected_files; do
     matches=$(awk -v name="$expected" '$0 == name { count += 1 } END { print count + 0 }' "$stage_dir/list")
@@ -275,13 +288,14 @@ validate_archive() {
     case "$member" in
       "$root_name/") ;;
       "$root_name/observer"|"$root_name/LICENSE"|"$root_name/START-HERE.md"|"$root_name/$archive_helper") ;;
+      "$root_name/observer-journal-helper") [ "$archive_has_journal" = true ] || die "unexpected journal helper" ;;
       *) die "archive contains an unexpected or unsafe member: $member" ;;
     esac
   done < "$stage_dir/list"
   while IFS=' ' read -r member_type member; do
     case "$member" in
       "$root_name/") [ "$member_type" = d ] || die "archive root must be a directory" ;;
-      "$root_name/observer"|"$root_name/LICENSE"|"$root_name/START-HERE.md"|"$root_name/$archive_helper") [ "$member_type" = - ] || die "archive files must be regular files" ;;
+      "$root_name/observer"|"$root_name/observer-journal-helper"|"$root_name/LICENSE"|"$root_name/START-HERE.md"|"$root_name/$archive_helper") [ "$member_type" = - ] || die "archive files must be regular files" ;;
       *) die "archive metadata contains an unexpected member" ;;
     esac
   done < "$stage_dir/types"
@@ -293,10 +307,15 @@ extract_archive() {
   chmod 700 "$stage_dir/extract"
   tar -xf "$stage_dir/plain.tar" -C "$stage_dir/extract" || die "archive extraction failed"
   source_dir="$stage_dir/extract/$root_name"
-  for name in observer LICENSE START-HERE.md "$archive_helper"; do
+  archive_files="observer LICENSE START-HERE.md $archive_helper"
+  [ "$archive_has_journal" = false ] || archive_files="$archive_files observer-journal-helper"
+  for name in $archive_files; do
     [ -f "$source_dir/$name" ] && [ ! -L "$source_dir/$name" ] || die "extracted archive contains an unsafe file"
   done
-  [ -z "$(find "$source_dir" -mindepth 1 -maxdepth 1 ! -name observer ! -name LICENSE ! -name START-HERE.md ! -name "$archive_helper" -print -quit)" ] || die "extracted archive contains unexpected files"
+  [ -z "$(find "$source_dir" -mindepth 1 -maxdepth 1 ! -name observer ! -name LICENSE ! -name START-HERE.md ! -name "$archive_helper" ! -name observer-journal-helper -print -quit)" ] || die "extracted archive contains unexpected files"
+  if [ "$archive_has_journal" = true ]; then
+    [ "$(file_size "$source_dir/observer-journal-helper")" -gt 0 ] && [ "$(file_size "$source_dir/observer-journal-helper")" -le 209715200 ] || die "journal helper size is invalid"
+  fi
   [ "$(file_size "$source_dir/observer")" -gt 0 ] && [ "$(file_size "$source_dir/observer")" -le 209715200 ] || die "observer binary size is invalid"
   for name in LICENSE START-HERE.md "$archive_helper"; do
     [ "$(file_size "$source_dir/$name")" -le 1048576 ] || die "$name exceeds its size limit"
@@ -344,7 +363,7 @@ EOF
 
 remove_managed_version() {
   directory=$1
-  rm -f "$directory/observer" "$directory/LICENSE" "$directory/START-HERE.md" "$directory/run-observer.sh"
+  rm -f "$directory/observer" "$directory/observer-journal-helper" "$directory/LICENSE" "$directory/START-HERE.md" "$directory/run-observer.sh"
   rmdir "$directory"
 }
 
@@ -352,12 +371,16 @@ action=install
 version=
 archive_source=
 checksum=
+manifest_source=
+checksums_source=
 install_root_arg=
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --version) [ "$#" -ge 2 ] || die "--version requires a value"; version=$2; shift 2 ;;
     --archive) [ "$#" -ge 2 ] || die "--archive requires a value"; archive_source=$2; shift 2 ;;
     --checksum) [ "$#" -ge 2 ] || die "--checksum requires a value"; checksum=$2; shift 2 ;;
+    --manifest) [ "$#" -ge 2 ] || die "--manifest requires a value"; manifest_source=$2; shift 2 ;;
+    --checksums) [ "$#" -ge 2 ] || die "--checksums requires a value"; checksums_source=$2; shift 2 ;;
     --install-root) [ "$#" -ge 2 ] || die "--install-root requires a value"; install_root_arg=$2; shift 2 ;;
     --rollback) [ "$#" -ge 2 ] || die "--rollback requires a value"; [ "$action" = install ] || die "choose one action"; action=rollback; version=$2; shift 2 ;;
     --uninstall) [ "$action" = install ] || die "choose one action"; action=uninstall; shift ;;
@@ -370,6 +393,12 @@ done
 
 if [ "$action" = install ]; then
   [ -n "$version" ] && valid_version "$version" || die "--version must be an explicit SemVer prerelease without a leading v"
+  if [ -n "$manifest_source" ] || [ -n "$checksums_source" ]; then
+    [ -n "$archive_source" ] && [ -n "$manifest_source" ] && [ -n "$checksums_source" ] || die "offline manifest verification requires --archive, --manifest and --checksums"
+    for source in "$manifest_source" "$checksums_source"; do
+      [ -f "$source" ] && [ ! -L "$source" ] && [ "$(file_size "$source")" -le 1048576 ] || die "offline manifest/checksum input is unsafe or too large"
+    done
+  fi
   if [ -n "$archive_source" ] || [ -n "$checksum" ]; then
     [ -n "$archive_source" ] && [ -n "$checksum" ] || die "offline installation requires both --archive and --checksum"
     valid_checksum "$checksum" || die "--checksum must be exactly 64 hexadecimal characters"
@@ -385,10 +414,15 @@ if [ "$action" = install ]; then
   if [ -n "$archive_source" ]; then
     cp "$archive_source" "$stage_dir/archive"
     expected_checksum=$checksum
+    if [ -n "$manifest_source" ]; then
+      cp "$manifest_source" "$stage_dir/release-manifest.json"
+      cp "$checksums_source" "$stage_dir/SHA256SUMS"
+    fi
   else
     base_url="https://github.com/$REPOSITORY/releases/download/v$version"
     download "$base_url/$archive_name" "$stage_dir/archive" "$MAX_ARCHIVE_BYTES"
     download "$base_url/SHA256SUMS" "$stage_dir/SHA256SUMS" 1048576
+    download "$base_url/release-manifest.json" "$stage_dir/release-manifest.json" 1048576
     checksum_count=$(awk -v name="$archive_name" '$2 == name || $2 == "*" name { count += 1; hash = $1 } END { print count + 0 }' "$stage_dir/SHA256SUMS")
     [ "$checksum_count" -eq 1 ] || die "SHA256SUMS does not contain exactly one entry for $archive_name"
     expected_checksum=$(awk -v name="$archive_name" '$2 == name || $2 == "*" name { print $1 }' "$stage_dir/SHA256SUMS")
@@ -396,9 +430,29 @@ if [ "$action" = install ]; then
   fi
   actual_checksum=$(sha256_file "$stage_dir/archive")
   [ "$(printf '%s' "$actual_checksum" | tr 'A-F' 'a-f')" = "$(printf '%s' "$expected_checksum" | tr 'A-F' 'a-f')" ] || die "archive checksum mismatch"
+  if [ -f "$stage_dir/release-manifest.json" ]; then
+    manifest_count=$(awk '$2 == "release-manifest.json" || $2 == "*release-manifest.json" { count += 1 } END { print count + 0 }' "$stage_dir/SHA256SUMS")
+    [ "$manifest_count" -eq 1 ] || die "checksum file must contain exactly one release-manifest.json entry"
+    manifest_hash=$(awk '$2 == "release-manifest.json" || $2 == "*release-manifest.json" { print $1 }' "$stage_dir/SHA256SUMS")
+    valid_checksum "$manifest_hash" || die "manifest checksum is invalid"
+    [ "$(sha256_file "$stage_dir/release-manifest.json")" = "$(printf '%s' "$manifest_hash" | tr 'A-F' 'a-f')" ] || die "manifest checksum mismatch"
+  fi
   validate_archive "$stage_dir/archive" "$root_name"
   extract_archive "$root_name"
   verify_binary_identity "$source_dir/observer"
+  if [ ! -f "$stage_dir/release-manifest.json" ]; then
+    # A malformed new record already failed the ordinary version check above.
+    # Old exact-four-file binaries may not understand this additive probe.
+    if release_schema=$("$source_dir/observer" version --release-schema 2> "$stage_dir/version.stderr"); then
+      [ "$release_schema" != observer-release/v2 ] || die "v2 offline installation requires --manifest and --checksums"
+    fi
+  fi
+  if [ -f "$stage_dir/release-manifest.json" ]; then
+    if ! verification=$("$source_dir/observer" version --release-manifest "$stage_dir/release-manifest.json" --archive-sha256 "$actual_checksum" --archive-size "$(file_size "$stage_dir/archive")" 2> "$stage_dir/version.stderr"); then
+      die "release manifest verification failed; legacy online releases require the installer from that release"
+    fi
+    [ "$verification" = RELEASE_MANIFEST_VERIFIED ] && [ ! -s "$stage_dir/version.stderr" ] || die "manifest verification is unsupported or invalid; use the installer from that release"
+  fi
   resolve_install_root "$install_root_arg"
   if root_is_empty; then
     printf '%s\n' "$MANAGED_MARKER" > "$install_root/.home-lab-observer-managed"
@@ -420,11 +474,20 @@ if [ "$action" = install ]; then
       [ "$(sha256_file "$source_dir/$name")" = "$(sha256_file "$target_dir/$name")" ] || die "existing unselected version does not match the verified archive"
     done
     [ "$(sha256_file "$source_dir/$archive_helper")" = "$(sha256_file "$target_dir/run-observer.sh")" ] || die "existing unselected version helper does not match the verified archive"
+    if [ "$archive_has_journal" = true ]; then
+      [ -f "$target_dir/observer-journal-helper" ] && [ "$(sha256_file "$source_dir/observer-journal-helper")" = "$(sha256_file "$target_dir/observer-journal-helper")" ] || die "existing journal helper does not match the verified archive"
+    else
+      [ ! -e "$target_dir/observer-journal-helper" ] || die "existing version has an unexpected journal helper"
+    fi
   else
     incoming_dir="$install_root/versions/.incoming-$version-$$"
     mkdir "$incoming_dir"
     chmod 700 "$incoming_dir"
     cp "$source_dir/observer" "$source_dir/LICENSE" "$source_dir/START-HERE.md" "$source_dir/$archive_helper" "$incoming_dir/"
+    if [ "$archive_has_journal" = true ]; then
+      cp "$source_dir/observer-journal-helper" "$incoming_dir/observer-journal-helper"
+      chmod 700 "$incoming_dir/observer-journal-helper"
+    fi
     if [ "$archive_helper" != run-observer.sh ]; then
       mv "$incoming_dir/$archive_helper" "$incoming_dir/run-observer.sh"
     fi
@@ -444,6 +507,7 @@ if [ "$action" = install ]; then
   write_atomic "$install_root/current" "$version"
   printf 'Installed Home Lab Observer %s. Nothing was started.\nRun: %s/bin/observer\n' "$version" "$install_root"
 elif [ "$action" = rollback ]; then
+  [ -z "$manifest_source" ] && [ -z "$checksums_source" ] || die "rollback does not accept manifest options"
   [ -z "$archive_source" ] && [ -z "$checksum" ] || die "rollback does not accept archive options"
   [ -n "$version" ] && valid_version "$version" || die "--rollback requires an installed SemVer prerelease"
   [ -d "$install_root_arg" ] && [ ! -L "$install_root_arg" ] || die "install root does not exist or is unsafe"
@@ -459,6 +523,7 @@ elif [ "$action" = rollback ]; then
   write_atomic "$install_root/current" "$version"
   printf 'Selected Home Lab Observer %s. Nothing was started.\n' "$version"
 else
+  [ -z "$manifest_source" ] && [ -z "$checksums_source" ] || die "uninstall does not accept manifest options"
   [ -z "$version" ] && [ -z "$archive_source" ] && [ -z "$checksum" ] || die "uninstall does not accept version or archive options"
   [ -d "$install_root_arg" ] && [ ! -L "$install_root_arg" ] || die "install root does not exist or is unsafe"
   resolve_install_root "$install_root_arg"
