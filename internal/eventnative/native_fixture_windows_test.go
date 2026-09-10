@@ -291,19 +291,75 @@ func assertFixtureSequence(t *testing.T, factory *fileFactory, source logobs.Sou
 			}
 			t.Fatalf("fixture record %d unavailable: %v", index, err)
 		}
-		markFixtureStage(t, stagePrefix+"-selected-types")
-		at, timeErr := recordValue.TimeCreated()
-		level, levelErr := recordValue.Level()
-		id, idErr := recordValue.EventID()
-		guid, guidErr := recordValue.ProviderGUID()
-		bookmark, bookmarkErr := recordValue.Bookmark()
-		decoded, decodeErr := decodeAnchor(bookmark)
-		markFixtureStage(t, stagePrefix+"-selected-values")
-		if timeErr != nil || levelErr != nil || idErr != nil || guidErr != nil || bookmarkErr != nil || decodeErr != nil ||
-			at == 0 || level != wantLevels[index] || id != wantID || guid != fixtureProviderGUID || decoded.recordID == 0 ||
-			decoded.fileTime != at || decoded.eventID != id || decoded.guid != guid || decoded.flags != anchorTimePresent|anchorEventPresent|anchorGUIDPresent {
+		failSelected := func(message string) {
 			recordValue.Close()
-			t.Fatalf("selected WEVTAPI values do not match fixture event %d", wantID)
+			t.Fatal(message)
+		}
+		markFixtureStage(t, stagePrefix+"-time-read")
+		at, err := recordValue.TimeCreated()
+		if err != nil {
+			failSelected("fixture TimeCreated read failed")
+		}
+		markFixtureStage(t, stagePrefix+"-time-value")
+		if at == 0 {
+			failSelected("fixture TimeCreated value is invalid")
+		}
+		markFixtureStage(t, stagePrefix+"-level-read")
+		level, err := recordValue.Level()
+		if err != nil {
+			failSelected("fixture Level read failed")
+		}
+		markFixtureStage(t, stagePrefix+"-level-value")
+		if level != wantLevels[index] {
+			failSelected("fixture Level value does not match")
+		}
+		markFixtureStage(t, stagePrefix+"-event-id-read")
+		id, err := recordValue.EventID()
+		if err != nil {
+			failSelected("fixture EventID read failed")
+		}
+		markFixtureStage(t, stagePrefix+"-event-id-value")
+		if id != wantID {
+			failSelected("fixture EventID value does not match")
+		}
+		markFixtureStage(t, stagePrefix+"-provider-guid-read")
+		guid, err := recordValue.ProviderGUID()
+		if err != nil {
+			failSelected("fixture ProviderGUID read failed")
+		}
+		markFixtureStage(t, stagePrefix+"-provider-guid-value")
+		if guid != fixtureProviderGUID {
+			failSelected("fixture ProviderGUID value does not match")
+		}
+		markFixtureStage(t, stagePrefix+"-bookmark-read")
+		bookmark, err := recordValue.Bookmark()
+		if err != nil {
+			failSelected("fixture bookmark read failed")
+		}
+		markFixtureStage(t, stagePrefix+"-bookmark-decode")
+		decoded, err := decodeAnchor(bookmark)
+		if err != nil {
+			failSelected("fixture bookmark decode failed")
+		}
+		markFixtureStage(t, stagePrefix+"-anchor-record-id")
+		if decoded.recordID == 0 {
+			failSelected("fixture bookmark record identifier is invalid")
+		}
+		markFixtureStage(t, stagePrefix+"-anchor-time")
+		if decoded.fileTime != at {
+			failSelected("fixture bookmark time does not match")
+		}
+		markFixtureStage(t, stagePrefix+"-anchor-event-id")
+		if decoded.eventID != id {
+			failSelected("fixture bookmark event identifier does not match")
+		}
+		markFixtureStage(t, stagePrefix+"-anchor-provider-guid")
+		if decoded.guid != guid {
+			failSelected("fixture bookmark provider identifier does not match")
+		}
+		markFixtureStage(t, stagePrefix+"-anchor-flags")
+		if decoded.flags != anchorTimePresent|anchorEventPresent|anchorGUIDPresent {
+			failSelected("fixture bookmark presence flags do not match")
 		}
 		if index == 0 {
 			firstBookmark = append([]byte(nil), bookmark...)
