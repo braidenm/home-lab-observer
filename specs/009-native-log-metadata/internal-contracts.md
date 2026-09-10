@@ -210,6 +210,15 @@ pipes and discarded stderr, not cursor staging files. Private request framing is
 2 MiB including protocol overhead. Native helper identity and environment checks precede execution. Missing Linux
 loader/library/helper degrades only logs. No cursor contents enter argv or environment.
 
+Linux acquisition has an independent two-MiB cumulative native-metadata budget in addition to the encoded-response
+bound: charge each visited bounded cursor, eight bytes per successful realtime value, and selected priority/message-ID
+values. Reserve worst-case headroom before the next visit (16-KiB cursor, realtime, two 4-KiB fields). If another visit
+cannot fit, a valid processed prefix returns `PARTIAL/RESPONSE_TOO_LARGE`, `Deferred=false`, `CaughtUp=false`, preserving
+its cursor so repeated attempts make progress. A no-prefix failure advances nothing. Oversized selected fields use a
+no-payload `ErrFieldTooLarge` native result and become known discards, never fallback events; conservatively charge their
+full field allowance. Initial realtime seek rounds its exact five-minute lower bound upward to native microsecond
+precision, never including a pre-window row by rounding down or inventing a discard for that precision adjustment.
+
 Every batch has `ExaminedCount <= 513`; the cap applies to every native record visit, not accepted rows alone.
 `ProbeCount` is internal accounting, excluded from public JSON and limited to one for `NORMAL` or two for a reset
 transition. It counts cursor-presence and metadata-only tail probes that contribute neither captured nor discarded

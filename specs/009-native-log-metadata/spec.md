@@ -24,7 +24,10 @@ useful without Platform Demo, with honest cross-platform gaps.
   reschedules the host lane; brief bounded serialization on the shared SQLite writer is expected. It is bounded to
   two sources maximum, a four-second overall deadline, two seconds per source, 512 accepted-plus-discarded records
   plus private cursor/tail probes and one deferred lookahead (at most 513 native record visits), two MiB output per
-  source including protocol framing, four KiB
+  source including protocol framing, and an independent two-MiB cumulative native-metadata budget for visited cursors,
+  realtime values and selected fields. Reserve a complete next visit before native acquisition; a byte-limited valid
+  prefix is PARTIAL/RESPONSE_TOO_LARGE without a deferred visit or caught-up claim and retains its resumable cursor.
+  Selected fields are capped at four KiB
   selected native fields (private cursors have their separate bound),
   16 KiB checkpoints and 200 recent in-memory records. Windows reads run in a fixed hidden helper process using the
   same verified executable, with bounded stdin/stdout and parent-enforced kill/wait on timeout; query handles stay on
