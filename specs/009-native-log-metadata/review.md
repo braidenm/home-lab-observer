@@ -15,6 +15,27 @@ method. Embedded assets are regenerated from the reviewed source. Native source
 activation is still pending: browser summary cases use schema- and semantic-checked
 synthetic responses and never read the developer's native logs.
 
+Root verification passed: all 45 UI tests, typecheck and builds; deterministic
+embedded asset check; contract and direct handler scenarios; real embedded-browser
+checks at 390, 768 and 1440 pixels, including one-hour/seven-day grids, uncut final
+buckets, compact mobile filters, keyboard table focus and local horizontal scroll.
+Root inspected desktop and mobile screenshots. Production native acquisition and
+end-to-end history wiring remain separate release gates.
+
+## Windows reader kernel review
+
+Root independently read the complete fixed-seam implementation, specification and
+synthetic tests. No blocker remains in this kernel slice. Review covers per-query
+and per-record close ownership, same-thread lifetime, strict bookmark proof versus
+generic failure, visited-row/byte limits, safe typed normalization and private
+checkpoint exclusion. An initial EOF/tail race was caught during design review;
+the tail must now prove a timestamp strictly older than the exact initial window
+before claiming zero coverage. Tests include the concurrent-arrival boundary.
+
+Native WEVTAPI binding, private bookmark anchor exactness against cleared/reused
+record IDs, owned native fixtures and the hidden helper entrypoint are still
+required. This review does not claim that Windows event acquisition is enabled.
+
 ## Contract checkpoint — reviewed; required CI pending
 
 This review does not approve native readers, persistence, API handlers, UI integration or a new release. Those are
