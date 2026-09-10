@@ -64,6 +64,23 @@ successive minute attempts retaining one coalesced row. Full Go tests, vet and r
 SQLite transactions, shared age/size maintenance and native integration remain outstanding; this evidence does not
 claim those features are delivered.
 
+## Collector/cache implementation review
+
+Root and an independent reviewer examined the fixed-cadence collector, immutable commit retry, request correlation,
+latest-status overlays and session-only cache. Review found and corrected: an older volatile write-failure overlay
+overwriting newer durable status; storage time consuming the shared native deadline; treating definite revision
+conflicts as ambiguous confirmation; and retaining discarded cache records in an oversized backing array. Reset and
+summary-grid correlation were tightened as well. Root re-read the corrected implementation and ran the regressions.
+
+The collector now preloads checkpoints before the native lane and commits only after readers finish. Every Store
+phase has a fixed two-second context; native readers share a separate four-second context. Stop cancels and joins
+without closing the borrowed Store. Definite conflicts cannot append rejected events; uncertain commits retain only
+the documented one-retry/revision-resolution flow. The 200-event ring owns bounded retained storage.
+
+Root replaced a wall-clock sleep in the load/lane test with direct phase-order/deadline assertions; thirty repeated
+domain test runs and vet passed. Native process kill/reap remains the responsibility of the fixed reader adapters,
+not a capability claimed by cooperative test fakes. Application lifecycle wiring remains pending.
+
 ## Summary HTTP implementation review
 
 The optional authenticated GET/HEAD summary handler was independently reviewed by root, including strict query

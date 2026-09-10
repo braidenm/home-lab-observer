@@ -354,7 +354,8 @@ failed reasons are only the three fixed failure reasons, `READER_FAILED` or the 
 collector borrows it and never closes it. `CommitBatch` validates first, then atomically CASes the source checkpoint
 at `ExpectedRevision`, writes minute source/severity rollups, discard-attribution counts, latest attempt, coalesced
 coverage intervals and the next revision. Zero CAS rows returns `ErrRevisionConflict`. A failed write advances nothing.
-After an ambiguous commit error, the single-flight collector reloads: revision `expected+1` means applied, unchanged
+`ErrRevisionConflict` is a definite rejection: the collector does not reload, retry, or append that rejected batch to
+the process cache. After any other ambiguous commit error, the single-flight collector reloads: revision `expected+1` means applied, unchanged
 revision permits one retry of the exact same immutable validated `Batch` (including its kind, times, cursor and counts),
 and any other revision is a conflict/reload. It never reruns `Reader`, substitutes a new batch, clears reset state, or
 blindly increments twice.
@@ -438,6 +439,8 @@ func (*Collector) Start(context.Context) error
 func (*Collector) Stop(context.Context) error
 func (*Collector) Current() Snapshot
 func (*Collector) Summary(context.Context, SummaryQuery) (Summary, error)
+func AggregateStatus([]Status) (Status, error)
+func StatusAfterBatch(Batch, Status) Status // validated batch/previous-status inputs
 
 type Snapshot struct {
     Status     Status
@@ -450,6 +453,14 @@ type Snapshot struct {
 15-second host collector. Source calls are single-flight per source. Confirmed commits update latest status and append
 events to the bounded memory ring. A failed or ambiguous store write keeps prior events, marks the cache stale/failed
 with a fixed reason, and does not claim persistence. `Current` and `Summary` return deep clones.
+
+The collector loads every enabled source checkpoint before it starts the four-second context shared only by the
+native reads, then begins persistence after all native reads have returned. Checkpoint load and the complete
+commit/revision-resolution sequence each receive their own fixed two-second Store context per source; summary Store
+reads also receive a two-second context. The fresh commit context intentionally remains available after a native
+deadline so a typed deadline batch can durably record its gap, while neither SQLite access nor ambiguity resolution
+can block lifecycle indefinitely. One commit context covers the initial write, checkpoint reread, optional exact-batch
+retry and final revision reread; retries do not reset that budget.
 
 `Collector.Summary` overlays that process-current cached source status onto the matching configured source returned by
 `Store.QuerySummary`, then recomputes only the top-level support/collection/freshness/reason from the overlaid statuses.
@@ -472,6 +483,9 @@ collector clock snapshot used for that overlay.
 the source list is empty, in which case the collector is a valid disabled cache and never calls native code or the log
 Store methods. `Collector.Summary` supplies its configured sources to `Store.QuerySummary`; neither local API query
 parameters nor callers can substitute source names.
+Store summaries must also exactly match the requested window, interval and count. A process-current storage overlay is
+applied only when its attempted time is strictly newer than the durable source status, preventing an older overlay
+from replacing a commit that became readable just before the collector cleared that overlay.
 
 `Stop` cancels and joins the loop and every native child/read before returning. It does not close `Store`. Serve shutdown
 must call log collector `Stop` before the existing host scheduler `Stop`, because the latter owns and closes the shared
