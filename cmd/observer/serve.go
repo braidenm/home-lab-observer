@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"syscall"
 	"time"
@@ -24,6 +25,8 @@ import (
 	"github.com/braidenm/home-lab-observer/internal/lifecycle"
 	"github.com/braidenm/home-lab-observer/internal/localapi"
 	"github.com/braidenm/home-lab-observer/internal/localauth"
+	"github.com/braidenm/home-lab-observer/internal/logobs"
+	"github.com/braidenm/home-lab-observer/internal/logprocess"
 	"github.com/braidenm/home-lab-observer/internal/scheduler"
 )
 
@@ -34,6 +37,8 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 	stateDir := flags.String("state-dir", "", "dedicated observer state directory on a local disk")
 	dockerEndpoint := flags.String("docker-endpoint", "", "opt-in local Docker Unix socket or Windows named pipe; disabled by default")
 	internalBackground := flags.Bool("internal-background-runtime", false, "run the fixed managed background runtime")
+	var sourceFlags logSourceFlags
+	flags.Var(&sourceFlags, "log-source", "opt-in native metadata source: system or application; repeat per source")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -46,6 +51,11 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 	}
 	if err := containerobs.ValidateEndpoint(*dockerEndpoint); err != nil {
 		fmt.Fprintln(stderr, "invalid Docker endpoint: use an explicit local unix:///absolute/path socket or npipe:////./pipe/name")
+		return 2
+	}
+	sources, sourceErr := logobs.ParseSources(runtime.GOOS, sourceFlags)
+	if sourceErr != nil {
+		fmt.Fprintln(stderr, "invalid native log sources: Linux supports system only")
 		return 2
 	}
 	if *stateDir == "" {
@@ -67,7 +77,7 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 		stdout, stderr = io.Discard, io.Discard
 	}
 	logger := slog.New(slog.NewJSONHandler(stderr, nil))
-	if err := serveRuntime(ctx, *listen, resolved, stdout, logger, serveRuntimeOptions{managed: *internalBackground, dockerEndpoint: *dockerEndpoint}); err != nil {
+	if err := serveRuntime(ctx, *listen, resolved, stdout, logger, serveRuntimeOptions{managed: *internalBackground, dockerEndpoint: *dockerEndpoint, logSources: sources}); err != nil {
 		// Errors may contain a private file path or OS data. Keep ordinary logs code-owned.
 		logger.Error("observer_stopped", "code", "SERVICE_FAILED")
 		return 1
@@ -88,6 +98,39 @@ type serveRuntimeOptions struct {
 	dockerEndpoint string
 	containers     *containerobs.Collector
 	newLifecycle   func(lifecycle.Config) (managedLifecycle, error)
+	logSources     []logobs.Source
+	logReader      logobs.Reader
+	newLogs        func(logobs.Config) (logRuntime, error)
+}
+
+type logRuntime interface {
+	Start(context.Context) error
+	Stop(context.Context) error
+	Current() logobs.Snapshot
+	Summary(context.Context, logobs.SummaryQuery) (logobs.Summary, error)
+}
+
+// Both collectors borrow history. Only their composition root can close it
+// after both have joined; scheduler's ordinary standalone ownership is unchanged.
+type borrowedHistory struct{ *history.Store }
+
+func (borrowedHistory) Close() error { return nil }
+
+type collectionStopper interface{ Stop(context.Context) error }
+
+func stopCollectors(logs, host collectionStopper, closeStore func() error) error {
+	logCtx, logCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	logErr := logs.Stop(logCtx)
+	logCancel()
+	hostCtx, hostCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	hostErr := host.Stop(hostCtx)
+	hostCancel()
+	if err := errors.Join(logErr, hostErr); err != nil {
+		// Do not close storage beneath an unjoined collector. Process exit owns
+		// final OS cleanup on this failed-shutdown path.
+		return err
+	}
+	return closeStore()
 }
 
 type managedLifecycle interface {
@@ -168,14 +211,29 @@ func serveRuntime(ctx context.Context, address, stateDir string, output io.Write
 		defer containers.Close()
 	}
 	collect := collectWithContainers(collector.New(collector.RealClock{}, collector.GopsutilProvider{}, cfg).Collect, containers)
-	runtime, err := scheduler.New(collect, store, scheduler.DefaultConfig())
+	runtime, err := scheduler.New(collect, borrowedHistory{store}, scheduler.DefaultConfig())
+	if err != nil {
+		_ = store.Close()
+		return err
+	}
+	newLogs := options.newLogs
+	if newLogs == nil {
+		newLogs = func(config logobs.Config) (logRuntime, error) { return logobs.New(config) }
+	}
+	reader := options.logReader
+	if reader == nil && len(options.logSources) > 0 {
+		// Release identity integration supplies the verified Linux helper digest.
+		// An absent digest fails closed, never discovers an arbitrary helper.
+		reader = logprocess.NewReader(version, commit, "")
+	}
+	logs, err := newLogs(logobs.Config{Sources: options.logSources, Reader: reader, Store: store})
 	if err != nil {
 		_ = store.Close()
 		return err
 	}
 	_, portText, _ := net.SplitHostPort(address)
 	port, _ := strconv.Atoi(portText)
-	handler, err := localapi.NewHandler(localapi.Config{Port: port, Token: token, Version: version, Source: runtime, History: store, ContainerSource: containers, Diagnostics: diagnosticWriter, Now: time.Now})
+	handler, err := localapi.NewHandler(localapi.Config{Port: port, Token: token, Version: version, Source: runtime, History: store, ContainerSource: containers, LogSummarySource: logs, Diagnostics: diagnosticWriter, Now: time.Now})
 	if err != nil {
 		_ = store.Close()
 		return err
@@ -186,6 +244,14 @@ func serveRuntime(ctx context.Context, address, stateDir string, output io.Write
 		_ = store.Close()
 		return err
 	}
+	if len(options.logSources) > 0 {
+		if err := logs.Start(context.WithoutCancel(ctx)); err != nil {
+			return errors.Join(err, stopCollectors(logs, runtime, store.Close))
+		}
+	}
+	stopCollection := func() error {
+		return stopCollectors(logs, runtime, store.Close)
+	}
 	server := &http.Server{Handler: handler, ErrorLog: log.New(safeHTTPLog{logger: logger, diagnostics: diagnosticWriter}, "", 0), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8192}
 	stopped := make(chan error, 1)
 	go func() { stopped <- server.Serve(listener) }()
@@ -194,9 +260,7 @@ func serveRuntime(ctx context.Context, address, stateDir string, output io.Write
 	logger.Info("observer_started", "version", version)
 	select {
 	case err := <-stopped:
-		stopCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		stopErr := runtime.Stop(stopCtx)
-		cancel()
+		stopErr := stopCollection()
 		if stopErr != nil {
 			var shutdownCode string
 			stopCode, shutdownCode = classifyShutdownFailure(stopErr)
@@ -218,9 +282,7 @@ func serveRuntime(ctx context.Context, address, stateDir string, output io.Write
 		if errors.Is(serveErr, http.ErrServerClosed) {
 			serveErr = nil
 		}
-		stopCtx, stopCancel := context.WithTimeout(context.Background(), 15*time.Second)
-		stopErr := runtime.Stop(stopCtx)
-		stopCancel()
+		stopErr := stopCollection()
 		if stopErr != nil {
 			var shutdownCode string
 			stopCode, shutdownCode = classifyShutdownFailure(stopErr)
