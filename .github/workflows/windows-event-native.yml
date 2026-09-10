@@ -35,7 +35,11 @@ jobs:
         env:
           RUNNER_ENVIRONMENT: ${{ runner.environment }}
         run: |
-          call "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -no_logo -arch=${{ matrix.architecture }}
+          set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+          if not exist "%VSWHERE%" exit /b 1
+          for /f "usebackq delims=" %%I in (`"%VSWHERE%" -latest -products * -property installationPath`) do set "VSROOT=%%I"
+          if not defined VSROOT exit /b 1
+          call "%VSROOT%\Common7\Tools\VsDevCmd.bat" -no_logo -arch=${{ matrix.architecture }}
           if errorlevel 1 exit /b %errorlevel%
           pwsh -NoProfile -NonInteractive -File scripts\test-windows-event-native-fixture.ps1 -ValidateConditionsOnly
           if errorlevel 1 exit /b %errorlevel%
