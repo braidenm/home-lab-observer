@@ -127,14 +127,17 @@ func (f *fileFactory) open(source logobs.Source, direction uint32) (eventreader.
 }
 
 type checkedAPI struct {
-	t            *testing.T
-	inner        eventAPI
-	thread       uint32
-	open         map[handle]bool
-	allowedFiles map[string]string
-	queryStages  map[handle]string
-	eventStages  map[handle]string
-	calls        int
+	t                  *testing.T
+	inner              eventAPI
+	thread             uint32
+	open               map[handle]bool
+	allowedFiles       map[string]string
+	queryStages        map[handle]string
+	eventStages        map[handle]string
+	bookmarkStages     map[handle]string
+	nextBookmarkStage  string
+	bookmarkCallFailed bool
+	calls              int
 }
 
 func (a *checkedAPI) check() {
@@ -199,11 +202,47 @@ func (a *checkedAPI) seek(query, bookmark handle, offset int64, timeout, flags u
 }
 func (a *checkedAPI) createBookmark(xml *string) (handle, error) {
 	a.check()
-	return a.own(a.inner.createBookmark(xml))
+	stage := ""
+	if xml == nil && a.nextBookmarkStage != "" {
+		stage = a.nextBookmarkStage
+		a.nextBookmarkStage = ""
+		markFixtureStage(a.t, stage+"-bookmark-create-start")
+	}
+	value, err := a.own(a.inner.createBookmark(xml))
+	if stage != "" {
+		switch {
+		case err != nil:
+			a.bookmarkCallFailed = true
+			markFixtureStage(a.t, stage+"-bookmark-create-error")
+		case value == 0:
+			a.bookmarkCallFailed = true
+			markFixtureStage(a.t, stage+"-bookmark-create-invalid")
+		default:
+			a.bookmarkStages[value] = stage
+			markFixtureStage(a.t, stage+"-bookmark-create-ok")
+		}
+	}
+	return value, err
 }
 func (a *checkedAPI) updateBookmark(bookmark, event handle) error {
 	a.check()
-	return a.inner.updateBookmark(bookmark, event)
+	stage := a.bookmarkStages[bookmark]
+	if stage != "" {
+		if eventStage := a.eventStages[event]; eventStage != stage {
+			a.t.Fatal("native fixture bookmark update used an unexpected event")
+		}
+		markFixtureStage(a.t, stage+"-bookmark-update-start")
+	}
+	err := a.inner.updateBookmark(bookmark, event)
+	if stage != "" {
+		if err != nil {
+			a.bookmarkCallFailed = true
+			markFixtureStage(a.t, stage+"-bookmark-update-error")
+		} else {
+			markFixtureStage(a.t, stage+"-bookmark-update-ok")
+		}
+	}
+	return err
 }
 func (a *checkedAPI) renderValues(context, event handle, maximum uint32) (nativeValues, error) {
 	a.check()
@@ -219,7 +258,31 @@ func (a *checkedAPI) renderValues(context, event handle, maximum uint32) (native
 }
 func (a *checkedAPI) renderBookmark(bookmark handle, maximum uint32) (string, error) {
 	a.check()
-	return a.inner.renderBookmark(bookmark, maximum)
+	stage := a.bookmarkStages[bookmark]
+	if stage != "" {
+		native, ok := a.inner.(*systemAPI)
+		if !ok {
+			a.t.Fatal("native fixture bookmark diagnostics require the system API")
+		}
+		markFixtureStage(a.t, stage+"-bookmark-native-render-start")
+		if _, _, err := native.render(0, bookmark, evtRenderBookmark, maximum); err != nil {
+			a.bookmarkCallFailed = true
+			markFixtureStage(a.t, stage+"-bookmark-native-render-error")
+			return "", err
+		}
+		markFixtureStage(a.t, stage+"-bookmark-native-render-ok")
+		markFixtureStage(a.t, stage+"-bookmark-render-start")
+	}
+	value, err := a.inner.renderBookmark(bookmark, maximum)
+	if stage != "" {
+		if err != nil {
+			a.bookmarkCallFailed = true
+			markFixtureStage(a.t, stage+"-bookmark-render-error")
+		} else {
+			markFixtureStage(a.t, stage+"-bookmark-render-ok")
+		}
+	}
+	return value, err
 }
 func (a *checkedAPI) close(value handle) {
 	a.check()
@@ -229,7 +292,24 @@ func (a *checkedAPI) close(value handle) {
 	delete(a.open, value)
 	delete(a.queryStages, value)
 	delete(a.eventStages, value)
+	delete(a.bookmarkStages, value)
 	a.inner.close(value)
+}
+
+func (a *checkedAPI) beginBookmark(stage string) {
+	a.t.Helper()
+	if a.nextBookmarkStage != "" {
+		a.t.Fatal("native fixture retained an unfinished bookmark diagnostic")
+	}
+	a.nextBookmarkStage = stage
+	a.bookmarkCallFailed = false
+}
+
+func (a *checkedAPI) finishBookmark() (called, failed bool) {
+	a.t.Helper()
+	called = a.nextBookmarkStage == ""
+	a.nextBookmarkStage = ""
+	return called, a.bookmarkCallFailed
 }
 
 func TestOwnedWindowsNativeFixture(t *testing.T) {
@@ -239,7 +319,7 @@ func TestOwnedWindowsNativeFixture(t *testing.T) {
 		t.Fatal("WEVTAPI is unavailable on a supported fixture runner")
 	}
 	api := &checkedAPI{
-		t: t, inner: native, open: make(map[handle]bool), queryStages: make(map[handle]string), eventStages: make(map[handle]string),
+		t: t, inner: native, open: make(map[handle]bool), queryStages: make(map[handle]string), eventStages: make(map[handle]string), bookmarkStages: make(map[handle]string),
 		allowedFiles: map[string]string{
 			files.systemBefore: "system-before", files.systemAfter: "system-after",
 			files.applicationBefore: "application-before", files.applicationAfter: "application-after",
@@ -331,11 +411,34 @@ func assertFixtureSequence(t *testing.T, factory *fileFactory, source logobs.Sou
 		if guid != fixtureProviderGUID {
 			failSelected("fixture ProviderGUID value does not match")
 		}
+		nativeRecord, ok := recordValue.(*record)
+		markFixtureStage(t, stagePrefix+"-record-id-type")
+		if !ok || nativeRecord.renderErr != nil || nativeRecord.values.errs[4] != nil {
+			failSelected("fixture EventRecordID is not an exact UInt64")
+		}
+		markFixtureStage(t, stagePrefix+"-record-id-value")
+		if nativeRecord.values.recordID == 0 {
+			failSelected("fixture EventRecordID is zero")
+		}
+		checked, ok := factory.api.(*checkedAPI)
+		if !ok {
+			failSelected("fixture bookmark diagnostics are unavailable")
+		}
+		checked.beginBookmark(stagePrefix)
 		markFixtureStage(t, stagePrefix+"-bookmark-read")
 		bookmark, err := recordValue.Bookmark()
+		bookmarkCalled, bookmarkCallFailed := checked.finishBookmark()
+		if !bookmarkCalled {
+			markFixtureStage(t, stagePrefix+"-bookmark-precall-reject")
+			failSelected("fixture bookmark was rejected before the native call")
+		}
 		if err != nil {
+			if !bookmarkCallFailed {
+				markFixtureStage(t, stagePrefix+"-bookmark-result-error")
+			}
 			failSelected("fixture bookmark read failed")
 		}
+		markFixtureStage(t, stagePrefix+"-bookmark-result-ok")
 		markFixtureStage(t, stagePrefix+"-bookmark-decode")
 		decoded, err := decodeAnchor(bookmark)
 		if err != nil {
