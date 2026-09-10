@@ -50,3 +50,16 @@ Source-summary reasons now match the closed wire matrix while the generic aggreg
 Root combined verification passed: `go test ./...`, `go vet ./...`, `npm run test:contracts`, and repository policy.
 The complete checkpoint must pass all required PR checks before merge; this does not authorize release claims for the
 unimplemented native, storage or UI slices. The private helper codec is the next separately reviewed contract slice.
+
+## Coverage reducer implementation review
+
+The private helper codec subsequently merged in PR 13 after all 12 required checks passed. This coverage slice adds
+only deterministic history-domain functions, not SQLite tables, a new collector, or native acquisition. Independent
+review found an initialized-empty checkpoint reset transition that was too permissive; it was corrected and tested
+for both reset kinds. Re-review reported no blockers and independently ran coverage tests twenty times and history vet.
+
+Root tests include every ordered historical-reason pair, a seeded interval-cell oracle, exact clipping/coalescing,
+fractional gap preservation, initialized-empty/reset/clock rollback rejection, future-attribution boundaries and 11,000
+successive minute attempts retaining one coalesced row. Full Go tests, vet and repository policy passed locally.
+SQLite transactions, shared age/size maintenance and native integration remain outstanding; this evidence does not
+claim those features are delivered.

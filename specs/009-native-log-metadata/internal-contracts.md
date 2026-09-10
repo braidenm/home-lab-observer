@@ -396,6 +396,20 @@ Every internal timestamp is UTC, non-zero and within RFC 3339's representable ye
 grid boundaries additionally have zero sub-second component and exact UTC-epoch alignment. The log store must choose a
 representation that round-trips that accepted range; this contract does not require Unix-nanosecond storage.
 
+### Storage precision and conservative seconds
+
+Persist coverage endpoints without losing sub-second precision. The integer public `covered_seconds` counts only
+complete UTC-aligned one-second cells wholly covered after sticky-gap precedence and interval coalescing. A fractional
+gap therefore cannot round away into `FULL`. Adjacent identical intervals coalesce before this projection. A bucket
+with less than one full covered second and no explicit gap is `UNKNOWN/NOT_YET_OBSERVED`; with explicit gap evidence it
+is `GAP` using the highest-precedence overlapping gap reason. Known positive record counts remain independent in both
+cases. This is conservative precision reduction, not evidence that collection was absent during every nanosecond.
+
+Store independently rejects event/discard timestamps later than `q+2s`, the fixed native acquisition horizon. Native
+readers classify such timestamps as invalid and attribute their known discard to `q`; valid old backlog retains event
+time and is pruned by ordinary retention. Reject a derived attempt interval outside the non-zero RFC 3339 year range
+before changing state; never cast overflowing dates into Unix nanoseconds or unsigned native time.
+
 ## Collector and cache ownership
 
 ```go
