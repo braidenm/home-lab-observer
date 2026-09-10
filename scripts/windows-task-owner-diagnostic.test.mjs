@@ -30,7 +30,7 @@ $expected=Make-Document $script:TaskOwnerSid
 foreach($alias in @($script:TaskOwnerSid,'LAB\owner','lab\OWNER','owner','OWNER')) {
   if((Compare-TaskDocuments $expected (Make-Document $alias)).kind -cne 'MATCH'){throw 'approved alias rejected'}
 }
-foreach($other in @('OTHER\owner','LAB\another','','S-1-5-21-100-200-300-401')) {
+foreach($other in @('OTHER\owner','LAB\another','',' owner ','S-1-5-21-100-200-300-401')) {
   if((Compare-TaskDocuments $expected (Make-Document $other)).kind -ceq 'MATCH'){throw 'unapproved identity accepted'}
 }
 if((Compare-TaskDocuments (Make-Document $script:TaskOwnerSid 'principal') (Make-Document 'LAB\owner' 'principal')).kind -ceq 'MATCH'){throw 'principal identity was normalized'}

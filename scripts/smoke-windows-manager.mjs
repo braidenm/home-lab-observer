@@ -75,16 +75,18 @@ $ErrorActionPreference='Stop'
 function New-Comparison([string]$Kind,[string]$Path,[string]$Field) {
   return [ordered]@{kind=$Kind;path=$Path;field=$Field}
 }
-function Get-DirectText($Node) {
+function Get-DirectText($Node,[switch]$PreserveWhitespace) {
   $text=''
   foreach ($child in @($Node.ChildNodes)) {
     if ($child.NodeType -eq [Xml.XmlNodeType]::Text -or $child.NodeType -eq [Xml.XmlNodeType]::CDATA) { $text += [string]$child.Value }
   }
+  if ($PreserveWhitespace) { return $text }
   return $text.Trim()
 }
 function Get-ComparableText($Node,[string]$LogicalPath) {
   $text=Get-DirectText $Node
   if ($LogicalPath -ceq 'Task/Triggers/LogonTrigger/UserId' -and [string]$Node.NamespaceURI -ceq 'http://schemas.microsoft.com/windows/2004/02/mit/task' -and $script:TaskOwnerSid) {
+    $text=Get-DirectText $Node -PreserveWhitespace
     if ($text -ceq $script:TaskOwnerSid) { return $script:TaskOwnerSid }
     foreach ($alias in @($script:TaskOwnerName,$script:TaskOwnerBare)) {
       if ($alias -and [string]::Equals($text,$alias,[StringComparison]::OrdinalIgnoreCase)) { return $script:TaskOwnerSid }
@@ -274,7 +276,7 @@ try {
     $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
     try {
       $sid=[string]$identity.User.Value;$name=[string]$identity.Name
-      if ($sid.Length -le 184 -and $sid -cmatch '^S-[0-9]+(?:-[0-9]+)+$' -and $name.Length -le 512) {
+      if ($sid.Length -le 184 -and $sid -cmatch '^S-[0-9]+(?:-[0-9]+)+$' -and [Text.Encoding]::UTF8.GetByteCount($name) -le 512) {
         $script:TaskOwnerSid=$sid;$script:TaskOwnerName=$name
         $parts=$name.Split([char]'\')
         if ($parts.Length -eq 2 -and [string]::Equals($parts[0],[Environment]::MachineName,[StringComparison]::OrdinalIgnoreCase)) { $script:TaskOwnerBare=$parts[1] }
