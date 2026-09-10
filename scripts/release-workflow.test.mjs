@@ -34,7 +34,8 @@ test("manager smoke preserves sanitized task shape when cleanup is unconfirmed",
 });
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const version = "0.1.0-preview.7";
+// Exercise the actual CI fixture identity through finalization and manifest checks.
+const version = "0.1.0-preview.999999";
 const commit = "0123456789abcdef0123456789abcdef01234567";
 const platforms = [
   ["linux", "amd64", "tar.gz"], ["linux", "arm64", "tar.gz"],
@@ -267,7 +268,7 @@ test("paired native delivery uses verified checkout and isolated reproducibility
   assert.match(delivery, /test "\$\(git rev-parse HEAD\)" = "\$GITHUB_SHA"/u);
   assert.match(delivery, /bash scripts\/build-native-v2\.sh "\$PREVIEW_VERSION" "\$GITHUB_SHA" dist\/binaries/u);
   assert.match(delivery, /--schema-version observer-release\/v2/u);
-  assert.match(delivery, /PREVIEW_VERSION: 0\.0\.0-preview\.999999/u);
+  assert(delivery.includes(`PREVIEW_VERSION: ${version}`));
   assert.match(delivery, /--schema schemas\/release-v2\.schema\.json/u);
   assert.match(delivery, /run: node scripts\/test-missing-linux-runtime\.mjs dist\/release/u);
   assert(delivery.indexOf('run: node scripts/test-missing-linux-runtime.mjs') < delivery.indexOf('name: Generate SPDX'));
