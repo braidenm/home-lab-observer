@@ -15,6 +15,7 @@ var (
 	ErrPermissionDenied = errors.New("JOURNAL_PERMISSION_DENIED")
 	ErrInvalidCursor    = errors.New("JOURNAL_INVALID_CURSOR")
 	ErrFieldMissing     = errors.New("JOURNAL_FIELD_MISSING")
+	ErrFieldTooLarge    = errors.New("JOURNAL_FIELD_TOO_LARGE")
 )
 
 // Factory always opens the caller-accessible local system journal. It accepts no
@@ -24,7 +25,8 @@ type Factory interface{ OpenSystem() (Journal, error) }
 // Journal belongs to the creating locked OS thread until Close. Field methods
 // return only the named field value, without its fixed native field-name prefix.
 // The native implementation must bound copies before returning and release its
-// native allocations; the reader rechecks bounds and takes owned copies.
+// native allocations; oversized fields return ErrFieldTooLarge without a buffer.
+// The reader rechecks bounds and takes owned copies.
 type Journal interface {
 	SeekRealtime(microseconds uint64) error
 	SeekCursor(cursor []byte) error

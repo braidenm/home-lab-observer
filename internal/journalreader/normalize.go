@@ -16,31 +16,46 @@ func (a *attempt) row() (*logobs.Event, time.Time, error) {
 		}
 		return nil, at, err
 	}
+	if err := a.chargeNative(8); err != nil {
+		return nil, at, err
+	}
 	nativeAt := time.Unix(int64(micros/1_000_000), int64(micros%1_000_000)*1000).UTC()
 	if nativeAt.Year() < 1 || nativeAt.Year() > 9999 || nativeAt.IsZero() || nativeAt.After(a.request.QueryStartedAt.Add(sourceDeadline)) {
 		return nil, at, nil
 	}
 	at = nativeAt
 	priority, err := callValue(a, a.journal.Priority)
+	if errors.Is(err, ErrFieldTooLarge) {
+		return nil, at, a.chargeNative(logobs.MaxNativeFieldBytes)
+	}
 	if err != nil && !errors.Is(err, ErrFieldMissing) {
 		return nil, at, err
 	}
-	if len(priority) > logobs.MaxNativeFieldBytes {
-		return nil, at, nil
-	}
-	priority = append([]byte(nil), priority...)
 	if errors.Is(err, ErrFieldMissing) {
 		priority = nil
 	}
+	if len(priority) > logobs.MaxNativeFieldBytes {
+		return nil, at, a.chargeNative(logobs.MaxNativeFieldBytes)
+	}
+	if err := a.chargeNative(len(priority)); err != nil {
+		return nil, at, err
+	}
+	priority = append([]byte(nil), priority...)
 	messageID, err := callValue(a, a.journal.MessageID)
+	if errors.Is(err, ErrFieldTooLarge) {
+		return nil, at, a.chargeNative(logobs.MaxNativeFieldBytes)
+	}
 	if err != nil && !errors.Is(err, ErrFieldMissing) {
 		return nil, at, err
 	}
-	if len(messageID) > logobs.MaxNativeFieldBytes {
-		return nil, at, nil
-	}
 	if errors.Is(err, ErrFieldMissing) {
 		messageID = nil
+	}
+	if len(messageID) > logobs.MaxNativeFieldBytes {
+		return nil, at, a.chargeNative(logobs.MaxNativeFieldBytes)
+	}
+	if err := a.chargeNative(len(messageID)); err != nil {
+		return nil, at, err
 	}
 	severity, validPriority := prioritySeverity(priority)
 	code := ""

@@ -37,14 +37,15 @@ type fakeRow struct {
 	errors               map[string]error
 }
 type fakeJournal struct {
-	rows       []fakeRow
-	pos        int
-	closes     int
-	calls      []string
-	faults     map[string]error
-	hook       func(string)
-	seekMicros uint64
-	seekCursor []byte
+	rows        []fakeRow
+	pos         int
+	closes      int
+	calls       []string
+	faults      map[string]error
+	hook        func(string)
+	seekMicros  uint64
+	seekCursor  []byte
+	nativeBytes int
 }
 
 func newJournal(rows ...fakeRow) *fakeJournal { return &fakeJournal{rows: rows, pos: -1} }
@@ -122,10 +123,19 @@ func (j *fakeJournal) TestCursor(cursor []byte) (bool, error) {
 }
 func (j *fakeJournal) RealtimeMicros() (uint64, error) {
 	err := j.call("realtime")
+	if err == nil {
+		j.nativeBytes += 8
+	}
 	return j.rows[j.pos].at, err
 }
 func (j *fakeJournal) Priority() ([]byte, error) {
 	err := j.call("priority")
+	if err == nil {
+		j.nativeBytes += len(j.rows[j.pos].priority)
+	}
+	if errors.Is(err, ErrFieldTooLarge) {
+		return nil, err
+	}
 	return j.rows[j.pos].priority, err
 }
 func (j *fakeJournal) MessageID() ([]byte, error) {
@@ -133,10 +143,19 @@ func (j *fakeJournal) MessageID() ([]byte, error) {
 	if err == nil && j.rows[j.pos].id == nil {
 		err = ErrFieldMissing
 	}
+	if err == nil {
+		j.nativeBytes += len(j.rows[j.pos].id)
+	}
+	if errors.Is(err, ErrFieldTooLarge) {
+		return nil, err
+	}
 	return j.rows[j.pos].id, err
 }
 func (j *fakeJournal) Cursor() ([]byte, error) {
 	err := j.call("cursor")
+	if err == nil {
+		j.nativeBytes += len(j.rows[j.pos].cursor)
+	}
 	return j.rows[j.pos].cursor, err
 }
 func (j *fakeJournal) Close() { j.closes++; _ = j.call("close") }

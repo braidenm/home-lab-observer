@@ -11,12 +11,17 @@ import (
 
 const sourceDeadline = 2 * time.Second
 
+const maxNativeVisitBytes = logobs.MaxCheckpointBytes + 8 + 2*logobs.MaxNativeFieldBytes
+
+var errNativeBudget = errors.New("JOURNAL_NATIVE_METADATA_TOO_LARGE")
+
 type attempt struct {
-	ctx       context.Context
-	request   logobs.ReadRequest
-	journal   Journal
-	batch     logobs.Batch
-	supported bool
+	ctx         context.Context
+	request     logobs.ReadRequest
+	journal     Journal
+	batch       logobs.Batch
+	supported   bool
+	nativeBytes int
 }
 
 // Read keeps native work on one OS thread. Context checks are cooperative; a
@@ -81,6 +86,9 @@ func (a *attempt) run(lower time.Time) error {
 			}
 			return err
 		}
+		if err := a.reserveNative(logobs.MaxCheckpointBytes); err != nil {
+			return err
+		}
 		visited, err := callValue(a, a.journal.Next)
 		if err != nil {
 			return err
@@ -103,7 +111,7 @@ func (a *attempt) run(lower time.Time) error {
 		}
 		a.batch.NextOpaque = cursor
 	} else {
-		micros := uint64(lower.Unix())*1_000_000 + uint64(lower.Nanosecond()/1000)
+		micros := uint64(lower.Unix())*1_000_000 + uint64((lower.Nanosecond()+999)/1000)
 		if err := call(a, func() error { return a.journal.SeekRealtime(micros) }); err != nil {
 			return err
 		}
@@ -116,6 +124,9 @@ func (a *attempt) tail(reset bool) error {
 		a.batch.Kind = logobs.BatchResetPending
 	}
 	if err := call(a, a.journal.SeekTail); err != nil {
+		return err
+	}
+	if err := a.reserveNative(logobs.MaxCheckpointBytes); err != nil {
 		return err
 	}
 	visited, err := callValue(a, a.journal.Previous)
@@ -150,6 +161,13 @@ func (a *attempt) ingest() error {
 	maximum := logobs.MaxAcceptedEvents - int(a.batch.ProbeCount)
 	processed := 0
 	for {
+		if err := a.reserveNative(maxNativeVisitBytes); err != nil {
+			if processed == 0 {
+				return err
+			}
+			a.setState(logobs.SupportSupported, logobs.CollectionPartial, logobs.ReasonResponseTooLarge)
+			return nil
+		}
 		visited, err := callValue(a, a.journal.Next)
 		if err != nil {
 			return err
@@ -191,7 +209,25 @@ func (a *attempt) cursor() ([]byte, error) {
 	if err != nil || len(value) == 0 || len(value) > logobs.MaxCheckpointBytes {
 		return nil, ErrReadFailed
 	}
+	if err := a.chargeNative(len(value)); err != nil {
+		return nil, err
+	}
 	return append([]byte(nil), value...), nil
+}
+
+func (a *attempt) reserveNative(size int) error {
+	if size < 0 || size > logobs.MaxSourceBytes-a.nativeBytes {
+		return errNativeBudget
+	}
+	return nil
+}
+
+func (a *attempt) chargeNative(size int) error {
+	if err := a.reserveNative(size); err != nil {
+		return err
+	}
+	a.nativeBytes += size
+	return nil
 }
 
 func (a *attempt) caughtUp() {
@@ -227,6 +263,8 @@ func (a *attempt) fail(err error) {
 		a.setState(logobs.SupportUnavailable, logobs.CollectionNotRun, logobs.ReasonLogHelperUnavailable)
 	case a.supported && errors.Is(err, context.DeadlineExceeded):
 		a.setState(logobs.SupportSupported, logobs.CollectionFailed, logobs.ReasonDeadlineExceeded)
+	case a.supported && errors.Is(err, errNativeBudget):
+		a.setState(logobs.SupportSupported, logobs.CollectionFailed, logobs.ReasonResponseTooLarge)
 	case a.supported:
 		a.setState(logobs.SupportSupported, logobs.CollectionFailed, logobs.ReasonReaderFailed)
 	default:
