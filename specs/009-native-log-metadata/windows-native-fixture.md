@@ -175,6 +175,12 @@ records. The next bounded discriminator adds one fixed synthetic UInt32 marker (
 publisher wrappers. Zero-payload events are documented as valid; this is an experiment, not an established cause.
 The observer still renders only the existing five allowlisted System properties, never the marker or event body.
 
+Run `34522846437` with the fixed marker reached native reader assertions on both x64 and ARM64, after owned-channel
+acquisition and export. Both then failed at `system-before-selected-values`. Thus the payload change resolved the
+empty-channel symptom in this configuration, but native acceptance remains incomplete; this does not establish
+that Windows generally rejects zero-payload events. The next step is field-specific assertion diagnosis, not
+loosening the required selected values or bookmark checks.
+
 The harness also classifies each owned channel's actual publishing-latency property as only `ZERO`, `WITHIN_10S`,
 `OVER_10S` or `UNAVAILABLE` before starting the publisher. This read-only diagnostic does not change isolation,
 channel configuration, the fixed readiness deadline or acceptance; it prevents a documented default from being
