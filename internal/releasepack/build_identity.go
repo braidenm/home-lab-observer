@@ -3,9 +3,10 @@ package releasepack
 import (
 	"debug/buildinfo"
 	"errors"
-	"github.com/braidenm/home-lab-observer/internal/buildidentity"
 	"os"
 	"runtime/debug"
+
+	"github.com/braidenm/home-lab-observer/internal/buildidentity"
 )
 
 func journalInputName(arch string) string { return "observer-journal-helper_linux_" + arch }

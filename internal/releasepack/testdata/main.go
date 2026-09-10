@@ -1,8 +1,9 @@
 package main
 
 import (
-	"github.com/braidenm/home-lab-observer/internal/buildidentity"
 	"runtime"
+
+	"github.com/braidenm/home-lab-observer/internal/buildidentity"
 )
 
 var version = "dev"

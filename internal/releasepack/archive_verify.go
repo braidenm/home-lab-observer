@@ -58,6 +58,9 @@ func verifyArchive(path string, asset Asset) error {
 		}
 		rootSeen := false
 		for _, entry := range archive.File {
+			if entry.ExternalAttrs&0x400 != 0 {
+				return invalid
+			}
 			if entry.Name == root+"/" {
 				if rootSeen || !entry.Mode().IsDir() || entry.UncompressedSize64 != 0 {
 					return invalid

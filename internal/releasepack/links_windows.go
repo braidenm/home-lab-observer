@@ -1,8 +1,9 @@
 package releasepack
 
 import (
-	"golang.org/x/sys/windows"
 	"io/fs"
+
+	"golang.org/x/sys/windows"
 )
 
 func singleLink(path string, _ fs.FileInfo) bool {

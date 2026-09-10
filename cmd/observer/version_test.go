@@ -2,11 +2,12 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/braidenm/home-lab-observer/internal/buildidentity"
 	"io"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/braidenm/home-lab-observer/internal/buildidentity"
 )
 
 func TestVersionDoesNotStartCollectionOrService(t *testing.T) {

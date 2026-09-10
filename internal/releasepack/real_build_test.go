@@ -1,12 +1,13 @@
 package releasepack
 
 import (
-	"github.com/braidenm/home-lab-observer/internal/buildidentity"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/braidenm/home-lab-observer/internal/buildidentity"
 )
 
 // Compile synthetic, zero-native-access programs; never execute their output.
