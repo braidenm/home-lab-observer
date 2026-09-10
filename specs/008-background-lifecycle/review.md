@@ -65,6 +65,25 @@ The process-exit smoke helper now clears completed deadlines: a successful backg
 two seconds locally rather than waiting for an unused 45-second timer. A regression test verifies timer/listener
 cleanup. All required CI checks and publication evidence are still pending.
 
+## Final merge acceptance
+
+[PR 11](https://github.com/braidenm/home-lab-observer/pull/11) auto-merged as
+`de290e2a1bcf99cc2ee0505e3126180eb3314156` after all twelve required checks passed. The accepted candidate was
+`b89784b`; [native delivery run 34425612923](https://github.com/braidenm/home-lab-observer/actions/runs/34425612923)
+completed in approximately four minutes. Windows verified actual saved-task enable/status/graceful stop/restart/disable;
+Linux/macOS native package tests, all three runtime OS tests, contracts, UI, policy and vulnerability checks passed.
+
+Windows native review identified saved-schema ordering, omitted documented defaults, explicit unified-engine behavior
+and current-owner logon aliases. Fixes preserve exact principal SID and all other action/ownership constraints, with
+bounded current-owner resolution and sanitized failure diagnostics. Independent review approved the alias fix and
+diagnostic matching; root reran full Go tests/vet, seven workflow/diagnostic tests, contracts and the runtime smoke.
+
+Preview 2 was published from that merge after all six native OS/architecture jobs passed. The initial provenance
+publication attempt encountered a GitHub server error; retrying only failed jobs succeeded without changing release
+bytes or bypassing provenance. Public Windows bytes match SHA-256 and the exact version/commit and pass real local
+authentication/schema/history and nonce-stop tests. Independent public attestation lookup remains pending because
+GitHub's trust-metadata endpoint returned transient 502/503 responses.
+
 ## Scope safeguards
 
 The public read-only HTTP surface has no lifecycle mutation route. User-manager control is only a local CLI operation
