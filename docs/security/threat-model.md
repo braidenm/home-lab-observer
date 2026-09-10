@@ -67,6 +67,21 @@ future actions use separate credentials, process, IPC, and allowlists
 | Unsafe update/rollback | Manual default, signed manifest, final-byte verification, side-by-side versions, health-confirmed switch, compatible state/backup |
 | Capability confusion | Explicit supported/degraded/disabled/denied states and freshness; never map missing data to zero/healthy |
 
+## Spec 009 planned helper boundary
+
+The optional Linux journal helper is an executable bundled with the same release, not a generic plugin. It is resolved
+only beside the running observer and checked against a build-embedded digest and closed protocol/version. Both its
+private request and normalized output are bounded; the environment excludes loader injection before exec. The main
+observer must run without the helper's dynamic libraries. Native stalls/crashes/malformed output become unavailable
+log collection, while the parent enforces deadlines and reaps children. No shell, arbitrary source, cursor in argv,
+message-body acquisition, library installation or privilege change is authorized by enabling this capability.
+
+The same-user helper separates failures, not hostile same-account authority. Native libraries and the host account
+remain part of the trusted computing base. Artifact integrity, filesystem identity, selected-field acquisition,
+permission-limited views, missing-loader fallback, private-checkpoint canaries and child-reaping tests are required
+before shipping. This section describes accepted controls under implementation, not protections already in preview 2.
+See [ADR 010](../adr/010-optional-linux-journal-helper.md).
+
 ## Explicit exclusions
 
 The first release has no arbitrary shell, arbitrary file reader, arbitrary log path, arbitrary Docker operation, generic plugin execution, LAN listener, or remote configuration that can broaden local collection. Adding one requires a new threat model and ADR.
