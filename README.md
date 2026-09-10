@@ -2,7 +2,7 @@
 
 Home Lab Observer is a cross-platform, headless-first observability service for a single machine. The downloadable preview collects host and process signals, optionally observes local Docker containers, keeps bounded numeric host history, and serves an authenticated local dashboard. Service observations, opt-in native logs and secure upload to a management application such as Platform Demo are planned extensions.
 
-The project is intentionally public and self-contained. It does not contain, build from, or grant access to the private home-lab infrastructure repository.
+The project is intentionally public and self-contained. It does not contain, build from, or grant access to the private machine
 
 ## Project status
 
