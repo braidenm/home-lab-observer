@@ -147,6 +147,9 @@ Before publication, the harness opens metadata for only the fixed owned publishe
 reads only the Boolean enabled property of its two owned channel configurations into fixed 16-byte variants, and
 checks that the fixed EventLog service is running. Every native handle is closed. These are prerequisite checks,
 not evidence that an event was recorded; actual bounded channel queries and native-reader assertions must still pass.
+The synthetic publisher additionally remains registered for two seconds after successful writes (two documented
+default Operational flush intervals). This bounded fixture-lifetime experiment is not a production delay or a claim
+that registration lifetime caused the failure. Channel visibility still has its existing ten-second deadline.
 
 This fixture would prove the real Windows ABI, selected render types, bookmark mechanics, strict seek/reset behavior,
 thread lifetime and private-file continuation. Because it deliberately never queries production channels, it does

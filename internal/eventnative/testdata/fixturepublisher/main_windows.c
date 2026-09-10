@@ -91,6 +91,12 @@ int wmain(int argc, wchar_t **argv) {
         return 1;
     }
     status = before ? write_before() : write_after();
+    if (status == ERROR_SUCCESS) {
+        // Test-only producer lifetime: allow two ordinary Operational flush
+        // intervals while the generated provider context remains registered.
+        // The channel-count and reader checks still determine actual success.
+        Sleep(2000);
+    }
     if (EventUnregisterBraidenM_HomeLabObserver_NativeFixture() != ERROR_SUCCESS) {
         status = ERROR_INVALID_STATE;
     }
