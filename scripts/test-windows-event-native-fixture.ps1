@@ -30,7 +30,7 @@ function Test-WevtMissing([string] $Kind, [string] $Name) {
     else { Fail 'unknown fixture registration kind' }
     if ($exitCode -eq 0) { return $false }
     if (Test-IsDocumentedMissing $Kind $exitCode) { return $true }
-    Fail 'fixture metadata probe did not return a documented missing status'
+    Fail ("fixture metadata probe returned unexpected fixed-$Kind status $exitCode")
 }
 
 function Test-IsDocumentedMissing([string] $Kind, [int] $ExitCode) {
