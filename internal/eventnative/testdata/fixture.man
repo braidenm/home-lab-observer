@@ -14,10 +14,8 @@
         message="$(string.Provider.Name)">
         <channels>
           <channel name="BraidenM-HomeLabObserver/Fixture-System" chid="FixtureSystem" symbol="HLO_FIXTURE_SYSTEM" type="Operational" isolation="Custom" enabled="true" value="16" message="$(string.Channel.System)">
-            <publishing><latency>100</latency></publishing>
           </channel>
           <channel name="BraidenM-HomeLabObserver/Fixture-Application" chid="FixtureApplication" symbol="HLO_FIXTURE_APPLICATION" type="Operational" isolation="Custom" enabled="true" value="17" message="$(string.Channel.Application)">
-            <publishing><latency>100</latency></publishing>
           </channel>
         </channels>
         <keywords>

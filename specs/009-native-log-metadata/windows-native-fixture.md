@@ -157,12 +157,18 @@ After fresh registration, only the two newly owned channels undergo an explicit 
 publishing any fixture events. This forces activation rather than relying on writing an already-true setting. No
 existing channel or service is restarted, and actual acquisition remains the acceptance criterion.
 
-The fixture now tests Custom isolation with explicit 100-ms publishing latency on only its two new Operational
+The fixture now tests Custom isolation with default publishing latency on only its two new Operational
 channels. Each receives a dedicated ETW session instead of depending on the runner's shared Application session.
 This is a bounded publishing-setup experiment, not a finding about the cause of the earlier empty channels. Cleanup
 disables only those owned channels before unregistration, including after partial setup failure; it still attempts
 unregistration when disabling fails, and uncertain cleanup prevents success or deletion of referenced resources.
 No existing channel, shared session, or service configuration is changed.
+
+Hosted run `34522394697` identified failure at manifest registration when Custom isolation and explicit 100-ms
+latency were combined. The next discriminator removes only explicit latency while retaining Custom isolation;
+the documented schema permits the prior configuration, so this is not evidence of a schema defect. Quiet command
+failures now expose only a fixed stage name, never command arguments, paths, or native output. Native acceptance
+also checks both System and Application post-clear continuation/reset behavior.
 
 The harness also classifies each owned channel's actual publishing-latency property as only `ZERO`, `WITHIN_10S`,
 `OVER_10S` or `UNAVAILABLE` before starting the publisher. This read-only diagnostic does not change isolation,
