@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -20,6 +21,12 @@ func TestSyntheticChild(t *testing.T) {
 	}
 	mode := strings.TrimPrefix(os.Args[len(os.Args)-1], "observer-child=")
 	switch mode {
+	case "cwd":
+		cwd, err := os.Getwd()
+		if err != nil {
+			os.Exit(8)
+		}
+		_, _ = os.Stdout.WriteString(cwd)
 	case "echo":
 		_, _ = io.Copy(os.Stdout, os.Stdin)
 	case "maximum", "overflow":
@@ -151,5 +158,26 @@ func TestLaunchFailureAndUnspecifiedEnvironmentArePrivate(t *testing.T) {
 		if !errors.Is(err, errProcessFailed) || len(out) != 0 || strings.Contains(err.Error(), "synthetic") {
 			t.Fatal("launch boundary leaked or inherited environment")
 		}
+	}
+}
+
+func TestResolverErrorCannotExposePrivateDetails(t *testing.T) {
+	tr := newTransport(func() (commandSpec, error) {
+		return commandSpec{}, errors.New("/synthetic/private-path private-cursor")
+	})
+	out, err := tr.exchange(context.Background(), nil)
+	if err != errProcessFailed || out != nil {
+		t.Fatal("resolver leaked noncanonical error")
+	}
+}
+
+func TestChildUsesExecutableDirectory(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := childTransport(t, "cwd").exchange(context.Background(), nil)
+	if err != nil || filepath.Clean(string(out)) != filepath.Dir(executable) {
+		t.Fatal("child inherited working directory")
 	}
 }
