@@ -4,11 +4,15 @@ package background
 
 import (
 	"context"
+	"encoding/base64"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"golang.org/x/sys/windows"
 )
 
 func TestWindowsTaskTemplateIsAcceptedInMemoryWithoutRegistration(t *testing.T) {
@@ -159,6 +163,131 @@ func TestWindowsSavedTaskMayOmitOnlyExactKnownDefaults(t *testing.T) {
 		if validTaskXML(changed, definition.content) {
 			t.Fatal("attribute or nested content on a default-valued field was accepted")
 		}
+	}
+}
+
+func TestWindowsTaskAcceptsOnlyKnownCurrentOwnerTriggerAliases(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "Home Lab Observer")
+	adapter, err := newPlatformAdapter(nil, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition, err := adapter.registration(Settings{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner, err := currentWindowsOwnerSID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner.qualifiedSAM = `EXAMPLE-HOST\ObserverOwner`
+	owner.localSAM = "ObserverOwner"
+	original := string(definition.content)
+	sidElement := "<UserId>" + owner.sid + "</UserId>"
+
+	for name, alias := range map[string]string{
+		"qualified SAM":     `example-host\observerowner`,
+		"local SAM":         "OBSERVEROWNER",
+		"current owner SID": owner.sid,
+	} {
+		t.Run(name, func(t *testing.T) {
+			actual := replaceOccurrence(t, original, sidElement, 1, "<UserId>"+alias+"</UserId>")
+			if !validTaskXMLForOwner(actual, definition.content, owner) {
+				t.Fatal("known current-owner trigger identifier was rejected")
+			}
+		})
+	}
+
+	for name, changed := range map[string]string{
+		"different account": replaceOccurrence(t, original, sidElement, 1, `<UserId>EXAMPLE-HOST\AnotherOwner</UserId>`),
+		"different domain":  replaceOccurrence(t, original, sidElement, 1, `<UserId>OTHER\ObserverOwner</UserId>`),
+		"different SID":     replaceOccurrence(t, original, sidElement, 1, `<UserId>S-1-5-18</UserId>`),
+		"empty":             replaceOccurrence(t, original, sidElement, 1, `<UserId></UserId>`),
+		"surrounding space": replaceOccurrence(t, original, sidElement, 1, `<UserId> ObserverOwner </UserId>`),
+		"attribute":         replaceOccurrence(t, original, sidElement, 1, `<UserId source="unexpected">ObserverOwner</UserId>`),
+		"nested":            replaceOccurrence(t, original, sidElement, 1, `<UserId><Value>ObserverOwner</Value></UserId>`),
+		"repeated":          replaceOccurrence(t, original, sidElement, 1, `<UserId>ObserverOwner</UserId><UserId>ObserverOwner</UserId>`),
+		"principal alias":   replaceOccurrence(t, original, sidElement, 2, `<UserId>ObserverOwner</UserId>`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if validTaskXMLForOwner(changed, definition.content, owner) {
+				t.Fatal("unknown or structurally invalid owner identifier was accepted")
+			}
+		})
+	}
+
+	domainOwner := owner
+	domainOwner.localSAM = ""
+	bareAlias := replaceOccurrence(t, original, sidElement, 1, `<UserId>ObserverOwner</UserId>`)
+	if validTaskXMLForOwner(bareAlias, definition.content, domainOwner) {
+		t.Fatal("bare alias for a non-local owner domain was accepted")
+	}
+	emptyOwner := strings.Replace(original, sidElement, `<UserId></UserId>`, 1)
+	if validTaskXMLForOwner(emptyOwner, definition.content, windowsOwnerIdentity{}) {
+		t.Fatal("empty owner identity normalized an all-user trigger")
+	}
+}
+
+func TestWindowsOwnerAliasResolutionUsesOnlyCurrentProcessSID(t *testing.T) {
+	computer, err := windows.ComputerName()
+	if err != nil {
+		t.Fatal(err)
+	}
+	qualified := computer + `\ObserverOwner`
+	runner := &recordingRunner{result: commandResult{output: base64.StdEncoding.EncodeToString([]byte(qualified))}}
+	adapter := &windowsAdapter{runner: runner, root: `C:\Observer`}
+	owner, err := adapter.currentWindowsOwnerIdentity(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if owner.sid == "" || owner.qualifiedSAM != qualified || owner.localSAM != "ObserverOwner" {
+		t.Fatalf("resolved owner identity has unexpected bounded fields: sid=%t qualified=%t local=%t", owner.sid != "", owner.qualifiedSAM == qualified, owner.localSAM == "ObserverOwner")
+	}
+	if len(runner.commands) != 1 || runner.commands[0].name != "powershell.exe" || !runner.commands[0].capture {
+		t.Fatal("current-owner lookup did not use the fixed bounded manager command")
+	}
+	arguments := runner.commands[0].args
+	if len(arguments) == 0 || arguments[len(arguments)-1] != owner.sid {
+		t.Fatal("current-owner lookup did not receive only the trusted process SID")
+	}
+
+	domainRunner := &recordingRunner{result: commandResult{output: base64.StdEncoding.EncodeToString([]byte(`OTHER-DOMAIN\ObserverOwner`))}}
+	domainAdapter := &windowsAdapter{runner: domainRunner, root: `C:\Observer`}
+	domainOwner, err := domainAdapter.currentWindowsOwnerIdentity(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if domainOwner.qualifiedSAM == "" || domainOwner.localSAM != "" {
+		t.Fatal("non-local owner unexpectedly received a bare local alias")
+	}
+}
+
+func TestWindowsOwnerAliasResolutionRejectsMalformedOutput(t *testing.T) {
+	for name, output := range map[string]string{
+		"not base64":     "not-base64!",
+		"missing domain": base64.StdEncoding.EncodeToString([]byte("ObserverOwner")),
+		"empty account":  base64.StdEncoding.EncodeToString([]byte(`EXAMPLE-HOST\`)),
+		"control":        base64.StdEncoding.EncodeToString([]byte("EXAMPLE-HOST\\Owner\nInjected")),
+		"oversized":      base64.StdEncoding.EncodeToString([]byte(`EXAMPLE-HOST\` + strings.Repeat("A", maxOwnerNameBytes))),
+	} {
+		t.Run(name, func(t *testing.T) {
+			runner := &recordingRunner{result: commandResult{output: output}}
+			adapter := &windowsAdapter{runner: runner, root: `C:\Observer`}
+			if _, err := adapter.currentWindowsOwnerIdentity(context.Background()); err == nil {
+				t.Fatal("malformed current-owner resolver output was accepted")
+			}
+		})
+	}
+}
+
+func TestWindowsCurrentOwnerAliasResolvesWithoutTaskRegistration(t *testing.T) {
+	adapter := &windowsAdapter{runner: execRunner{timeout: 5 * time.Second}, root: `C:\Observer`}
+	owner, err := adapter.currentWindowsOwnerIdentity(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if owner.sid == "" || owner.qualifiedSAM == "" {
+		t.Fatal("current Windows owner SID or qualified SAM alias is empty")
 	}
 }
 

@@ -5,6 +5,7 @@ package background
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -13,6 +14,8 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf16"
+	"unicode/utf8"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -24,7 +27,10 @@ const taskXMLNamespace = "http://schemas.microsoft.com/windows/2004/02/mit/task"
 const (
 	maxTaskXMLDepth    = 32
 	maxTaskXMLElements = 512
+	maxOwnerNameBytes  = 512
 )
+
+var compareStringOrdinal = windows.NewLazySystemDLL("kernel32.dll").NewProc("CompareStringOrdinal")
 
 type windowsAdapter struct {
 	runner commandRunner
@@ -46,6 +52,12 @@ type taskElementFrame struct {
 	counts     map[string]int
 }
 
+type windowsOwnerIdentity struct {
+	sid          string
+	qualifiedSAM string
+	localSAM     string
+}
+
 func launcherName() string { return "observer.cmd" }
 
 func newPlatformAdapter(runner commandRunner, root string) (platformAdapter, error) {
@@ -56,11 +68,10 @@ func newPlatformAdapter(runner commandRunner, root string) (platformAdapter, err
 }
 
 func (a *windowsAdapter) registration(Settings) (registration, error) {
-	tokenUser, err := windows.GetCurrentProcessToken().GetTokenUser()
+	owner, err := currentWindowsOwnerSID()
 	if err != nil {
 		return registration{}, err
 	}
-	sid := tokenUser.User.Sid.String()
 	launcher := filepath.Join(a.root, "bin", launcherName())
 	systemDirectory, err := windows.GetSystemDirectory()
 	if err != nil {
@@ -76,7 +87,7 @@ func (a *windowsAdapter) registration(Settings) (registration, error) {
   <Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries><StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><AllowHardTerminate>true</AllowHardTerminate><StartWhenAvailable>true</StartWhenAvailable><RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable><IdleSettings><StopOnIdleEnd>false</StopOnIdleEnd><RestartOnIdle>false</RestartOnIdle></IdleSettings><AllowStartOnDemand>true</AllowStartOnDemand><Enabled>true</Enabled><Hidden>false</Hidden><RunOnlyIfIdle>false</RunOnlyIfIdle><DisallowStartOnRemoteAppSession>false</DisallowStartOnRemoteAppSession><UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine><WakeToRun>false</WakeToRun><ExecutionTimeLimit>PT0S</ExecutionTimeLimit><Priority>7</Priority><RestartOnFailure><Interval>PT1M</Interval><Count>3</Count></RestartOnFailure></Settings>
   <Actions Context="Owner"><Exec><Command>%s</Command><Arguments>%s</Arguments></Exec></Actions>
 </Task>
-`, sid, sid, xmlEscape(powershell), xmlEscape(argument))
+`, owner.sid, owner.sid, xmlEscape(powershell), xmlEscape(argument))
 	return registration{fileName: "task.xml", content: []byte(content)}, nil
 }
 
@@ -104,22 +115,42 @@ func (a *windowsAdapter) inspect(ctx context.Context, expected registration) (ma
 	if err != nil {
 		return state, err
 	}
-	if !validTaskXML(result.output, expected.content) {
+	owner, err := a.currentWindowsOwnerIdentity(ctx)
+	if err != nil {
+		return state, errors.New("resolve current Windows task owner")
+	}
+	if !validTaskXMLForOwner(result.output, expected.content, owner) {
 		return state, coded(CodeRegistrationMismatch, errors.New("existing scheduled task is not managed by this observer"))
 	}
 	return state, nil
 }
 
 func validTaskXML(actual string, expected []byte) bool {
-	want, err := canonicalTaskXML(expected)
+	owner, err := currentWindowsOwnerSID()
 	if err != nil {
 		return false
 	}
-	got, err := canonicalTaskXML([]byte(actual))
+	return validTaskXMLForOwner(actual, expected, owner)
+}
+
+func validTaskXMLForOwner(actual string, expected []byte, owner windowsOwnerIdentity) bool {
+	want, err := canonicalTaskXMLForOwner(expected, owner)
+	if err != nil {
+		return false
+	}
+	got, err := canonicalTaskXMLForOwner([]byte(actual), owner)
 	return err == nil && strings.Join(got, "\x00") == strings.Join(want, "\x00")
 }
 
 func canonicalTaskXML(value []byte) ([]string, error) {
+	owner, err := currentWindowsOwnerSID()
+	if err != nil {
+		return nil, err
+	}
+	return canonicalTaskXMLForOwner(value, owner)
+}
+
+func canonicalTaskXMLForOwner(value []byte, owner windowsOwnerIdentity) ([]string, error) {
 	normalized, err := normalizeTaskXMLBytes(value)
 	if err != nil {
 		return nil, err
@@ -128,6 +159,7 @@ func canonicalTaskXML(value []byte) ([]string, error) {
 	var tokens []string
 	var frames []taskElementFrame
 	registrationURISeen := false
+	triggerOwnerSeen := false
 	defaultFieldsSeen := make(map[string]bool)
 	rootSeen := false
 	elementCount := 0
@@ -182,6 +214,21 @@ func canonicalTaskXML(value []byte) ([]string, error) {
 					return nil, errors.New("task XML registration URI does not match the managed task")
 				}
 				registrationURISeen = true
+				continue
+			}
+			if isTaskTriggerOwner(parents, typed.Name) {
+				if triggerOwnerSeen {
+					return nil, errors.New("task XML contains duplicate logon trigger owner")
+				}
+				if err := consumeTaskTriggerOwner(decoder, typed, owner); err != nil {
+					return nil, err
+				}
+				tokens = append(tokens,
+					"<"+typed.Name.Space+"|"+typed.Name.Local+" >",
+					"=<current-owner>",
+					"</"+typed.Name.Space+"|"+typed.Name.Local+">",
+				)
+				triggerOwnerSeen = true
 				continue
 			}
 			if defaultPath, defaultValue, ok := normalizedTaskDefault(parents, typed.Name); ok {
@@ -313,6 +360,120 @@ func canonicalizeTaskAllGroup(tokens []string, frame taskElementFrame) error {
 	}
 	copy(tokens[frame.start+1:len(tokens)-1], inner)
 	return nil
+}
+
+func currentWindowsOwnerSID() (windowsOwnerIdentity, error) {
+	tokenUser, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		return windowsOwnerIdentity{}, err
+	}
+	sid := tokenUser.User.Sid.String()
+	if sid == "" {
+		return windowsOwnerIdentity{}, errors.New("current Windows owner SID is empty")
+	}
+	return windowsOwnerIdentity{sid: sid}, nil
+}
+
+func (a *windowsAdapter) currentWindowsOwnerIdentity(ctx context.Context) (windowsOwnerIdentity, error) {
+	owner, err := currentWindowsOwnerSID()
+	if err != nil {
+		return windowsOwnerIdentity{}, err
+	}
+	if a.runner == nil {
+		return owner, nil
+	}
+	const resolveCurrentSID = `& { param($ownerSid) $ErrorActionPreference='Stop'; $sid=New-Object Security.Principal.SecurityIdentifier($ownerSid); $name=$sid.Translate([Security.Principal.NTAccount]).Value; $bytes=[Text.Encoding]::UTF8.GetBytes($name); [Console]::Out.Write([Convert]::ToBase64String($bytes)) }`
+	result, err := a.runner.run(ctx, command{
+		name: "powershell.exe", args: []string{"-NoProfile", "-NonInteractive", "-Command", resolveCurrentSID, owner.sid}, capture: true,
+	})
+	if err != nil {
+		return windowsOwnerIdentity{}, err
+	}
+	encoded := result.output
+	if encoded == "" || len(encoded) > base64.StdEncoding.EncodedLen(maxOwnerNameBytes) {
+		return windowsOwnerIdentity{}, errors.New("current Windows owner name is invalid")
+	}
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil || len(decoded) == 0 || len(decoded) > maxOwnerNameBytes || !utf8.Valid(decoded) {
+		return windowsOwnerIdentity{}, errors.New("current Windows owner name is invalid")
+	}
+	qualified := string(decoded)
+	domain, account, ok := strings.Cut(qualified, `\`)
+	if !ok || domain == "" || account == "" || strings.Contains(account, `\`) || containsControl(qualified) {
+		return windowsOwnerIdentity{}, errors.New("current Windows owner name is invalid")
+	}
+	owner.qualifiedSAM = qualified
+	computer, err := windows.ComputerName()
+	if err == nil && windowsOrdinalEqualFold(domain, computer) {
+		owner.localSAM = account
+	}
+	return owner, nil
+}
+
+func containsControl(value string) bool {
+	for _, character := range value {
+		if character < 0x20 || character == 0x7f {
+			return true
+		}
+	}
+	return false
+}
+
+func windowsOrdinalEqualFold(left, right string) bool {
+	if left == right {
+		return true
+	}
+	leftUTF16, err := windows.UTF16FromString(left)
+	if err != nil {
+		return false
+	}
+	rightUTF16, err := windows.UTF16FromString(right)
+	if err != nil {
+		return false
+	}
+	result, _, _ := compareStringOrdinal.Call(
+		uintptr(unsafe.Pointer(&leftUTF16[0])), uintptr(len(leftUTF16)-1),
+		uintptr(unsafe.Pointer(&rightUTF16[0])), uintptr(len(rightUTF16)-1),
+		1,
+	)
+	return result == 2
+}
+
+func (owner windowsOwnerIdentity) matches(value string) bool {
+	if owner.sid != "" && value == owner.sid {
+		return true
+	}
+	return owner.qualifiedSAM != "" && windowsOrdinalEqualFold(value, owner.qualifiedSAM) ||
+		owner.localSAM != "" && windowsOrdinalEqualFold(value, owner.localSAM)
+}
+
+func isTaskTriggerOwner(parents []xml.Name, current xml.Name) bool {
+	path, ok := exactTaskPath(parents, current)
+	return ok && path == "Task/Triggers/LogonTrigger/UserId"
+}
+
+func consumeTaskTriggerOwner(decoder *xml.Decoder, start xml.StartElement, owner windowsOwnerIdentity) error {
+	if len(start.Attr) != 0 {
+		return errors.New("task XML logon trigger owner contains attributes")
+	}
+	var contents strings.Builder
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		switch typed := token.(type) {
+		case xml.CharData:
+			contents.Write(typed)
+		case xml.EndElement:
+			if typed.Name != start.Name || !owner.matches(contents.String()) {
+				return errors.New("task XML logon trigger owner changed")
+			}
+			return nil
+		default:
+			return errors.New("task XML logon trigger owner is not a simple value")
+		}
+	}
 }
 
 // Task Scheduler omits these exact default-valued fields when it persists a
