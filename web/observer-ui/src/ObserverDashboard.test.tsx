@@ -52,6 +52,8 @@ describe("ObserverDashboard", () => {
     await screen.findByRole("heading", { name: "studio-node" });
     await user.click(screen.getByRole("button", { name: "Logs" }));
     expect(screen.getByText("No log summary endpoint")).toBeTruthy();
+    expect(screen.getByText(/Operational history, not a forensic audit/)).toBeTruthy();
+    expect(screen.getByText(/identical identity fields can evade reset detection/)).toBeTruthy();
     expect(await screen.findByText(/Default body state: OMITTED/)).toBeTruthy();
     await user.click(screen.getByRole("button", { name: /Collection Complete/i }));
     expect(screen.getByRole("heading", { name: "Event context" })).toBeTruthy();
