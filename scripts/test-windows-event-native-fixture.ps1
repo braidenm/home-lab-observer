@@ -811,6 +811,9 @@ try {
     }
     if ($exitCode -ne 0) {
         $allowedStages = @(
+            'bookmark-render-property-count',
+            'bookmark-render-byte-length',
+            'bookmark-render-terminator',
             'system-before-query-open',
             'system-before-next',
             'system-before-time-read',

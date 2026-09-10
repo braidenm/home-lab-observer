@@ -265,10 +265,25 @@ func (a *checkedAPI) renderBookmark(bookmark handle, maximum uint32) (string, er
 			a.t.Fatal("native fixture bookmark diagnostics require the system API")
 		}
 		markFixtureStage(a.t, stage+"-bookmark-native-render-start")
-		if _, _, err := native.render(0, bookmark, evtRenderBookmark, maximum); err != nil {
+		buffer, properties, err := native.render(0, bookmark, evtRenderBookmark, maximum)
+		if err != nil {
 			a.bookmarkCallFailed = true
 			markFixtureStage(a.t, stage+"-bookmark-native-render-error")
 			return "", err
+		}
+		failure := ""
+		switch {
+		case properties != 0:
+			failure = "bookmark-render-property-count"
+		case len(buffer) < 2 || len(buffer)%2 != 0:
+			failure = "bookmark-render-byte-length"
+		case buffer[len(buffer)-2] != 0 || buffer[len(buffer)-1] != 0:
+			failure = "bookmark-render-terminator"
+		}
+		if failure != "" {
+			a.bookmarkCallFailed = true
+			markFixtureStage(a.t, failure)
+			return "", errNativeFailed
 		}
 		markFixtureStage(a.t, stage+"-bookmark-native-render-ok")
 		markFixtureStage(a.t, stage+"-bookmark-render-start")
