@@ -1,0 +1,37 @@
+name: Linux native journal fixture
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: journal-native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  owned-synthetic-fixture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install and verify the Ubuntu 24.04 journal fixture writer
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -o Acquire::Retries=3
+          candidate=$(apt-cache policy systemd-journal-remote | awk '/Candidate:/ { print $2 }')
+          case "$candidate" in 255.*) ;; *) echo "unexpected journal fixture writer: $candidate" >&2; exit 1 ;; esac
+          sudo apt-get install -y --no-install-recommends "systemd-journal-remote=$candidate"
+          test "$(dpkg-query -W -f='${Version}' systemd-journal-remote)" = "$candidate"
+          /usr/lib/systemd/systemd-journal-remote --version
+      - name: Generate and read only the owned synthetic journal
+        shell: bash
+        run: bash scripts/test-journal-native-fixture.sh

@@ -29,10 +29,13 @@ NUL-free, and never parsed or logged. Seek remains a positioning hint: the kerne
 Deterministic tests use an injected native-call table to prove fixed open flags, exact fields, prefix/size bounds,
 owned copies, cursor freeing, errno reduction, close-once behavior, and wrong-thread refusal without opening any host
 journal. A Linux-only integration test uses a test-compiled `sd_journal_open_directory` seam only when
-`OBSERVER_TEST_SYNTHETIC_JOURNAL_DIR` names an owned synthetic journal directory whose last record has the fixed test
-priority/message ID. Production never contains an exported directory opener. Supplying that fixture in hosted Linux
-CI remains pending for the helper/process integration slice; actual representative systemd fixture evidence remains
-required before declaring the helper supported, and the test must never fall back to a host journal.
+`OBSERVER_TEST_SYNTHETIC_JOURNAL_DIR` names an owned synthetic journal directory. GitHub-hosted Ubuntu 24.04 CI pins
+the installed `systemd-journal-remote` package to that run's verified systemd-255 candidate and converts three fixed
+journal-export records into one bounded journal file. The integration test reads only that directory, proves realtime,
+priority/message-ID normalization, an oversized selected-field discard, exact cursor continuation and the fixed loader
+failure mapping. A body canary is present but never selected or returned. Production never contains an exported directory
+opener and the test never falls back to a host journal. Helper/process identity, timeout and release-package evidence
+remain separate required slices before declaring the helper supported.
 
 Primary ABI references verified 2026-09-10:
 
@@ -45,3 +48,6 @@ Primary ABI references verified 2026-09-10:
   and [`sd_journal_get_data`](https://github.com/systemd/systemd/blob/v255/man/sd_journal_get_data.xml) manuals
 - purego v0.10.0 [`dlfcn.go`](https://github.com/ebitengine/purego/blob/v0.10.0/dlfcn.go) and
   [`func.go`](https://github.com/ebitengine/purego/blob/v0.10.0/func.go)
+- systemd [`Journal Export Format`](https://systemd.io/JOURNAL_EXPORT_FORMATS/) and v255
+  [`systemd-journal-remote` file input/output interface](https://github.com/systemd/systemd/blob/v255/src/journal-remote/journal-remote-main.c)
+- Ubuntu 24.04 [`systemd-journal-remote` package](https://packages.ubuntu.com/noble/systemd-journal-remote)

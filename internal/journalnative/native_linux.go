@@ -48,7 +48,14 @@ var _ journalreader.Factory = (*Factory)(nil)
 
 // NewFactory loads only the fixed systemd SONAME and exact symbol allowlist.
 func NewFactory() (*Factory, error) {
-	calls, closeLibrary, err := loadNativeCalls()
+	return newFactoryFromLoader(loadNativeCalls)
+}
+
+func newFactoryFromLoader(loader func() (nativeCalls, func() error, error)) (*Factory, error) {
+	if loader == nil {
+		return nil, journalreader.ErrUnavailable
+	}
+	calls, closeLibrary, err := loader()
 	if err != nil {
 		return nil, journalreader.ErrUnavailable
 	}
