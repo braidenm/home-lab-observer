@@ -7,6 +7,27 @@
 
 #include "fixture.h"
 
+static const GUID expected_provider = {
+    0x4f0a8ead, 0x523c, 0x4f1d, {0x9d, 0x5e, 0x30, 0xd0, 0x3a, 0x30, 0xf8, 0x1b}
+};
+
+static BOOL descriptor_matches(const EVENT_DESCRIPTOR *descriptor, USHORT id,
+                               UCHAR channel, UCHAR level) {
+    return descriptor->Id == id && descriptor->Version == 0 &&
+           descriptor->Channel == channel && descriptor->Level == level &&
+           descriptor->Opcode == 0 && descriptor->Task == 0;
+}
+
+static BOOL generated_manifest_matches(void) {
+    return IsEqualGUID(&HLO_FIXTURE_PROVIDER, &expected_provider) &&
+           descriptor_matches(&HLO_SYSTEM_INFO, 101, 16, 4) &&
+           descriptor_matches(&HLO_SYSTEM_WARN, 102, 16, 3) &&
+           descriptor_matches(&HLO_SYSTEM_AFTER, 103, 16, 2) &&
+           descriptor_matches(&HLO_APPLICATION_ERROR, 201, 17, 2) &&
+           descriptor_matches(&HLO_APPLICATION_CRITICAL, 202, 17, 1) &&
+           descriptor_matches(&HLO_APPLICATION_AFTER, 203, 17, 4);
+}
+
 static DWORD write_descriptors(REGHANDLE registration,
                                const EVENT_DESCRIPTOR *const *descriptors,
                                size_t count) {
@@ -46,6 +67,9 @@ int wmain(int argc, wchar_t **argv) {
 
     if (argc != 2) {
         return 2;
+    }
+    if (!generated_manifest_matches()) {
+        return 4;
     }
     if (wcscmp(argv[1], L"before") == 0) {
         selected = before;

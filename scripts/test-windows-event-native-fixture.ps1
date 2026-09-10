@@ -27,6 +27,7 @@ function Invoke-OwnedPublisher([string] $Path, [string] $Phase) {
     if ($Phase -cne 'before' -and $Phase -cne 'after') { Fail 'unknown publisher phase' }
     & $Path $Phase 1>$null 2>$null
     if ($LASTEXITCODE -eq 3) { Fail 'generated fixture descriptor was not enabled' }
+    if ($LASTEXITCODE -eq 4) { Fail 'generated fixture descriptors did not match the fixed manifest' }
     if ($LASTEXITCODE -ne 0) { Fail 'owned fixture publisher failed' }
 }
 
@@ -38,14 +39,29 @@ function Wait-OwnedRecords([string] $Phase) {
         if ($Phase -ceq 'before') {
             $systemCount = [OwnedEventFixtureMetadataProbe]::SystemBeforeCount()
             $applicationCount = [OwnedEventFixtureMetadataProbe]::ApplicationBeforeCount()
+            $systemIDCount = [OwnedEventFixtureMetadataProbe]::SystemBeforeIDCount()
+            $applicationIDCount = [OwnedEventFixtureMetadataProbe]::ApplicationBeforeIDCount()
         } else {
             $systemCount = [OwnedEventFixtureMetadataProbe]::SystemAfterCount()
             $applicationCount = [OwnedEventFixtureMetadataProbe]::ApplicationAfterCount()
+            $systemIDCount = [OwnedEventFixtureMetadataProbe]::SystemAfterIDCount()
+            $applicationIDCount = [OwnedEventFixtureMetadataProbe]::ApplicationAfterIDCount()
         }
-        if ($systemCount -lt 0 -or $applicationCount -lt 0) { Fail 'owned fixture record readiness query failed' }
-        if ($systemCount -gt $expected -or $applicationCount -gt $expected) { Fail 'owned fixture record count exceeded its fixed bound' }
+        if ($systemCount -lt 0 -or $applicationCount -lt 0 -or $systemIDCount -lt 0 -or $applicationIDCount -lt 0) {
+            Fail 'owned fixture record readiness query failed'
+        }
+        if ($systemCount -gt $expected -or $applicationCount -gt $expected -or
+            $systemIDCount -gt $expected -or $applicationIDCount -gt $expected) {
+            Fail 'owned fixture record count exceeded its fixed bound'
+        }
         if ($systemCount -eq $expected -and $applicationCount -eq $expected) { return }
         Start-Sleep -Milliseconds 25
+    }
+    if ($systemIDCount -eq $expected -and $applicationIDCount -eq $expected) {
+        Fail 'owned fixture records were visible but the fixed provider filter did not match'
+    }
+    if ($systemIDCount -gt 0 -or $applicationIDCount -gt 0) {
+        Fail 'owned fixture record visibility remained partial at the fixed deadline'
     }
     Fail 'owned fixture records did not become visible before the fixed deadline'
 }
@@ -129,6 +145,10 @@ public static class OwnedEventFixtureMetadataProbe
     private const string ApplicationBeforeQuery = "*[System[Provider[@Name='BraidenM-HomeLabObserver-NativeFixture'] and (EventID=201 or EventID=202)]]";
     private const string SystemAfterQuery = "*[System[Provider[@Name='BraidenM-HomeLabObserver-NativeFixture'] and EventID=103]]";
     private const string ApplicationAfterQuery = "*[System[Provider[@Name='BraidenM-HomeLabObserver-NativeFixture'] and EventID=203]]";
+    private const string SystemBeforeIDQuery = "*[System[(EventID=101 or EventID=102)]]";
+    private const string ApplicationBeforeIDQuery = "*[System[(EventID=201 or EventID=202)]]";
+    private const string SystemAfterIDQuery = "*[System[EventID=103]]";
+    private const string ApplicationAfterIDQuery = "*[System[EventID=203]]";
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [DllImport("wevtapi.dll", ExactSpelling = true, SetLastError = true)]
@@ -192,6 +212,10 @@ public static class OwnedEventFixtureMetadataProbe
     public static int ApplicationBeforeCount() { return Count(ApplicationChannelName, ApplicationBeforeQuery, 2); }
     public static int SystemAfterCount() { return Count(SystemChannelName, SystemAfterQuery, 1); }
     public static int ApplicationAfterCount() { return Count(ApplicationChannelName, ApplicationAfterQuery, 1); }
+    public static int SystemBeforeIDCount() { return Count(SystemChannelName, SystemBeforeIDQuery, 2); }
+    public static int ApplicationBeforeIDCount() { return Count(ApplicationChannelName, ApplicationBeforeIDQuery, 2); }
+    public static int SystemAfterIDCount() { return Count(SystemChannelName, SystemAfterIDQuery, 1); }
+    public static int ApplicationAfterIDCount() { return Count(ApplicationChannelName, ApplicationAfterIDQuery, 1); }
 
     private static int Probe(IntPtr handle)
     {
@@ -309,6 +333,8 @@ try {
     if (Test-AnyMissing $providerMissing $systemMissing $applicationMissing) {
         Fail 'fixture registration was not observable'
     }
+    Invoke-Quiet 'wevtutil.exe' @('sl', $systemChannel, '/e:true')
+    Invoke-Quiet 'wevtutil.exe' @('sl', $applicationChannel, '/e:true')
     Invoke-OwnedPublisher $publisher 'before'
     Wait-OwnedRecords 'before'
 

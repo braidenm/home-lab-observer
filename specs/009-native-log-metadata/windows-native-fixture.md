@@ -37,7 +37,10 @@ generated descriptor. It emits no event data or native error details while waiti
 Before each private export, a test-only readiness probe queries only the two owned channel constants with the exact
 owned provider/event-ID XPath. It calls `EvtNext` with a zero timeout, closes every returned handle, counts at most one
 record beyond the fixed expected count, and retries between calls for at most ten monotonic seconds. It never renders
-or returns event contents. The hard runaway bound for an individual non-cancelable native call remains the hosted job
+or returns event contents. A second fixed event-ID-only query over the same owned channels distinguishes a provider
+filter mismatch from no visible records without broadening to an ordinary channel or rendering data. The harness
+explicitly enables only its newly registered owned channels before publication. The hard runaway bound for an
+individual non-cancelable native call remains the hosted job
 timeout. [EvtNext](https://learn.microsoft.com/en-us/windows/win32/api/winevt/nf-winevt-evtnext)
 
 The generator exports exact synthetic provider/event-ID selections into private EVTX files before and after clearing
