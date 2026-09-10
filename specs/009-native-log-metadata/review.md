@@ -147,3 +147,22 @@ Combined tests cover a one-row maintenance budget, 5,000 host plus 5,000 log rec
 allocation reclamation, fixed-width dates through year 9999, malformed/incompatible optional schema fallback,
 checkpoint preservation, concurrent CAS contenders and cancellation. Root full Go tests, vet, repository policy and
 diff checks pass. This is storage-library evidence; production/native wiring and release proof remain separate gates.
+
+## Fixed helper process and identity review
+
+Independent transport review found resolver errors escaping verbatim and missing
+working-directory regression evidence. Both were corrected: only canonical fixed
+resolver codes may escape, and real synthetic children prove the pinned directory.
+Re-review approved bounded pipes, overflow termination, timeout/reaping, the
+non-queuing occupied slot, hardening-before-input and cleanup-before-output.
+The cleanup callback now reports errors; those reject the response as well.
+
+Root independently reviewed all platform identity code and tests: fixed adjacent
+Linux digest, same-executable Windows identity, bounded files, link/privilege and
+owner/ACL checks, minimal environment and read-only refusal. A second reviewer
+approved the correlated Reader bridge and explicit unsupported/no-launch states.
+Full combined Go tests, vet and repository policy pass locally. Windows native
+node/ACL tests execute locally; a positive whole-path test explicitly refuses this
+development host's permissive ancestors, and must pass rather than skip in CI.
+Linux native filesystem and child tests remain required CI evidence. This slice
+does not enable sources, install a helper or claim packaged native support.
