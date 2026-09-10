@@ -23,3 +23,7 @@ Before the implementation checkpoint, resolve and test:
 The ADR must include primary sources for the selected Engine API's operation/status semantics and the chosen OS peer
 security primitives. Existing read-only ADRs remain unchanged. Proposed numerical defaults can support synthetic policy
 tests, but they do not resolve these authority, privacy or operational decisions.
+
+Proposal adjustment: R2/R8 now explicitly keep full daemon identities local and use broker-minted opaque remote
+references; R4 binds grace to owner policy and denies delegate overrides. These resolve those two ambiguities in the
+written proposal, not the pending executable-contract, architecture-acceptance or implementation gates.

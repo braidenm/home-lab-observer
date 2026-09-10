@@ -23,6 +23,8 @@ configuration changes, image pulls, daemon restart, host reboot or automatic rem
   policy revision. Never authorize through email, administrator role, display name, short ID, image, labels, or a
   public inventory alias alone. Recreated containers require a new grant; reconnecting/replacing the engine invalidates
   grants until owner confirmation. Grant administration is separate from execution; delegates cannot redelegate.
+  Full Docker IDs and engine-generation mappings remain in protected local broker state. Remote requests/grants/audit
+  use installation-bound opaque references minted by that broker; names and UI aliases are never authority.
 - **R3 Execution check:** Authenticate the request, validate installation/owner binding, resolve a broker-owned target
   reference, persist admission, then recheck current grant/revocation/expiry and authoritative target state immediately
   before dispatch. The broker also enforces a local owner allowlist. Failure to obtain fresh authorization is denial,
@@ -33,6 +35,8 @@ configuration changes, image pulls, daemon restart, host reboot or automatic rem
   headers, body, signal, checkpoint, attachment or method. Start has no body/options. Stop/restart use the owner-approved
   grace value, proposed default 30 seconds and range 1..120 seconds. Never allow zero/immediate force or negative/infinite
   grace. The container's configured stop signal remains in effect; Docker can force termination when grace expires.
+  Bind grace to the owner-approved action grant/policy and canonical idempotency payload. Delegates cannot override
+  or lower it. Changing grace requires an owner policy update and fresh authorization.
 - **R5 Semantics:** Apply the state table below. A restart grant is explicitly permission to cause a stop/start cycle,
   but does not grant the independent start or stop endpoints. Stop/start grants together do not automatically expose
   the restart endpoint. Reject paused, restarting, removing, dead, missing and unknown states. Target state can change
@@ -50,7 +54,8 @@ configuration changes, image pulls, daemon restart, host reboot or automatic rem
   explicit acknowledgement, fresh authorization and a new key. Cancellation after dispatch is not rollback.
 - **R8 Audit:** Append durable admission/denial, dispatch, outcome, reconciliation and grant-change records, including
   actor/owner/install opaque identifiers, protected target identity, action, policy revision, request ID, UTC times,
-  effective grace and fixed result codes. Never store credentials, environment, raw inspect bodies, raw daemon errors
+  effective grace and fixed result codes. Remote audit excludes full daemon IDs and local connection details.
+  Never store credentials, environment, raw inspect bodies, raw daemon errors
   or unrestricted user text. Fsync/transaction durability semantics must be proven before activation. Audit is not a
   forensic tamper guarantee against the host owner. If final audit persistence fails, retain unresolved dispatch intent
   and inhibit further work rather than report unaudited success.
