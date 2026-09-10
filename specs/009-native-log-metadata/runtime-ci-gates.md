@@ -30,5 +30,5 @@ This is actual packaged persistence/restart evidence, not successful native jour
 
 Local full Go tests/vet, repository policy, release tests, schema/contract tests and actual current-snapshot
 validation passed before draft submission. Native Windows fixture acceptance subsequently passed on both architectures
-and merged in PR #31; see [owned Windows evidence](windows-native-fixture.md). The manual
-release workflow still needs a separately reviewed v2 promotion before preview publication.
+and merged in PR #31; see [owned Windows evidence](windows-native-fixture.md). The separately reviewed v2 publication
+promotion merged in PR #33 and published preview 3 after six-target verification; see [release evidence](traceability.md).
