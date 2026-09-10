@@ -85,16 +85,26 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 $probeSource = @'
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 
 public static class OwnedEventFixtureMetadataProbe
 {
     private const string ProviderName = "BraidenM-HomeLabObserver-NativeFixture";
     private const string SystemChannelName = "BraidenM-HomeLabObserver/Fixture-System";
     private const string ApplicationChannelName = "BraidenM-HomeLabObserver/Fixture-Application";
+    private const int MaxPublisherCount = 4096;
+    private const int MaxPublisherCharacters = 2048;
+    private const int ErrorNoMoreItems = 259;
+    private const int MissingProvider = 15002;
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("wevtapi.dll", ExactSpelling = true, SetLastError = true)]
+    private static extern IntPtr EvtOpenPublisherEnum(IntPtr session, int flags);
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [DllImport("wevtapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
-    private static extern IntPtr EvtOpenPublisherMetadata(IntPtr session, string publisherId, string logFilePath, int locale, int flags);
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EvtNextPublisherId(IntPtr publisherEnum, int bufferSize, [Out] StringBuilder buffer, out int bufferUsed);
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [DllImport("wevtapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
@@ -105,7 +115,35 @@ public static class OwnedEventFixtureMetadataProbe
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool EvtClose(IntPtr handle);
 
-    public static int Publisher() { return Probe(EvtOpenPublisherMetadata(IntPtr.Zero, ProviderName, null, 0, 0)); }
+    public static int Publisher()
+    {
+        IntPtr publisherEnum = EvtOpenPublisherEnum(IntPtr.Zero, 0);
+        if (publisherEnum == IntPtr.Zero) return 1;
+        int result = 1;
+        long started = Environment.TickCount64;
+        try {
+            for (int index = 0; index < MaxPublisherCount; index++) {
+                if (Environment.TickCount64 - started > 5000) break;
+                StringBuilder buffer = new StringBuilder(MaxPublisherCharacters);
+                int used;
+                bool found = EvtNextPublisherId(publisherEnum, MaxPublisherCharacters, buffer, out used);
+                int nextError = Marshal.GetLastWin32Error();
+                if (Environment.TickCount64 - started > 5000) break;
+                if (!found) {
+                    if (nextError == ErrorNoMoreItems) result = MissingProvider;
+                    break;
+                }
+                if (used < 1 || used > MaxPublisherCharacters || buffer.Length < 1 || buffer.Length >= MaxPublisherCharacters) break;
+                if (String.Equals(buffer.ToString(), ProviderName, StringComparison.Ordinal)) {
+                    result = 0;
+                    break;
+                }
+            }
+        } finally {
+            if (!EvtClose(publisherEnum)) result = 1;
+        }
+        return result;
+    }
     public static int SystemChannel() { return Probe(EvtOpenChannelConfig(IntPtr.Zero, SystemChannelName, 0)); }
     public static int ApplicationChannel() { return Probe(EvtOpenChannelConfig(IntPtr.Zero, ApplicationChannelName, 0)); }
 

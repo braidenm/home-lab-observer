@@ -82,6 +82,15 @@ The generator must fail closed unless all of these conditions hold:
   required job, not a skip or a reason to broaden permissions.
 - The fixed provider GUID/name and both fixed custom channel names are absent before installation. The test never
   adopts, overwrites, clears, or removes a pre-existing registration.
+- Provider absence is established through the test-only registered-provider enumeration, bounded to 4,096 identifiers,
+  4 KiB of UTF-16 per identifier and a five-second monotonic loop. Each identifier is compared only to the fixed fixture
+  name and immediately discarded; none is printed, persisted or returned. This is necessary because opening metadata
+  for an absent provider can return the same file-not-found status as a broken resource. The two fixed channel probes
+  use their exact names and ingest only a native status code. The five-second bound is checked before and after every
+  local enumeration call; WEVTAPI has no cancellation parameter, so the hosted job timeout remains the hard runaway
+  bound for a blocked native call.
+  [enumerating registered providers](https://learn.microsoft.com/en-us/windows/win32/api/winevt/nf-winevt-evtopenpublisherenum),
+  [reading the next provider identifier](https://learn.microsoft.com/en-us/windows/win32/api/winevt/nf-winevt-evtnextpublisherid)
 - Every export path is a new regular file beneath the owned root, with a fixed count and size cap. Native or command
   output is bounded and must not include event XML, bookmark XML, payloads, account names, host names or raw errors.
 - No test API can name `System`, `Application`, `Security`, an arbitrary channel, an arbitrary EVTX outside the owned
