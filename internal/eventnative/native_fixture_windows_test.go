@@ -280,6 +280,20 @@ func (a *checkedAPI) renderBookmark(bookmark handle, maximum uint32) (string, er
 		case buffer[len(buffer)-2] != 0 || buffer[len(buffer)-1] != 0:
 			failure = "bookmark-render-terminator"
 		}
+		if failure == "" {
+			for offset := 0; offset < len(buffer)-2; offset += 2 {
+				if buffer[offset] == 0 && buffer[offset+1] == 0 {
+					failure = "bookmark-render-zero-padding"
+					for _, value := range buffer[offset:] {
+						if value != 0 {
+							failure = "bookmark-render-nonzero-suffix"
+							break
+						}
+					}
+					break
+				}
+			}
+		}
 		if failure != "" {
 			a.bookmarkCallFailed = true
 			markFixtureStage(a.t, failure)

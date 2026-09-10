@@ -814,6 +814,8 @@ try {
             'bookmark-render-property-count',
             'bookmark-render-byte-length',
             'bookmark-render-terminator',
+            'bookmark-render-zero-padding',
+            'bookmark-render-nonzero-suffix',
             'system-before-query-open',
             'system-before-next',
             'system-before-time-read',
