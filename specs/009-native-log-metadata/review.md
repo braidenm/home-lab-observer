@@ -203,3 +203,18 @@ special files, elevated modes and nonzero data after tar termination.
 Full local Go tests, vet and repository policy passed before the hostile-header follow-up; focused archive tests
 and the full combined suite are required again before merge. This library slice does not activate v2 publication
 or assert the installer/native runtime integration is complete.
+
+## Helper-aware release smoke review
+
+Root independently reviewed the release-finalizer and native-delivery smoke change at `d503742` and found its
+production behavior coherent. Review identified one evidence mismatch: the text described temporary extraction,
+while the implementation streams the exact helper member from each Linux archive. It also requested direct archive
+tests rather than relying on installed-file tests and synthetic non-archive payloads. Follow-up `5fe01df` corrected
+the description and added a real owned tar fixture covering matching bytes, wrong size, wrong digest and a missing
+member. The helper is never executed and no host journal is queried.
+
+Focused release/schema tests pass, as do the full npm contract/runtime suite with the pinned Go toolchain and script
+syntax checks. V1 manifest/layout and installer invocation remain accepted unchanged. V2 adds exact profile/schema
+checks, five-file Linux layouts, streamed helper digest/size verification for both Linux archives, manifest-aware
+offline installation, and installed-helper verification on native Linux. Workflow activation and actual six-platform
+v2 package smoke remain required gates; this PR changes neither release workflow.
