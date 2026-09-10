@@ -330,6 +330,13 @@ public static class OwnedEventFixtureMetadataProbe
     public static bool ApplicationEnabled() { return ChannelEnabled(ApplicationChannelName); }
     public static bool SystemOwnerMatches() { return ChannelOwnedByProvider(SystemChannelName); }
     public static bool ApplicationOwnerMatches() { return ChannelOwnedByProvider(ApplicationChannelName); }
+    public static string SystemPublishingLatency() { return ChannelPublishingLatency(SystemChannelName); }
+    public static string ApplicationPublishingLatency() { return ChannelPublishingLatency(ApplicationChannelName); }
+    public static bool ScalarNormalizationMatches() {
+        const ulong raw = 0xfedcba9800000065UL;
+        return NormalizeScalar(EvtVarTypeUInt32, raw) == 101UL &&
+            NormalizeScalar(EvtVarTypeUInt64, raw) == raw;
+    }
     public static int SystemBeforeCount() { return Count(SystemChannelName, SystemBeforeQuery, 2); }
     public static int ApplicationBeforeCount() { return Count(ApplicationChannelName, ApplicationBeforeQuery, 2); }
     public static int SystemAfterCount() { return Count(SystemChannelName, SystemAfterQuery, 1); }
@@ -494,8 +501,15 @@ public static class OwnedEventFixtureMetadataProbe
             used != 16 || property.Type != expectedType) {
             return false;
         }
-        value = property.UInt64Value;
+        value = NormalizeScalar(expectedType, property.UInt64Value);
         return true;
+    }
+
+    private static ulong NormalizeScalar(uint type, ulong raw)
+    {
+        // Only the lower 32 bits are active for EvtVarTypeUInt32. The remaining
+        // union storage is unspecified and must not participate in validation.
+        return type == EvtVarTypeUInt32 ? (uint)raw : raw;
     }
 
     private static bool ChannelOwnedByProvider(string channel)
@@ -535,6 +549,27 @@ public static class OwnedEventFixtureMetadataProbe
             if (!EvtClose(config)) matches = false;
         }
         return matches;
+    }
+
+    private static string ChannelPublishingLatency(string channel)
+    {
+        IntPtr config = EvtOpenChannelConfig(IntPtr.Zero, channel, 0);
+        if (config == IntPtr.Zero) return "UNAVAILABLE";
+        string category = "UNAVAILABLE";
+        try {
+            EvtVariant property;
+            int used;
+            // EvtChannelPublishingConfigLatency = 16; EvtVarTypeUInt32 = 8.
+            if (EvtGetChannelConfigProperty(config, 16, 0, 16, out property, out used) &&
+                used == 16 && property.Type == EvtVarTypeUInt32) {
+                uint milliseconds = (uint)property.UInt64Value;
+                category = milliseconds == 0 ? "ZERO" :
+                    (milliseconds <= 10000 ? "WITHIN_10S" : "OVER_10S");
+            }
+        } finally {
+            if (!EvtClose(config)) category = "UNAVAILABLE";
+        }
+        return category;
     }
 
     private static int LogCount(string channel, int expected)
@@ -657,10 +692,17 @@ try {
         -not [OwnedEventFixtureMetadataProbe]::ApplicationOwnerMatches()) {
         Fail 'owned fixture channel ownership did not match the fixed publisher'
     }
+    if (-not [OwnedEventFixtureMetadataProbe]::ScalarNormalizationMatches()) {
+        Fail 'owned fixture scalar normalization self-test failed'
+    }
     $eventLogService = Get-Service -Name 'EventLog' -ErrorAction SilentlyContinue
     if ($null -eq $eventLogService -or $eventLogService.Status -ne 'Running') {
         Fail 'event log service was not running on the hosted fixture runner'
     }
+    $systemLatency = [OwnedEventFixtureMetadataProbe]::SystemPublishingLatency()
+    $applicationLatency = [OwnedEventFixtureMetadataProbe]::ApplicationPublishingLatency()
+    Write-Output ("Owned fixture publishing latency: system={0}; application={1}." -f
+        $systemLatency, $applicationLatency)
     Invoke-OwnedPublisher $publisher 'before'
     Wait-OwnedRecords 'before'
 

@@ -153,6 +153,11 @@ Hosted run `34519720070` tested two additional seconds of registered publisher l
 both owned channels still contained zero records. The ineffective delay was removed. Channel visibility keeps its
 existing ten-second deadline; neither longer waits nor a successful write call establish native acquisition.
 
+The harness also classifies each owned channel's actual publishing-latency property as only `ZERO`, `WITHIN_10S`,
+`OVER_10S` or `UNAVAILABLE` before starting the publisher. This read-only diagnostic does not change isolation,
+channel configuration, the fixed readiness deadline or acceptance; it prevents a documented default from being
+mistaken for evidence of the hosted runner's actual shared-session configuration.
+
 This fixture would prove the real Windows ABI, selected render types, bookmark mechanics, strict seek/reset behavior,
 thread lifetime and private-file continuation. Because it deliberately never queries production channels, it does
 not natively prove that a particular user's live `System` or `Application` permissions contain readable events;
