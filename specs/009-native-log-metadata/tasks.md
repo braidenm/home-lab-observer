@@ -2,6 +2,7 @@
 
 - [x] Merge, publish and independently verify Spec 008 before starting implementation of this slice.
 - [x] Accept the optional bundled Linux native helper and separate portability/packaging ADR.
+- [x] Accept and document Windows continuation's identical-tuple collision limitation (ADR 011).
 - [x] Accept native metadata acquisition/privacy ADR and exact closed cross-slice contracts, including source aliases,
   severity/event-code vocabulary, fixed grids, count/coverage semantics and JSON-safe integer rejection.
 - [ ] Implement bounded fixed-source native readers and honest unsupported states.
