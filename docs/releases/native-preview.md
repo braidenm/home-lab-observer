@@ -1,12 +1,13 @@
-# Proposed preview 3: optional native log metadata and history
+# Native preview 3: optional native log metadata and history
 
-**Draft for review, not a publication announcement.** Preview 3 remains pending final native acceptance (including
-Windows), review and owner-controlled publication. Remove this draft status only when those gates are satisfied.
+These notes describe the preview 3 release candidate. Check the
+[releases page](https://github.com/braidenm/home-lab-observer/releases) for published artifacts; this file on `main`
+is not itself a publication announcement. Owned Windows native acceptance has passed on x64 and ARM64.
 The owner must record a successful independent Native reproducibility check for the exact authorized commit before
 dispatch; publication reuses that evidence instead of duplicating sixteen compilation operations. The publication
 workflow still verifies all six native target artifacts, checks vulnerabilities and attests final bytes before release.
 
-## Planned additions
+## Capabilities
 
 Opt-in Linux system-journal and Windows System/Application metadata, a recent-session event list, and persisted
 one-hour/six-hour/day/week summaries. Collection keeps bounded timestamps, severity and validated event codes, not
@@ -46,4 +47,4 @@ rollback. Removal preserves the separate data directory and token; existing immu
 
 Existing per-user background lifecycle and bounded product diagnostics remain available. These do not confer machine-wide
 boot-before-login service support. Native metadata is not remote-upload eligible. Remote enrollment, Kubernetes collection
-and start/stop/restart management of containers are separate future work, not capabilities announced by these draft notes.
+and start/stop/restart management of containers are separate future work, not capabilities included in this version.
