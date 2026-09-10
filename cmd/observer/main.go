@@ -20,6 +20,9 @@ var version = "dev"
 var commit = "unknown"
 
 func main() {
+	if handled, code := dispatchPrivateLogHelper(os.Args[1:], os.Stdin, os.Stdout); handled {
+		os.Exit(code)
+	}
 	identity, err := buildidentity.Resolve(releaseIdentity, version, commit, "observer", runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "BUILD_IDENTITY_INVALID")
