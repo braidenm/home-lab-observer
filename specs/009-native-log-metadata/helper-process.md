@@ -40,6 +40,15 @@ size boundaries, overflow, nonzero exit, cancellation, timeout, privacy, concurr
 slot refusal and reap-before-reuse. Injectable process lifecycle seams cover an
 OS wait that outlasts the caller; production never exposes those seams.
 
+The reusable child dispatcher performs process hardening before reading a single
+private input byte. Only a bounded, exactly correlated request may open the fixed
+native reader. It emits one validated protocol response; expected native-open
+failure is a closed unavailable batch. Invalid input, hardening failure, reader
+error, cancellation or invalid batch exits unsuccessfully without diagnostics.
+The native reader's cleanup runs before emitting output so cleanup-time failure
+or cancellation cannot publish a premature success. Actual platform entrypoints
+and mandatory Linux hardening wiring remain integration gates.
+
 References: Go 1.27.1 [os/exec Cmd](https://pkg.go.dev/os/exec#Cmd) and
 [Process.Kill](https://pkg.go.dev/os#Process.Kill). `WaitDelay` closes lingering
 pipes but is not an absolute bound on an operating-system process wait.
