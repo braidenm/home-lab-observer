@@ -109,6 +109,17 @@ is `STALE` and keeps its last-success `observed_at`. `attempted_at` describes th
 earlier time is contiguous; bucket coverage remains authoritative for historical gaps. Either timestamp is null when
 absent.
 
+`observed_at` is the query start of the latest committed attempt that captured at least one event or explicitly proved
+caught-up, including a caught-up empty read; it is not an event timestamp. A definite persistence-write failure cannot
+durably advance attempt or coverage state. When stored history remains readable, `Collector.Summary` overlays only the
+matching source's process-current latest status as `SUPPORTED/FAILED`, reason `LOG_STORAGE_UNAVAILABLE`, and
+`attempted_at` equal to that failed query start. It retains prior `observed_at`/`coverage_through`, uses `STALE` when a
+prior success exists and `UNKNOWN` otherwise, and recomputes top-level latest quality from those overlaid statuses. The
+overlay never changes stored buckets, counts, coverage state/seconds, or creates a gap/previous-attempt value. It is
+explicitly volatile and may disappear after restart; the next successful commit derives any retained-window gap from
+the last durable attempt. If stored history itself is unreadable, the endpoint returns its fixed unavailable Problem
+rather than synthesizing a summary.
+
 Coverage states have exact meanings:
 
 - `FULL`: every second of the interval is covered; `covered_seconds` equals the interval, counts are present (including
@@ -120,6 +131,27 @@ Coverage states have exact meanings:
   reason is non-null, and independently known captured/discarded counts may still be present.
 - `UNKNOWN`: no trustworthy coverage evidence exists; covered seconds are 0, reason is non-null, and independently
   known captured/discarded counts may still be present.
+
+Historical reason selection is a closed deterministic precedence, highest first:
+
+1. `CHECKPOINT_RESET`
+2. `PERMISSION_DENIED`
+3. `DEADLINE_EXCEEDED`
+4. `INVALID_RESPONSE`
+5. `RESPONSE_TOO_LARGE`
+6. `READER_FAILED`
+7. `BACKLOG_DEFERRED`
+8. `MISSED_COLLECTION`
+9. `NOT_YET_OBSERVED`
+
+The first eight retain their established code meanings. `NOT_YET_OBSERVED` is the new exact fallback meaning only that
+the fixed historical cell has neither positive coverage nor persisted gap evidence. For a `GAP` or `PARTIAL` bucket
+with multiple persisted gap reasons, select the first present code in this list. A full bucket has null reason. An
+otherwise unknown bucket uses `NOT_YET_OBSERVED`. There is no lexical or arbitrary-string fallback, and a later
+positive interval never displaces an overlapping persisted gap reason. This ordering applies to historical bucket
+reduction only; latest source/top-level status reasons continue to follow the fixed state aggregation matrix.
+`LOG_STORAGE_UNAVAILABLE` is the new status-only code for the volatile overlay described above; it is never persisted
+as a historical gap reason.
 
 Every configured source always returns exactly `expected_bucket_count` ascending epoch-aligned buckets, including an
 unsupported or permission-denied latest state. A source with no historical evidence returns all `UNKNOWN` buckets with
@@ -226,7 +258,15 @@ and request-error states must not blank or modify the existing source/severity/e
 No body drawer, raw JSON, live tail, arbitrary query/facet, install action, or cross-platform parity claim is added.
 Fixtures and tests include additive unknown metadata, malformed known fields, safe-integer overflow, inconsistent
 count/coverage invariants, all-null gaps, positive-count gaps, zero-with-full-coverage, latest-failure history retention,
-secret/body/path canaries, optional-method fallback, keyboard access, and 390/768/1440 layouts.
+pairwise historical-reason precedence, volatile storage-failure status without history mutation, caught-up empty
+success, ambiguous same-batch retry without a second read, secret/body/path canaries, optional-method fallback,
+keyboard access, and 390/768/1440 layouts.
 
 Collection remains scheduler-owned at an independent 60-second cadence with an immediate first attempt; those native,
 checkpoint-CAS, coalesced-coverage, fixed-minute-rollup, retention, and process-reaping contracts stay outside this DTO.
+The producer marks an attempt caught-up only after explicit exhausted/current-source proof with no deferred lookahead,
+byte/line/row truncation, deadline, cancellation, or malformed protocol. Known discarded rows do not prevent caught-up
+when the complete selected source was examined.
+After an ambiguous store result, an unchanged checkpoint revision permits one resubmission of the exact immutable
+validated batch—same kind, timestamps, cursor and counts. It never invokes the native reader again or substitutes a new
+batch; an incremented revision means the original applied, and any other revision is a conflict.

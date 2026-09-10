@@ -70,7 +70,7 @@ type Status struct {
     SupportState    SupportState
     CollectionState CollectionState
     Freshness       Freshness
-    ObservedAt      *time.Time // last successful useful collection, not latest attempt
+    ObservedAt      *time.Time // query start of latest committed captured-or-caught-up success; includes caught-up empty
     AttemptedAt     *time.Time // latest attempted collection
     CoverageThrough *time.Time // latest caught-up query-start watermark, not contiguous proof
     ReasonCode      *ReasonCode
@@ -80,6 +80,32 @@ type Status struct {
 `Event.Validate` enforces exact source/severity/code forms and UTC. Native codes are only `WIN_<uint32>`,
 `WIN_<32-lowercase-hex-guid>_<uint32>`, `SYSTEMD_<32-lowercase-hex-id>`, or `SYSTEMD_PRIORITY_<0..7>`.
 Counters reject increments beyond 9007199254740991 before persistence.
+
+Historical gap reduction accepts this closed `ReasonCode` precedence, highest first:
+
+```go
+const (
+    ReasonCheckpointReset       ReasonCode = "CHECKPOINT_RESET"
+    ReasonPermissionDenied      ReasonCode = "PERMISSION_DENIED"
+    ReasonDeadlineExceeded      ReasonCode = "DEADLINE_EXCEEDED"
+    ReasonInvalidResponse       ReasonCode = "INVALID_RESPONSE"
+    ReasonResponseTooLarge      ReasonCode = "RESPONSE_TOO_LARGE"
+    ReasonReaderFailed          ReasonCode = "READER_FAILED"
+    ReasonBacklogDeferred       ReasonCode = "BACKLOG_DEFERRED"
+    ReasonMissedCollection      ReasonCode = "MISSED_COLLECTION"
+    ReasonNotYetObserved        ReasonCode = "NOT_YET_OBSERVED"
+    ReasonLogStorageUnavailable ReasonCode = "LOG_STORAGE_UNAVAILABLE" // status only
+)
+
+func HistoricalReasonRank(ReasonCode) (rank uint8, ok bool)
+```
+
+The first eight reuse established code meanings. `NOT_YET_OBSERVED` is the new projection-only fallback for a fixed
+historical cell with neither positive coverage nor persisted gap evidence; it is not stored as a gap. For a bucket with
+multiple persisted gap reasons, the first present code wins. `HistoricalReasonRank` returns `ok` only for those nine
+historical codes and a lower rank wins. There is no lexical/arbitrary fallback. This precedence does not replace the
+latest-status aggregation matrix. `LOG_STORAGE_UNAVAILABLE` is a separate new status-only reason for a definite
+persistence-write failure visible in the current process; it is never a historical gap reason.
 
 ## Checkpoint and bounded reader
 
@@ -182,6 +208,12 @@ when no event was accepted. The sentinel is absent from events/discards and `Nex
 A successful normal batch may advance the cursor; only `CaughtUp` may advance the persisted coverage-through watermark
 to `QueryStartedAt`. That watermark is status, never a start from which positive historical coverage is inferred.
 
+`CaughtUp` is true only when the adapter explicitly proves the selected source exhausted/current as of the query and
+the attempt has no deferred lookahead or byte, line, row, deadline, cancellation, malformed-protocol, or other
+truncation. Known discarded rows do not prevent caught-up when the complete selected source was examined. A caught-up
+empty commit sets `ObservedAt` to `QueryStartedAt` as a successful collection time; individual events always retain
+their own native event time.
+
 `Batch.Validate` requires all times to be non-zero UTC with `QueryStartedAt <= StartedAt <= FinishedAt`, validates
 every event/discard and safe counter sum, and requires `CaughtUp == false` for failed/reset batches. Events, discards,
 reason pointers, and `NextOpaque` are deep-cloned before caching or persistence. Store additionally checks under the
@@ -266,7 +298,9 @@ collector borrows it and never closes it. `CommitBatch` validates first, then at
 at `ExpectedRevision`, writes minute source/severity rollups, discard-attribution counts, latest attempt, coalesced
 coverage intervals and the next revision. Zero CAS rows returns `ErrRevisionConflict`. A failed write advances nothing.
 After an ambiguous commit error, the single-flight collector reloads: revision `expected+1` means applied, unchanged
-revision permits one normal retry, and any other revision is a conflict/reload; it never blindly increments twice.
+revision permits one retry of the exact same immutable validated `Batch` (including its kind, times, cursor and counts),
+and any other revision is a conflict/reload. It never reruns `Reader`, substitutes a new batch, clears reset state, or
+blindly increments twice.
 
 Coverage is derived by `CommitBatch`, not by the native `Reader`. Each commit derives at most
 `MaxCoverageSegmentsPerCommit` coalesced, half-open UTC `[start,end)` segments. Let `q = Batch.QueryStartedAt`,
@@ -342,6 +376,17 @@ type Snapshot struct {
 events to the bounded memory ring. A failed or ambiguous store write keeps prior events, marks the cache stale/failed
 with a fixed reason, and does not claim persistence. `Current` and `Summary` return deep clones.
 
+`Collector.Summary` overlays that process-current cached source status onto the matching configured source returned by
+`Store.QuerySummary`, then recomputes only the top-level support/collection/freshness/reason from the overlaid statuses.
+It never changes Store-derived buckets, counts, coverage state/seconds, or the last durable `CoverageThrough`. A definite
+persistence failure therefore reports volatile `SUPPORTED/FAILED/LOG_STORAGE_UNAVAILABLE` latest status with
+`AttemptedAt = QueryStartedAt` while preserving the prior successful `ObservedAt` and `CoverageThrough`; freshness is
+`STALE` with a prior success and `UNKNOWN` otherwise. It fabricates no durable gap or `PreviousAttemptAt`. That volatile
+failure may disappear after restart. The next successful commit derives its retained-window gap from the last durable
+`PreviousAttemptAt`. If `Store.QuerySummary` itself fails, no overlay is fabricated and the API returns its fixed
+unavailable Problem. Overlay and cloning occur under collector synchronization, reject a source mismatch, and keep all
+projected status timestamps no later than the collector clock snapshot used for that overlay.
+
 `Config.Sources` is unique and in fixed `system,application` order. `Store` is required. `Reader` may be nil only when
 the source list is empty, in which case the collector is a valid disabled cache and never calls native code or the log
 Store methods. `Collector.Summary` supplies its configured sources to `Store.QuerySummary`; neither local API query
@@ -386,6 +431,11 @@ summary-unavailable Problem response.
   covered minute, failure followed by overlapping success remains `PARTIAL`, backlog counts do not upgrade a gap, and
   unknown cells may be resolved by later positive proof. A prior attempt older than seven days is clamped to the
   retention floor without rejecting or inventing pre-retention coverage.
+- Prove the exact historical-reason ordering with pairwise/mixed fixtures, `NOT_YET_OBSERVED` only for absent coverage
+  evidence, no arbitrary fallback, and volatile `LOG_STORAGE_UNAVAILABLE` status overlay without bucket/checkpoint
+  mutation; restart drops only the volatile status and the next commit derives the durable gap.
+- Prove caught-up requires explicit exhaustion and every truncation/deadline path clears it; caught-up empty updates
+  `ObservedAt`, and ambiguous commit retry submits the identical batch without a second native read.
 - Prove projection never calls native code, never emits a body/private checkpoint, applies `log_limit` 0..200, and keeps
   a stale ring after failure.
 - Prove summary fixed grids and independent count/coverage states, 256KiB bound, strict known fields with additive client
