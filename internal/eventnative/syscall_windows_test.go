@@ -3,15 +3,80 @@
 package eventnative
 
 import (
+	"encoding/binary"
 	"errors"
 	"syscall"
 	"testing"
+	"unicode/utf16"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 
 	"github.com/braidenm/home-lab-observer/internal/eventreader"
 )
+
+func TestParseBookmarkBufferAcceptsObservedPropertyCountsAndCopies(t *testing.T) {
+	units := append(utf16.Encode([]rune("<BookmarkList/>")), 0)
+	buffer := make([]byte, len(units)*2)
+	for index, unit := range units {
+		binary.LittleEndian.PutUint16(buffer[index*2:], unit)
+	}
+	want := "<BookmarkList/>"
+	zero, zeroErr := parseBookmarkBuffer(buffer, 0)
+	one, oneErr := parseBookmarkBuffer(buffer, 1)
+	if zeroErr != nil || oneErr != nil || zero != want || one != want {
+		t.Fatal("bookmark parser did not preserve property-count compatibility")
+	}
+	for index := range buffer {
+		buffer[index] = 0
+	}
+	if zero != want || one != want {
+		t.Fatal("bookmark parser borrowed native render memory")
+	}
+}
+
+func TestParseBookmarkBufferRejectsInvalidShapeAndEncoding(t *testing.T) {
+	encode := func(units ...uint16) []byte {
+		buffer := make([]byte, len(units)*2)
+		for index, unit := range units {
+			binary.LittleEndian.PutUint16(buffer[index*2:], unit)
+		}
+		return buffer
+	}
+	valid := encode('x', 0)
+	oversizedUnits := make([]uint16, int(maxBookmarkXMLBytes)/2+1)
+	for index := range oversizedUnits {
+		oversizedUnits[index] = 'x'
+	}
+	oversizedUnits[len(oversizedUnits)-1] = 0
+	tests := []struct {
+		name       string
+		buffer     []byte
+		properties uint32
+	}{
+		{"property-count-two", valid, 2},
+		{"property-count-maximum", valid, ^uint32(0)},
+		{"empty", nil, 0},
+		{"odd-byte-count", []byte{1, 0, 0}, 0},
+		{"missing-terminator", encode('x'), 0},
+		{"embedded-terminator", encode('x', 0, 'y', 0), 0},
+		{"unpaired-high-surrogate", encode(0xd83d, 0), 0},
+		{"unpaired-low-surrogate", encode(0xde00, 0), 0},
+		{"oversized", encode(oversizedUnits...), 0},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := parseBookmarkBuffer(test.buffer, test.properties); !errors.Is(err, errNativeFailed) {
+				t.Fatal("invalid bookmark render buffer was accepted")
+			}
+			if test.properties == 0 {
+				if _, err := parseBookmarkBuffer(test.buffer, 1); !errors.Is(err, errNativeFailed) {
+					t.Fatal("property-count compatibility bypassed buffer validation")
+				}
+			}
+		})
+	}
+}
 
 func TestParseValuesCopiesTypedScalarsAndCanonicalGUID(t *testing.T) {
 	const variantBytes = int(unsafe.Sizeof(evtVariant{}))
