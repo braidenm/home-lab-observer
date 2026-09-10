@@ -281,3 +281,26 @@ test("paired native delivery uses verified checkout and isolated reproducibility
     assert.match(line, /@[a-f0-9]{40}(?:\s+#|$)/u);
   }
 });
+
+test("publication promotes the reviewed v2 profile and installs its smoke dependencies", async () => {
+  const release = await readFile(path.join(repositoryRoot, ".github/workflows/native-release.yml"), "utf8");
+  const build = release.split("\n  build:\n")[1].split("\n  vulnerability-scan:\n")[0];
+  const publish = release.split("\n  publish:\n")[1];
+  assert.match(build, /test "\$\(git rev-parse HEAD\)" = "\$COMMIT"/u);
+  assert.match(build, /bash scripts\/build-native-v2\.sh "\$VERSION" "\$COMMIT" dist\/binaries/u);
+  assert.doesNotMatch(build, /mkdir -p dist\/binaries|-X main\.(?:version|commit)=/u);
+  assert.match(build, /--schema-version observer-release\/v2/u);
+  assert.match(build, /--schema schemas\/release-v2\.schema\.json/u);
+  assert.doesNotMatch(build, /release-v1\.schema\.json/u);
+  const pack = build.indexOf("run: go run ./cmd/releasepack");
+  const scratch = build.indexOf("run: node scripts/test-missing-linux-runtime.mjs dist/release");
+  const sbom = build.indexOf("name: Generate SPDX");
+  assert(pack >= 0 && scratch > pack && sbom > scratch, "scratch probe must see unfinalized verified v2 artifacts");
+  assert.match(build, /node --test scripts\/test-missing-linux-runtime\.test\.mjs/u);
+  assert.doesNotMatch(build, /run: bash scripts\/test-build-native-v2\.sh/u);
+  assert.match(build, /independent Native reproducibility check for the authorized/u);
+  const install = publish.indexOf("run: npm ci --ignore-scripts --no-audit --no-fund");
+  const bundle = publish.indexOf("node scripts/smoke-native-delivery.mjs --mode bundle");
+  assert(install >= 0 && bundle > install, "fresh publish runner needs Ajv before importing smoke in any mode");
+  assert.match(publish, /node scripts\/smoke-native-delivery\.mjs --mode anonymous/u);
+});
