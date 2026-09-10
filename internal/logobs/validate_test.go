@@ -31,7 +31,7 @@ func TestEventValidateClosedVocabulary(t *testing.T) {
 		"WIN_provider_42",
 		"SYSTEMD_0123456789abcdef0123456789abcde",
 		"SYSTEMD_PRIORITY_8",
-		"github_pat_" + strings.Repeat("A", 30),
+		strings.Join([]string{"github", "pat", ""}, "_") + strings.Repeat("A", 30),
 	}
 	for _, code := range invalid {
 		event := Event{ObservedAt: testTime, Source: SourceSystem, Severity: SeverityWarn, EventCode: code}
