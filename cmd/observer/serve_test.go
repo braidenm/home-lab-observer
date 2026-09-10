@@ -14,6 +14,7 @@ import (
 
 	"github.com/braidenm/home-lab-observer/internal/history"
 	"github.com/braidenm/home-lab-observer/internal/lifecycle"
+	"github.com/braidenm/home-lab-observer/internal/localauth"
 )
 
 func TestClassifyShutdownFailure(t *testing.T) {
@@ -119,6 +120,24 @@ func TestServeDrainsAndReleasesHistory(t *testing.T) {
 			t.Fatal("service did not become live")
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+	token, tokenErr := localauth.Load(filepath.Join(state, "local-api.token"))
+	if tokenErr != nil {
+		t.Fatal(tokenErr)
+	}
+	request, requestErr := http.NewRequest(http.MethodGet, "http://"+address+"/api/v1/logs/summary?range=1h", nil)
+	if requestErr != nil {
+		t.Fatal(requestErr)
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	response, responseErr := client.Do(request)
+	if responseErr != nil {
+		t.Fatal(responseErr)
+	}
+	body, readErr := io.ReadAll(io.LimitReader(response.Body, 4096))
+	_ = response.Body.Close()
+	if readErr != nil || response.StatusCode != http.StatusOK || !strings.Contains(string(body), "LOG_SOURCES_DISABLED") {
+		t.Fatal("disabled summary collector was not wired into runtime")
 	}
 	cancel()
 	select {

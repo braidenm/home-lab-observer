@@ -242,7 +242,7 @@ func serveRuntime(ctx context.Context, address, stateDir string, output io.Write
 	}
 	_, portText, _ := net.SplitHostPort(address)
 	port, _ := strconv.Atoi(portText)
-	handler, err := localapi.NewHandler(localapi.Config{Port: port, Token: token, Version: version, Source: runtime, History: store, ContainerSource: containers, LogSummarySource: logs, Diagnostics: diagnosticWriter, Now: time.Now})
+	handler, err := localapi.NewHandler(localapi.Config{Port: port, Token: token, Version: version, Source: runtime, History: store, ContainerSource: containers, LogSource: logs, LogSummarySource: logs, Diagnostics: diagnosticWriter, Now: time.Now})
 	if err != nil {
 		_ = store.Close()
 		return err
