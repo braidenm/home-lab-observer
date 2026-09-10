@@ -24,10 +24,10 @@ function Invoke-Quiet([string] $File, [string[]] $Arguments) {
 }
 
 function Test-WevtMissing([string] $Kind, [string] $Name) {
-    if ($Kind -eq 'provider') { & wevtutil.exe gp $Name 1>$null 2>$null }
-    elseif ($Kind -eq 'channel') { & wevtutil.exe gl $Name 1>$null 2>$null }
+    if ($Kind -eq 'provider' -and $Name -ceq $provider) { $exitCode = [OwnedEventFixtureMetadataProbe]::Publisher() }
+    elseif ($Kind -eq 'channel' -and $Name -ceq $systemChannel) { $exitCode = [OwnedEventFixtureMetadataProbe]::SystemChannel() }
+    elseif ($Kind -eq 'channel' -and $Name -ceq $applicationChannel) { $exitCode = [OwnedEventFixtureMetadataProbe]::ApplicationChannel() }
     else { Fail 'unknown fixture registration kind' }
-    $exitCode = $LASTEXITCODE
     if ($exitCode -eq 0) { return $false }
     if (Test-IsDocumentedMissing $Kind $exitCode) { return $true }
     Fail 'fixture metadata probe did not return a documented missing status'
@@ -82,6 +82,45 @@ $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.Wind
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Fail 'provider registration requires the hosted runner administrator token'
 }
+$probeSource = @'
+using System;
+using System.Runtime.InteropServices;
+
+public static class OwnedEventFixtureMetadataProbe
+{
+    private const string ProviderName = "BraidenM-HomeLabObserver-NativeFixture";
+    private const string SystemChannelName = "BraidenM-HomeLabObserver/Fixture-System";
+    private const string ApplicationChannelName = "BraidenM-HomeLabObserver/Fixture-Application";
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("wevtapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
+    private static extern IntPtr EvtOpenPublisherMetadata(IntPtr session, string publisherId, string logFilePath, int locale, int flags);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("wevtapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
+    private static extern IntPtr EvtOpenChannelConfig(IntPtr session, string channelPath, int flags);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("wevtapi.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EvtClose(IntPtr handle);
+
+    public static int Publisher() { return Probe(EvtOpenPublisherMetadata(IntPtr.Zero, ProviderName, null, 0, 0)); }
+    public static int SystemChannel() { return Probe(EvtOpenChannelConfig(IntPtr.Zero, SystemChannelName, 0)); }
+    public static int ApplicationChannel() { return Probe(EvtOpenChannelConfig(IntPtr.Zero, ApplicationChannelName, 0)); }
+
+    private static int Probe(IntPtr handle)
+    {
+        if (handle == IntPtr.Zero) {
+            int openError = Marshal.GetLastWin32Error();
+            return openError == 0 ? 1 : openError;
+        }
+        if (!EvtClose(handle)) return 1;
+        return 0;
+    }
+}
+'@
+$null = Add-Type -TypeDefinition $probeSource -Language CSharp
 $runnerRoot = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd([IO.Path]::DirectorySeparatorChar)
 $runnerItem = Get-Item -LiteralPath $runnerRoot -Force
 if (-not $runnerItem.PSIsContainer -or ($runnerItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
