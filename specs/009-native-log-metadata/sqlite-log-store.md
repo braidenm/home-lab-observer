@@ -1,7 +1,7 @@
 # Additive log-history implementation
 
-Status: transaction and query implementation under review. Shared retention maintenance and application wiring are
-required before this slice is enabled or released.
+Status: transaction, query and shared-retention implementation independently reviewed and locally verified.
+Required cross-platform CI and application wiring remain necessary before this slice is enabled or released.
 
 The log Store port borrows the existing SQLite connection and ownership lock. It never opens or closes a second
 database and leaves core `user_version=2` unchanged. Its lazy version key is `log_metadata_schema_version=1` in
@@ -45,9 +45,8 @@ Independent review identified derived lower-bound underflow for valid early year
 bounds now clamp to the earliest valid non-zero UTC instant; empty clipped intervals add no evidence. Tests cover
 that edge, uint64 revisions, concurrent CAS contenders, cancelled writes and future-skew eviction/reconstruction.
 
-Remaining before delivery: share the existing seven-day/250-MiB maintenance budget with log rows (including WAL),
-verify bounded eviction under storage pressure, complete independent review and cancellation/concurrency tests,
-integrate collector lifecycle ordering, and run all required cross-platform checks.
+Remaining before delivery: integrate collector lifecycle ordering and run all required cross-platform checks and
+packaged native-reader scenarios. Shared maintenance, cancellation, concurrency and pressure tests are implemented.
 
 ## Shared maintenance policy
 
