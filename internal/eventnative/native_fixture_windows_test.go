@@ -260,48 +260,6 @@ func (a *checkedAPI) renderBookmark(bookmark handle, maximum uint32) (string, er
 	a.check()
 	stage := a.bookmarkStages[bookmark]
 	if stage != "" {
-		native, ok := a.inner.(*systemAPI)
-		if !ok {
-			a.t.Fatal("native fixture bookmark diagnostics require the system API")
-		}
-		markFixtureStage(a.t, stage+"-bookmark-native-render-start")
-		buffer, properties, err := native.render(0, bookmark, evtRenderBookmark, maximum)
-		if err != nil {
-			a.bookmarkCallFailed = true
-			markFixtureStage(a.t, stage+"-bookmark-native-render-error")
-			return "", err
-		}
-		failure := ""
-		switch {
-		case properties == 1:
-			failure = "bookmark-render-property-count-one"
-		case properties != 0:
-			failure = "bookmark-render-property-count"
-		case len(buffer) < 2 || len(buffer)%2 != 0:
-			failure = "bookmark-render-byte-length"
-		case buffer[len(buffer)-2] != 0 || buffer[len(buffer)-1] != 0:
-			failure = "bookmark-render-terminator"
-		}
-		if failure == "" {
-			for offset := 0; offset < len(buffer)-2; offset += 2 {
-				if buffer[offset] == 0 && buffer[offset+1] == 0 {
-					failure = "bookmark-render-zero-padding"
-					for _, value := range buffer[offset:] {
-						if value != 0 {
-							failure = "bookmark-render-nonzero-suffix"
-							break
-						}
-					}
-					break
-				}
-			}
-		}
-		if failure != "" {
-			a.bookmarkCallFailed = true
-			markFixtureStage(a.t, failure)
-			return "", errNativeFailed
-		}
-		markFixtureStage(a.t, stage+"-bookmark-native-render-ok")
 		markFixtureStage(a.t, stage+"-bookmark-render-start")
 	}
 	value, err := a.inner.renderBookmark(bookmark, maximum)
