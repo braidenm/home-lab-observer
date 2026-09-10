@@ -35,6 +35,7 @@ jobs:
         run: |
           npm run test:contracts
           node --test scripts/release-workflow.test.mjs
+          node --test scripts/test-missing-linux-runtime.test.mjs
       - name: Cross-build paired native preview binaries
         shell: bash
         run: |
@@ -44,6 +45,8 @@ jobs:
           bash scripts/build-native-v2.sh "$PREVIEW_VERSION" "$GITHUB_SHA" dist/binaries
       - name: Create deterministic native archives and manifest
         run: go run ./cmd/releasepack --schema-version observer-release/v2 --version "$PREVIEW_VERSION" --commit "$GITHUB_SHA" --binaries dist/binaries --output dist/release --resources packaging/resources
+      - name: Prove packaged core survives missing optional Linux runtime
+        run: node scripts/test-missing-linux-runtime.mjs dist/release
       - name: Generate SPDX dependency SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:

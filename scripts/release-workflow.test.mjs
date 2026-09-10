@@ -268,6 +268,8 @@ test("paired native delivery uses verified checkout and isolated reproducibility
   assert.match(delivery, /bash scripts\/build-native-v2\.sh "\$PREVIEW_VERSION" "\$GITHUB_SHA" dist\/binaries/u);
   assert.match(delivery, /--schema-version observer-release\/v2/u);
   assert.match(delivery, /--schema schemas\/release-v2\.schema\.json/u);
+  assert.match(delivery, /run: node scripts\/test-missing-linux-runtime\.mjs dist\/release/u);
+  assert(delivery.indexOf('run: node scripts/test-missing-linux-runtime.mjs') < delivery.indexOf('name: Generate SPDX'));
   assert.match(proof, /runs-on: ubuntu-24\.04/u);
   assert.match(proof, /timeout-minutes: 12/u);
   assert.match(proof, /OBSERVER_TEST_REPRODUCIBLE_BUILDS: '1'/u);
