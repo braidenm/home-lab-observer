@@ -166,3 +166,16 @@ node/ACL tests execute locally; a positive whole-path test explicitly refuses th
 development host's permissive ancestors, and must pass rather than skip in CI.
 Linux native filesystem and child tests remain required CI evidence. This slice
 does not enable sources, install a helper or claim packaged native support.
+
+## Release identity and paired archive review
+
+Root independently reviewed the v2 package profile, authoritative identity framing/scan, strict manifest parsing,
+bounded archive verification and retained v1 behavior. Actual stripped, trimpath cross-build fixtures validate the
+binary representation without executing cross-platform outputs; neither framing nor checksums replace attestation.
+Review requested direct hostile archive headers. The resulting test exposed ZIP reparse attributes not represented
+by Go's regular-file mode; verification now rejects those attributes as well as links, duplicate/traversal members,
+special files, elevated modes and nonzero data after tar termination.
+
+Full local Go tests, vet and repository policy passed before the hostile-header follow-up; focused archive tests
+and the full combined suite are required again before merge. This library slice does not activate v2 publication
+or assert the installer/native runtime integration is complete.
