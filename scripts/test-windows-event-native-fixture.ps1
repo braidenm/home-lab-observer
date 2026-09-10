@@ -25,8 +25,20 @@ function Invoke-Quiet([string] $File, [string[]] $Arguments) {
 
 function Test-WevtMissing([string] $Kind, [string] $Name) {
     if ($Kind -eq 'provider') { & wevtutil.exe gp $Name 1>$null 2>$null }
-    else { & wevtutil.exe gl $Name 1>$null 2>$null }
-    return $LASTEXITCODE -ne 0
+    elseif ($Kind -eq 'channel') { & wevtutil.exe gl $Name 1>$null 2>$null }
+    else { Fail 'unknown fixture registration kind' }
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -eq 0) { return $false }
+    if (Test-IsDocumentedMissing $Kind $exitCode) { return $true }
+    Fail 'fixture metadata probe did not return a documented missing status'
+}
+
+function Test-IsDocumentedMissing([string] $Kind, [int] $ExitCode) {
+    # Microsoft documents these Win32 Event Log results as provider metadata
+    # missing (15002) and channel missing (15007). Every other CLI failure is
+    # permission/service/invalid-state uncertainty and therefore fails closed.
+    return ($Kind -eq 'provider' -and $ExitCode -eq 15002) -or
+        ($Kind -eq 'channel' -and $ExitCode -eq 15007)
 }
 
 function Test-AllMissing([bool] $ProviderMissing, [bool] $SystemMissing, [bool] $ApplicationMissing) {
@@ -41,6 +53,12 @@ if ($ValidateConditionsOnly) {
     if (-not (Test-AllMissing $true $true $true) -or (Test-AllMissing $true $false $true) -or
         (Test-AnyMissing $false $false $false) -or -not (Test-AnyMissing $false $true $false)) {
         Fail 'registration condition self-test failed'
+    }
+    if (-not (Test-IsDocumentedMissing 'provider' 15002) -or -not (Test-IsDocumentedMissing 'channel' 15007) -or
+        (Test-IsDocumentedMissing 'provider' 15007) -or (Test-IsDocumentedMissing 'channel' 15002) -or
+        (Test-IsDocumentedMissing 'provider' 0) -or (Test-IsDocumentedMissing 'channel' 5) -or
+        (Test-IsDocumentedMissing 'channel' 1722)) {
+        Fail 'registration exit-code self-test failed'
     }
     Write-Output 'Windows event fixture registration conditions passed.'
     return
