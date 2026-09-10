@@ -95,14 +95,19 @@ func retainedSession(ctx context.Context, seed time.Time, force bool) (result er
 	if !until(ctx, check) || !check() {
 		return errProof
 	}
-	if current(ctx, client, token) != nil {
-		return errProof
-	}
-	body, status, err := get(ctx, client, "/api/v1/snapshots/current", token, 1<<20)
-	if err != nil || status != 200 || emptyCurrentRing(body) != nil {
-		return errProof
-	}
-	if _, status, err := get(ctx, client, "/health/ready", "", 4096); err != nil || status != 200 {
+	// The independent log lane can finish before the first host snapshot. Wait
+	// within the shared deadline instead of assuming their startup order.
+	if !until(ctx, func() bool {
+		if current(ctx, client, token) != nil {
+			return false
+		}
+		body, status, err := get(ctx, client, "/api/v1/snapshots/current", token, 1<<20)
+		if err != nil || status != 200 || emptyCurrentRing(body) != nil {
+			return false
+		}
+		_, status, err = get(ctx, client, "/health/ready", "", 4096)
+		return err == nil && status == 200
+	}) {
 		return errProof
 	}
 	if force {
