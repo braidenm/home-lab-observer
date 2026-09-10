@@ -64,16 +64,32 @@ func TestFailureProofRejectsFalsePasses(t *testing.T) {
 }
 
 func TestExtractClosedPackage(t *testing.T) {
-	for _, bad := range []string{"", "../escape", "duplicate", "link", "missing"} {
+	for _, bad := range []string{"", "../escape", "duplicate", "link", "missing", "flat", "alternate-root", "duplicate-root", "nested-root"} {
 		t.Run(bad, func(t *testing.T) {
 			var buffer bytes.Buffer
 			writer := tar.NewWriter(&buffer)
+			root := "home-lab-observer_test_linux_amd64"
+			prefix := root + "/"
+			if bad == "alternate-root" {
+				prefix = "alternate/"
+			}
+			if bad == "nested-root" {
+				prefix += "nested/"
+			}
+			if bad == "flat" {
+				prefix = ""
+			} else {
+				_ = writer.WriteHeader(&tar.Header{Name: prefix, Mode: 0755, Typeflag: tar.TypeDir})
+			}
+			if bad == "duplicate-root" {
+				_ = writer.WriteHeader(&tar.Header{Name: prefix, Mode: 0755, Typeflag: tar.TypeDir})
+			}
 			names := []string{"observer", "observer-journal-helper", "LICENSE", "START-HERE.md", "run-observer.sh"}
 			if bad == "missing" {
 				names = names[:4]
 			}
 			for _, name := range names {
-				_ = writer.WriteHeader(&tar.Header{Name: name, Mode: 0755, Size: 1, Typeflag: tar.TypeReg})
+				_ = writer.WriteHeader(&tar.Header{Name: prefix + name, Mode: 0755, Size: 1, Typeflag: tar.TypeReg})
 				_, _ = writer.Write([]byte("x"))
 			}
 			switch bad {
@@ -81,14 +97,14 @@ func TestExtractClosedPackage(t *testing.T) {
 				_ = writer.WriteHeader(&tar.Header{Name: bad, Mode: 0644, Size: 1})
 				_, _ = writer.Write([]byte("x"))
 			case "duplicate":
-				_ = writer.WriteHeader(&tar.Header{Name: "observer", Mode: 0755, Size: 1})
+				_ = writer.WriteHeader(&tar.Header{Name: prefix + "observer", Mode: 0755, Size: 1})
 				_, _ = writer.Write([]byte("x"))
 			case "link":
 				_ = writer.WriteHeader(&tar.Header{Name: "other", Linkname: "observer", Typeflag: tar.TypeSymlink})
 			}
 			_ = writer.Close()
 			directory := t.TempDir()
-			err := extract(tar.NewReader(&buffer), directory)
+			err := extract(tar.NewReader(&buffer), directory, root)
 			if (err == nil) != (bad == "") {
 				t.Fatal("wrong extraction decision")
 			}

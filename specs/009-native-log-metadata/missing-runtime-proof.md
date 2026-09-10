@@ -5,7 +5,9 @@ Status: test-only fixture; actual Docker execution requires a hosted Linux CI ru
 `node scripts/test-missing-linux-runtime.mjs RELEASEPACK_DIRECTORY` consumes the unfinalized eight-file releasepack
 output (six archives, manifest, checksums), before installers/SBOM are added. Inputs are trusted CI artifacts, not a
 download authenticity mechanism. The staging utility verifies all archive/checksum contracts, requires v2 and the
-host Linux architecture, then extracts the exact five-file package into a newly owned context. The runtime probe
+host Linux architecture, then requires the single leading archive root directory derived from the verified asset
+filename (without `.tar.gz`) and its exact five direct file children. Flat, alternate, duplicate or nested roots fail.
+It extracts those five files into a newly owned flat package context. The runtime probe
 executes the packaged primary's manifest verification mode, so identity, profile and actual helper pairing are checked.
 
 The image is FROM scratch with only the verified package, manifest metadata and static Go test probe. No external base
@@ -23,3 +25,9 @@ All probe reads, output, polling and subprocess waits are bounded. The outer scr
 cleans only its random labelled container/image and owned temporary directory. Cleanup failure fails the check. No
 workflow is modified by this slice. Unit tests exercise synthetic HTTP/projection/extraction seams; compiling them is
 not evidence that the packaged scratch service ran. Hosted execution is a separate explicit acceptance gate.
+
+`TestStageRealV2GoArtifacts` compiles eight synthetic Go identity-bearing binaries without executing them, builds actual
+v2 releasepack archives, and stages both Linux profiles. An optional new `OBSERVER_TEST_STAGE_EXPORT` path preserves
+that fixture for `TestStageExportedV2` under Linux using `OBSERVER_TEST_STAGE_INPUT`; the latter needs no Go compiler
+or Docker. These synthetic binaries prove staging/layout, not actual helper runtime operation. Runtime JSON predicates
+are also checked against the real local API projection and SQLite summary with synthetic failure batches.

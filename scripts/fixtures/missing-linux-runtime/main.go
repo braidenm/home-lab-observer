@@ -49,6 +49,14 @@ func stage(source, destination string) error {
 	if runtime.GOOS != "linux" || (runtime.GOARCH != "amd64" && runtime.GOARCH != "arm64") {
 		return errProof
 	}
+	return stageLinux(source, destination, runtime.GOARCH)
+}
+
+// stageLinux also allows cross-host tests of the exact Linux package layout.
+func stageLinux(source, destination, arch string) error {
+	if arch != "amd64" && arch != "arm64" {
+		return errProof
+	}
 	if err := releasepack.Verify(source); err != nil {
 		return errProof
 	}
@@ -62,7 +70,7 @@ func stage(source, destination string) error {
 	}
 	var asset *releasepack.Asset
 	for i := range manifest.Assets {
-		if manifest.Assets[i].OS == "linux" && manifest.Assets[i].Arch == runtime.GOARCH {
+		if manifest.Assets[i].OS == "linux" && manifest.Assets[i].Arch == arch {
 			asset = &manifest.Assets[i]
 		}
 	}
@@ -85,7 +93,7 @@ func stage(source, destination string) error {
 		return errProof
 	}
 	defer gz.Close()
-	if err := extract(tar.NewReader(gz), filepath.Join(destination, "package")); err != nil {
+	if err := extract(tar.NewReader(gz), filepath.Join(destination, "package"), strings.TrimSuffix(asset.Filename, ".tar.gz")); err != nil {
 		return errProof
 	}
 	identity, _ := json.Marshal(archiveIdentity{asset.SHA256, asset.SizeBytes})
@@ -98,9 +106,13 @@ func stage(source, destination string) error {
 	return nil
 }
 
-func extract(reader *tar.Reader, directory string) error {
+func extract(reader *tar.Reader, directory, root string) error {
+	if root == "" || strings.ContainsAny(root, "/\\") || root == "." || root == ".." {
+		return errProof
+	}
 	expected := map[string]int64{"observer": 200 << 20, "observer-journal-helper": 200 << 20,
 		"LICENSE": 1 << 20, "START-HERE.md": 1 << 20, "run-observer.sh": 1 << 20}
+	rootSeen := false
 	var total int64
 	for {
 		header, err := reader.Next()
@@ -110,7 +122,18 @@ func extract(reader *tar.Reader, directory string) error {
 		if err != nil {
 			return errProof
 		}
-		limit, ok := expected[header.Name]
+		if header.Name == root+"/" {
+			if rootSeen || header.Typeflag != tar.TypeDir || header.Size != 0 || header.Mode != 0755 {
+				return errProof
+			}
+			rootSeen = true
+			continue
+		}
+		if !rootSeen || !strings.HasPrefix(header.Name, root+"/") {
+			return errProof
+		}
+		name := strings.TrimPrefix(header.Name, root+"/")
+		limit, ok := expected[name]
 		if !ok || header.Typeflag != tar.TypeReg || header.Size < 1 || header.Size > limit || header.Mode&07000 != 0 {
 			return errProof
 		}
@@ -118,12 +141,12 @@ func extract(reader *tar.Reader, directory string) error {
 		if total > 220<<20 {
 			return errProof
 		}
-		delete(expected, header.Name)
+		delete(expected, name)
 		mode := os.FileMode(0644)
-		if header.Name == "observer" || header.Name == "observer-journal-helper" || header.Name == "run-observer.sh" {
+		if name == "observer" || name == "observer-journal-helper" || name == "run-observer.sh" {
 			mode = 0755
 		}
-		file, err := os.OpenFile(filepath.Join(directory, header.Name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+		file, err := os.OpenFile(filepath.Join(directory, name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 		if err != nil {
 			return errProof
 		}
@@ -133,7 +156,7 @@ func extract(reader *tar.Reader, directory string) error {
 			return errProof
 		}
 	}
-	if len(expected) != 0 {
+	if !rootSeen || len(expected) != 0 {
 		return errProof
 	}
 	return nil
