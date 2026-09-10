@@ -21,6 +21,14 @@ took four seconds and the complete cross-build job took 3m7s. Earlier head `05fc
 reproducibility gate and all three native archive/installer smoke targets. These are evidence for those exact heads,
 not a substitute for rerunning CI after the independently identified HTTP shutdown fix.
 
-Local full Go tests/vet, repository policy, 14 release tests, schema/contract tests and actual current-snapshot
-validation passed before draft submission. Native Windows fixture acceptance and final packaged enabled-source
-history/restart checks remain separate gates, not inferred from these results.
+At head `7f5a1e3`, all 14 CI checks passed. Native delivery run `34451723217`, cross-build job `102788742772`,
+executed the extended packaged scratch proof and reported `MISSING_RUNTIME_PROOF_PASSED`: one synthetic durable
+event survives graceful restart and forced termination, while the new session ring stays empty and the unavailable
+native source remains explicit. The proof took about four seconds; the cross-build job took 2m50s. Paired-build
+run `34451723117` passed in 4m56s, and all three native archive/installer smoke targets passed at this same head.
+This is actual packaged persistence/restart evidence, not successful native journal acquisition.
+
+Local full Go tests/vet, repository policy, release tests, schema/contract tests and actual current-snapshot
+validation passed before draft submission. Native Windows fixture acceptance subsequently passed on both architectures
+and merged in PR #31; see [owned Windows evidence](windows-native-fixture.md). The manual
+release workflow still needs a separately reviewed v2 promotion before preview publication.
