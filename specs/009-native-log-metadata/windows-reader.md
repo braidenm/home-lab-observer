@@ -1,8 +1,9 @@
 # Windows Event Log reader kernel
 
-Status: Synthetic, fixed-seam implementation slice of accepted ADR 009. No WEVTAPI binding, native XML parser,
-host log query, helper entrypoint or process launch is supplied. The same-binary hidden helper and its enforced
-kill/reap deadline remain separate requirements; a cooperative context cannot interrupt a stalled native call.
+Status: PROPOSED Windows amd64/arm64 WEVTAPI binding over the accepted synthetic kernel. Private-anchor generation
+policy is pending owner acceptance; no host-log fixture read, helper entrypoint or activation is supplied. The
+same-binary hidden helper and its enforced kill/reap deadline remain separate requirements; a cooperative context
+cannot interrupt a stalled native call.
 
 ## Primary API evidence and fixed seams
 
@@ -11,7 +12,7 @@ locks one OS thread before opening anything and retains it through every record/
 [EvtQuery](https://learn.microsoft.com/en-us/windows/win32/api/winevt/nf-winevt-evtquery)
 
 The factory exposes only `OpenInitial(source, lowerFileTime)`, `OpenContinuation(source)` and `OpenTail(source)`.
-The source is validated `system` or `application`, mapped by the eventual binding to local System or Application
+The source is validated `system` or `application`, mapped by the binding to local System or Application
 channel constants. Initial uses a code-owned time predicate, continuation an unfiltered forward channel query,
 and tail a fixed reverse query. There is no caller path, XML, XPath, session, flags, remote host or command.
 
@@ -28,7 +29,7 @@ Every returned record is closed even if returned alongside an error or cancellat
 [EvtNext](https://learn.microsoft.com/en-us/windows/win32/api/winevt/nf-winevt-evtnext)
 
 `Record` exposes only TimeCreated FILETIME, Level, EventID, optional provider GUID, private bookmark/exactness, and
-close. The future binding renders only those selected values using a fixed render context, never all system fields,
+close. The binding renders only those selected values using a fixed render context, never all system fields,
 full event XML, formatted messages or provider names. Native null/wrong type/oversized values have separate bounded
 errors. No borrowed native buffer crosses a subsequent native call. Level is uint8, EventID uint16 (widened into the
 existing uint32 code grammar), GUID is canonical UUID-byte order, and FILETIME is uint64.
@@ -44,6 +45,35 @@ already acquired by `Bookmark`; it must acquire no further native data. XML byte
 proof after clearing/reusing IDs. Bookmark construction, canonical private format, size-before-copy checks and exact
 native error mapping require a separately reviewed binding and synthetic native fixture, not assumptions here.
 [bookmark API workflow](https://learn.microsoft.com/en-us/windows/win32/wes/bookmarking-events)
+
+### Proposed private anchor v1 (pending owner decision on generation evidence)
+
+The native binding uses a closed binary envelope, never public JSON: eight-byte `HLOWEV1\0` magic; one-byte fixed
+source (`system=1`, `application=2`); one-byte flags with only TimeCreated-present, EventID-present and
+provider-GUID-present bits 0..2; two reserved zero bytes; big-endian EventRecordID, TimeCreated FILETIME and EventID;
+sixteen canonical UUID-order provider-GUID bytes; a big-endian 32-bit UTF-8 bookmark-XML length; that exact
+WEVTAPI-rendered private bookmark;
+and a 32-byte SHA-256 integrity digest over every preceding byte. The complete envelope is nonempty and at most
+16 KiB. Decode rejects unknown versions/flags, nonzero reserved bytes, wrong source, zero RecordID, invalid
+UTF-8/NUL, length/trailing-data mismatch and digest mismatch before calling `EvtCreateBookmark`. The XML is needed only
+to reconstruct WEVTAPI's bookmark handle; it is never logged, rendered publicly, or compared for exactness.
+
+EventRecordID is mandatory and a missing, malformed or out-of-range value fails the attempt. A native Null
+TimeCreated, EventID or provider GUID has its present bit clear and canonical value bytes zero; exactness compares
+both presence and value. This lets a validly bookmarkable row with a missing selected public field be discarded and
+advanced without inventing that field. A wrong native type, range, pointer or attributed oversize for any identity
+field fails the attempt because equating different malformed raw values is not proof; malformed native bytes are
+never persisted. Level is deliberately absent from the identity anchor: it affects severity normalization but does
+not strengthen the fixed record identity. An overall render/protocol/combined-size failure also fails the attempt.
+
+After strict offset-zero seek, the verification record first creates its own bounded anchor. Exactness compares the
+saved versus newly selected fixed source, EventRecordID, presence-qualified TimeCreated, EventID and provider GUID; it
+does not compare bookmark XML bytes. This detects normal record-ID reuse with different selected identity. Microsoft
+documents no stable channel-generation identifier, however, and does not state that `EvtLogCreationTime` changes on
+`EvtClearLog`. Therefore this tuple is not yet accepted as absolute proof against a cleared channel recreating an
+identical tuple. The binding must not claim such a guarantee or use creation/last-write/count/oldest-record heuristics
+until the owner chooses the documented collision limitation, reset-every-cycle behavior, or a separately justified
+generation policy.
 
 Only `ErrBookmarkStale` during strict positioning or false exactness establishes reset. A missing probe row after a
 successful seek is a failed attempt, not independent stale proof. Generic `ERROR_EVT_QUERY_RESULT_STALE`, timeout,
@@ -72,7 +102,7 @@ continuation 511 plus verification probe plus sentinel. Captured and discarded r
 
 An independent 2 MiB native budget charges returned bookmark/anchor bytes and successful typed selected values
 (8-byte FILETIME, 1-byte Level, 2-byte EventID, 16-byte GUID). The bookmark bound includes the complete private anchor;
-the future binding must not acquire unaccounted anchor data. Reserve 16 KiB plus four 4-KiB field allowances before
+the binding must not acquire unaccounted anchor data. Reserve 16 KiB plus four 4-KiB field allowances before
 each ingestion visit; ordinary probes reserve 16 KiB. A size-probe `ErrFieldTooLarge` returns no buffer, charges 4 KiB and discards
 the row. Byte-limited valid prefixes return PARTIAL/RESPONSE_TOO_LARGE with their cursor and no extra visit/EOF claim.
 The separate encoded helper-response 2 MiB cap remains independent.
@@ -83,9 +113,11 @@ Representable old backlog retains its event time for Store retention; missing, m
 are discarded at q. No pre-window row is included by rounding down.
 [FILETIME](https://learn.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-filetime)
 
-Level 1→CRITICAL, 2→ERROR, 3→WARN, 4→INFO, 5→TRACE; zero/missing/unknown→UNKNOWN. Missing or malformed EventID discards;
-valid EventID plus absent/malformed GUID uses WIN_id, or valid GUID uses WIN_32lowerhex_id. Oversized fields discard
-the whole row, rather than accepting fallback. Native operation errors reject the tentative prefix with fixed reasons.
+Level 1→CRITICAL, 2→ERROR, 3→WARN, 4→INFO, 5→TRACE; zero/missing/unknown→UNKNOWN. A native Null TimeCreated or
+EventID is bookmarkable with explicit absence and then discards; a wrong-type/range identity field fails the attempt
+because its exact continuation identity is unprovable. Valid EventID plus an absent GUID uses WIN_id, or a valid GUID
+uses WIN_32lowerhex_id. An attributed oversized non-identity field discards the whole row; identity or combined-render
+oversize fails the attempt rather than accepting fallback. Native operation errors reject the tentative prefix with fixed reasons.
 No arbitrary native error, bookmark, name or body enters public events, errors, or diagnostics.
 
 ## Verification
@@ -94,5 +126,6 @@ Synthetic tests precede implementation: both fixed sources, forbidden source ref
 exact/nearest/reused-anchor outcomes, strict stale versus generic failures, current-tail continuation, reset-only
 tail, empty initial proof, per-record/query ownership including cancellation, normalization and private canaries,
 FILETIME/field/bookmark/row/byte edges, multiple byte-limited batches without replay, and cloned outputs.
-Native fixture tests for strict error mappings, clear/reuse, channel permissions, GUID byte order, render types,
-same-thread handles and process kill/reap are explicitly not completed by this kernel.
+Synthetic binding tests cover strict flags/error mapping, selected render types, canonical GUID byte order, fixed
+queries and per-handle ownership. Owned native fixture tests for clear/reuse, permissions and thread affinity, plus
+the helper's process kill/reap proof, remain separate and must precede activation.
