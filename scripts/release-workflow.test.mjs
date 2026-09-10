@@ -267,6 +267,7 @@ test("paired native delivery uses verified checkout and isolated reproducibility
   assert.match(delivery, /test "\$\(git rev-parse HEAD\)" = "\$GITHUB_SHA"/u);
   assert.match(delivery, /bash scripts\/build-native-v2\.sh "\$PREVIEW_VERSION" "\$GITHUB_SHA" dist\/binaries/u);
   assert.match(delivery, /--schema-version observer-release\/v2/u);
+  assert.match(delivery, /PREVIEW_VERSION: 0\.0\.0-preview\.999999/u);
   assert.match(delivery, /--schema schemas\/release-v2\.schema\.json/u);
   assert.match(delivery, /run: node scripts\/test-missing-linux-runtime\.mjs dist\/release/u);
   assert(delivery.indexOf('run: node scripts/test-missing-linux-runtime.mjs') < delivery.indexOf('name: Generate SPDX'));

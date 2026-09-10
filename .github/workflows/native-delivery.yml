@@ -13,7 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PREVIEW_VERSION: 0.1.0-preview.1
+  # Synthetic CI identity; never reuse an immutable public release version.
+  PREVIEW_VERSION: 0.0.0-preview.999999
   GOFLAGS: -buildvcs=false
 
 jobs:
