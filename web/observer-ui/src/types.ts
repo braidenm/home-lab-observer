@@ -201,6 +201,54 @@ export interface TrendSnapshot {
   series: TrendSeries[];
 }
 
+export type LogSource = "system" | "application";
+export type LogCoverageState = "FULL" | "PARTIAL" | "GAP" | "UNKNOWN";
+export interface LogCounts { captured: number; discarded: number }
+export interface LogSeverityCounts {
+  trace: number;
+  debug: number;
+  info: number;
+  warn: number;
+  error: number;
+  critical: number;
+  unknown: number;
+}
+export interface LogSummaryBucket {
+  at: string;
+  coverageState: LogCoverageState;
+  coveredSeconds: number;
+  reasonCode: string | null;
+  counts: (LogCounts & { severity: LogSeverityCounts }) | null;
+}
+export interface LogSourceSummary {
+  source: LogSource;
+  status: SectionQuality & { attemptedAt: string | null; coverageThrough: string | null };
+  coverageState: LogCoverageState;
+  coveredSeconds: number;
+  counts: LogCounts | null;
+  buckets: LogSummaryBucket[];
+}
+export interface LogSummary extends SectionQuality {
+  schemaVersion: "observer-log-summary/v1";
+  generatedAt: string;
+  range: TrendRange;
+  windowStart: string;
+  windowEnd: string;
+  bucketIntervalSeconds: 60 | 300 | 900 | 3600;
+  expectedBucketCount: 60 | 72 | 96 | 168;
+  coverageState: LogCoverageState;
+  counts: LogCounts | null;
+  limits: { maxSources: 2; maxBucketsPerSource: 168; maxResponseBytes: 262144 };
+  privacy: {
+    dataClassification: "LOCAL_SENSITIVE";
+    containsLogBodies: false;
+    containsEventCodes: false;
+    containsIdentityFields: false;
+    remoteUploadEligible: false;
+  };
+  sources: LogSourceSummary[];
+}
+
 export type DiagnosticsState = "AVAILABLE" | "UNAVAILABLE" | "DISABLED";
 
 export interface DiagnosticsHealth {
@@ -236,6 +284,8 @@ export interface ObserverDataSource {
   getContainerInventory?(signal?: AbortSignal): Promise<ContainerInventory>;
   /** Optional because remote embedding applications may not expose local self-diagnostics. */
   getDiagnosticsHealth?(signal?: AbortSignal): Promise<DiagnosticsHealth>;
+  /** Optional because remote consumers may omit local-sensitive persisted log metadata. */
+  getLogSummary?(range: TrendRange, signal?: AbortSignal): Promise<LogSummary>;
 }
 
 export interface ObserverProblemDetails {
