@@ -526,9 +526,10 @@ func assertReset(t *testing.T, factory *fileFactory, source logobs.Source, saved
 		t.Fatal(err)
 	}
 	started := time.Now().UTC().Add(-time.Second)
+	previousAttempt := started.Add(-time.Second)
 	batch, err := reader.Read(context.Background(), logobs.ReadRequest{
 		Source: source, QueryStartedAt: started,
-		Checkpoint: logobs.Checkpoint{Revision: 1, Opaque: append([]byte(nil), saved...)},
+		Checkpoint: logobs.Checkpoint{Revision: 1, PreviousAttemptAt: &previousAttempt, Opaque: append([]byte(nil), saved...)},
 	})
 	if err != nil {
 		t.Fatalf("native reset read failed: %v", err)
