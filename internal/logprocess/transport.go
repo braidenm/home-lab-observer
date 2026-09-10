@@ -107,6 +107,7 @@ func runCommand(parent context.Context, spec commandSpec, input []byte) ([]byte,
 	defer cancel()
 	output := &boundedOutput{cancel: cancel}
 	cmd := exec.CommandContext(ctx, spec.path, spec.args...)
+	cmd.Dir = filepath.Dir(spec.path)
 	cmd.Env = append([]string(nil), spec.env...)
 	cmd.Stdin = bytes.NewReader(input)
 	cmd.Stdout = output

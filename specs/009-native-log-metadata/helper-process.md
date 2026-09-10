@@ -12,6 +12,8 @@ Each transport instance has one non-queuing child slot. A request is bounded to
 never returned or logged. Input and output are private pipes, never files or
 arguments. The platform resolver must supply a minimal code-owned environment;
 the transport rejects an unspecified environment rather than inherit it.
+The working directory is the verified executable's directory, never the parent's
+possibly untrusted current directory. Windows helpers have no visible console.
 
 The caller has at most two seconds including launch and I/O, constrained by its
 parent context. Cancellation or output overflow kills the direct child. One Wait
