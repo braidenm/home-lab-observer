@@ -112,13 +112,20 @@ absent.
 `observed_at` is the query start of the latest committed attempt that captured at least one event or explicitly proved
 caught-up, including a caught-up empty read; it is not an event timestamp. A definite persistence-write failure cannot
 durably advance attempt or coverage state. When stored history remains readable, `Collector.Summary` overlays only the
-matching source's process-current latest status as `SUPPORTED/FAILED`, reason `LOG_STORAGE_UNAVAILABLE`, and
-`attempted_at` equal to that failed query start. It retains prior `observed_at`/`coverage_through`, uses `STALE` when a
-prior success exists and `UNKNOWN` otherwise, and recomputes top-level latest quality from those overlaid statuses. The
-overlay never changes stored buckets, counts, coverage state/seconds, or creates a gap/previous-attempt value. It is
-explicitly volatile and may disappear after restart; the next successful commit derives any retained-window gap from
-the last durable attempt. If stored history itself is unreadable, the endpoint returns its fixed unavailable Problem
-rather than synthesizing a summary.
+matching source's process-current latest status with collection `FAILED`, reason `LOG_STORAGE_UNAVAILABLE`, and
+`attempted_at` equal to that failed query start. Its support candidate is the validated attempted batch's proven
+support, otherwise prior cached support, otherwise `UNAVAILABLE`; it is never promoted to `SUPPORTED`. If that candidate
+is `SUPPORTED`, the overlay is `SUPPORTED/FAILED`. If it is `DISABLED`, `UNAVAILABLE`, `PERMISSION_DENIED` or
+`UNSUPPORTED`, the overlay is `UNAVAILABLE/FAILED`: the existing current-snapshot and metric-series schemas reserve all
+non-`SUPPORTED` source states for `NOT_RUN/UNKNOWN`, so the new summary schema uses this explicit summary-only storage
+failure combination rather than weakening those contracts or emitting invalid `UNSUPPORTED/FAILED`. The current
+snapshot retains its existing state rules.
+
+The overlay retains prior `observed_at`/`coverage_through`, uses `STALE` when a prior success exists and `UNKNOWN`
+otherwise, and recomputes top-level latest quality from those overlaid statuses. It never changes stored buckets,
+counts, coverage state/seconds, or creates a gap/previous-attempt value. It is explicitly volatile and may disappear
+after restart; the next successful commit derives any retained-window gap from the last durable attempt. If stored
+history itself is unreadable, the endpoint returns its fixed unavailable Problem rather than synthesizing a summary.
 
 Coverage states have exact meanings:
 
@@ -261,6 +268,9 @@ count/coverage invariants, all-null gaps, positive-count gaps, zero-with-full-co
 pairwise historical-reason precedence, volatile storage-failure status without history mutation, caught-up empty
 success, ambiguous same-batch retry without a second read, secret/body/path canaries, optional-method fallback,
 keyboard access, and 390/768/1440 layouts.
+An explicit regression proves an unsupported attempted batch followed by store failure is never rendered or projected
+as `SUPPORTED`; summary uses `UNAVAILABLE/FAILED/LOG_STORAGE_UNAVAILABLE`, while legacy current-snapshot state remains
+schema-compatible.
 
 Collection remains scheduler-owned at an independent 60-second cadence with an immediate first attempt; those native,
 checkpoint-CAS, coalesced-coverage, fixed-minute-rollup, retention, and process-reaping contracts stay outside this DTO.

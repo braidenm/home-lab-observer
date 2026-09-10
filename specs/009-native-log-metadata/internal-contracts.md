@@ -379,13 +379,19 @@ with a fixed reason, and does not claim persistence. `Current` and `Summary` ret
 `Collector.Summary` overlays that process-current cached source status onto the matching configured source returned by
 `Store.QuerySummary`, then recomputes only the top-level support/collection/freshness/reason from the overlaid statuses.
 It never changes Store-derived buckets, counts, coverage state/seconds, or the last durable `CoverageThrough`. A definite
-persistence failure therefore reports volatile `SUPPORTED/FAILED/LOG_STORAGE_UNAVAILABLE` latest status with
-`AttemptedAt = QueryStartedAt` while preserving the prior successful `ObservedAt` and `CoverageThrough`; freshness is
-`STALE` with a prior success and `UNKNOWN` otherwise. It fabricates no durable gap or `PreviousAttemptAt`. That volatile
-failure may disappear after restart. The next successful commit derives its retained-window gap from the last durable
-`PreviousAttemptAt`. If `Store.QuerySummary` itself fails, no overlay is fabricated and the API returns its fixed
-unavailable Problem. Overlay and cloning occur under collector synchronization, reject a source mismatch, and keep all
-projected status timestamps no later than the collector clock snapshot used for that overlay.
+persistence failure sets `CollectionState = FAILED`, `ReasonCode = LOG_STORAGE_UNAVAILABLE`, and `AttemptedAt` to the
+failed query start. It chooses a support candidate from the validated attempted batch when available, otherwise prior
+cached status, otherwise `UNAVAILABLE`; it never promotes that candidate to `SUPPORTED`. A `SUPPORTED` candidate remains
+`SUPPORTED/FAILED`. Any non-`SUPPORTED` candidate maps to `UNAVAILABLE/FAILED` in this summary-only overlay because the
+existing current-snapshot and metric-series schemas require their non-`SUPPORTED` states to be `NOT_RUN/UNKNOWN`; those
+producer contracts remain unchanged and never receive an invalid `UNSUPPORTED/FAILED` combination.
+
+The overlay preserves prior successful `ObservedAt` and `CoverageThrough`; freshness is `STALE` with a prior success and
+`UNKNOWN` otherwise. It fabricates no durable gap or `PreviousAttemptAt`, and may disappear after restart. The next
+successful commit derives its retained-window gap from the last durable `PreviousAttemptAt`. If `Store.QuerySummary`
+itself fails, no overlay is fabricated and the API returns its fixed unavailable Problem. Overlay and cloning occur
+under collector synchronization, reject a source mismatch, and keep all projected status timestamps no later than the
+collector clock snapshot used for that overlay.
 
 `Config.Sources` is unique and in fixed `system,application` order. `Store` is required. `Reader` may be nil only when
 the source list is empty, in which case the collector is a valid disabled cache and never calls native code or the log
@@ -433,7 +439,9 @@ summary-unavailable Problem response.
   retention floor without rejecting or inventing pre-retention coverage.
 - Prove the exact historical-reason ordering with pairwise/mixed fixtures, `NOT_YET_OBSERVED` only for absent coverage
   evidence, no arbitrary fallback, and volatile `LOG_STORAGE_UNAVAILABLE` status overlay without bucket/checkpoint
-  mutation; restart drops only the volatile status and the next commit derives the durable gap.
+  mutation; restart drops only the volatile status and the next commit derives the durable gap. An unsupported or
+  permission-denied attempted batch followed by Store failure must never become `SUPPORTED`; the summary overlay is
+  `UNAVAILABLE/FAILED/LOG_STORAGE_UNAVAILABLE` and legacy current-snapshot combinations remain unchanged.
 - Prove caught-up requires explicit exhaustion and every truncation/deadline path clears it; caught-up empty updates
   `ObservedAt`, and ambiguous commit retry submits the identical batch without a second native read.
 - Prove projection never calls native code, never emits a body/private checkpoint, applies `log_limit` 0..200, and keeps
