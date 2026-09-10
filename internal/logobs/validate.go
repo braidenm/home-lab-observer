@@ -296,7 +296,7 @@ func (b Batch) Validate() error {
 	if len(b.NextOpaque) > MaxCheckpointBytes {
 		return errors.New("next checkpoint exceeds size bound")
 	}
-	if len(b.Events) > MaxAcceptedEvents || b.ExaminedCount > MaxExaminedEvents {
+	if len(b.Events) > MaxAcceptedEvents || len(b.Discards) > MaxAcceptedEvents || b.ExaminedCount > MaxExaminedEvents {
 		return errors.New("batch exceeds event bounds")
 	}
 	if b.CollectionState == CollectionOK {
@@ -314,6 +314,9 @@ func (b Batch) Validate() error {
 	}
 	if b.SupportState != SupportSupported && b.SupportState != SupportUnavailable && b.CollectionState != CollectionNotRun {
 		return errors.New("non-supported batch implies collection")
+	}
+	if err := b.validateNativeState(); err != nil {
+		return err
 	}
 
 	var discarded uint64
@@ -362,6 +365,12 @@ func (b Batch) Validate() error {
 	if b.CollectionState == CollectionOK && !b.CaughtUp {
 		return errors.New("successful batch requires caught-up proof")
 	}
+	if b.CollectionState == CollectionOK && b.DiscardedCount != 0 {
+		return errors.New("successful batch cannot have discarded rows")
+	}
+	if b.CaughtUp && b.CollectionState == CollectionPartial && (b.ReasonCode == nil || *b.ReasonCode != ReasonInvalidResponse || b.DiscardedCount == 0) {
+		return errors.New("caught-up partial batch is inconsistent")
+	}
 	if acceptedAndDiscarded > 0 && len(b.NextOpaque) == 0 {
 		return errors.New("observed batch requires next checkpoint")
 	}
@@ -374,6 +383,47 @@ func (b Batch) Validate() error {
 		}
 	}
 	return nil
+}
+
+func (b Batch) validateNativeState() error {
+	reason := ReasonCode("")
+	if b.ReasonCode != nil {
+		reason = *b.ReasonCode
+	}
+	switch b.SupportState {
+	case SupportSupported:
+		switch b.CollectionState {
+		case CollectionOK:
+			return nil
+		case CollectionPartial:
+			if b.Kind != BatchNormal && reason == ReasonCheckpointReset {
+				return nil
+			}
+			if reason == ReasonInvalidResponse || reason == ReasonDeadlineExceeded || reason == ReasonResponseTooLarge || reason == ReasonBacklogDeferred {
+				return nil
+			}
+		case CollectionFailed:
+			if reason == ReasonDeadlineExceeded || reason == ReasonInvalidResponse || reason == ReasonResponseTooLarge || reason == ReasonReaderFailed {
+				return nil
+			}
+		}
+	case SupportUnavailable:
+		if b.CollectionState == CollectionFailed && reason == ReasonReaderFailed {
+			return nil
+		}
+		if b.CollectionState == CollectionNotRun && (reason == ReasonNoVisibleJournal || reason == ReasonLogHelperUnavailable || reason == ReasonLogHelperMismatch || reason == ReasonReaderFailed) {
+			return nil
+		}
+	case SupportPermissionDenied:
+		if b.CollectionState == CollectionNotRun && reason == ReasonPermissionDenied {
+			return nil
+		}
+	case SupportUnsupported:
+		if b.CollectionState == CollectionNotRun && reason == ReasonPlatformUnsupported {
+			return nil
+		}
+	}
+	return errors.New("native batch state or reason is inconsistent")
 }
 
 func (b Batch) validateResetBatch() error {
@@ -429,6 +479,7 @@ func (s Summary) Validate() error {
 		return errors.New("summary exceeds source bound")
 	}
 	previousRank := -1
+	var totalCaptured, totalDiscarded uint64
 	for i := range s.Sources {
 		rank := sourceRank(s.Sources[i].Source)
 		if rank < 0 || rank <= previousRank {
@@ -437,6 +488,15 @@ func (s Summary) Validate() error {
 		previousRank = rank
 		if err := validateSourceSummary(s.Sources[i], query); err != nil {
 			return fmt.Errorf("invalid source summary: %w", err)
+		}
+		if counts := s.Sources[i].Counts; counts != nil {
+			var ok bool
+			if totalCaptured, ok = addSafe(totalCaptured, counts.Captured); !ok {
+				return errors.New("cross-source captured count exceeds safe integer")
+			}
+			if totalDiscarded, ok = addSafe(totalDiscarded, counts.Discarded); !ok {
+				return errors.New("cross-source discarded count exceeds safe integer")
+			}
 		}
 	}
 	return nil
@@ -641,7 +701,7 @@ func validateReasonPointer(reason *ReasonCode) error {
 }
 
 func validateUTC(value time.Time, name string) error {
-	if value.IsZero() || value.Location() != time.UTC {
+	if value.IsZero() || value.Location() != time.UTC || value.Year() < 1 || value.Year() > 9999 {
 		return fmt.Errorf("%s must be non-zero UTC", name)
 	}
 	return nil

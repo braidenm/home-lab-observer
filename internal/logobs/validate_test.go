@@ -184,6 +184,7 @@ func TestStatusValidationRejectsFalseSuccessAndInvalidStatePairs(t *testing.T) {
 func TestBatchValidationBoundsAndResetState(t *testing.T) {
 	reasonBacklog := ReasonBacklogDeferred
 	reasonReader := ReasonReaderFailed
+	reasonInvalid := ReasonInvalidResponse
 	reasonReset := ReasonCheckpointReset
 	event := Event{ObservedAt: testTime.Add(-time.Second), Source: SourceSystem, Severity: SeverityError, EventCode: "SYSTEMD_PRIORITY_3"}
 	discard := DiscardCount{At: testTime.Add(-2 * time.Second), Count: 1}
@@ -193,8 +194,7 @@ func TestBatchValidationBoundsAndResetState(t *testing.T) {
 			Kind: BatchNormal, Source: SourceSystem, ExpectedRevision: 2,
 			QueryStartedAt: testTime, StartedAt: testTime, FinishedAt: testTime.Add(time.Second),
 			SupportState: SupportSupported, CollectionState: CollectionOK,
-			Events: []Event{event}, Discards: []DiscardCount{discard},
-			ExaminedCount: 2, DiscardedCount: 1, CaughtUp: true, NextOpaque: []byte("cursor"),
+			Events: []Event{event}, ExaminedCount: 1, CaughtUp: true, NextOpaque: []byte("cursor"),
 		},
 		{
 			Kind: BatchNormal, Source: SourceSystem, QueryStartedAt: testTime, StartedAt: testTime, FinishedAt: testTime,
@@ -215,6 +215,12 @@ func TestBatchValidationBoundsAndResetState(t *testing.T) {
 			SupportState: SupportSupported, CollectionState: CollectionPartial, ReasonCode: &reasonReset,
 			ExaminedCount: 1, NextOpaque: []byte("new-cursor"),
 		},
+		{
+			Kind: BatchNormal, Source: SourceSystem, QueryStartedAt: testTime, StartedAt: testTime, FinishedAt: testTime,
+			SupportState: SupportSupported, CollectionState: CollectionPartial, ReasonCode: &reasonInvalid,
+			Events: []Event{event}, Discards: []DiscardCount{discard},
+			ExaminedCount: 2, DiscardedCount: 1, CaughtUp: true, NextOpaque: []byte("cursor"),
+		},
 	}
 	for i, batch := range valid {
 		if err := batch.Validate(); err != nil {
@@ -229,7 +235,7 @@ func TestBatchValidationBoundsAndResetState(t *testing.T) {
 		{"unknown kind", func(b *Batch) { b.Kind = "TAIL" }},
 		{"source mismatch", func(b *Batch) { b.Events[0].Source = SourceApplication }},
 		{"discard mismatch", func(b *Batch) { b.DiscardedCount = 2 }},
-		{"examined mismatch", func(b *Batch) { b.ExaminedCount = 1 }},
+		{"examined mismatch", func(b *Batch) { b.ExaminedCount = 0 }},
 		{"deferred caught up", func(b *Batch) { b.Deferred = true; b.ExaminedCount = 3 }},
 		{"oversized cursor", func(b *Batch) { b.NextOpaque = make([]byte, MaxCheckpointBytes+1) }},
 		{"missing reason", func(b *Batch) { b.CollectionState = CollectionPartial; b.ReasonCode = nil }},
@@ -278,7 +284,7 @@ func TestBatchValidationBoundsAndResetState(t *testing.T) {
 	}
 	boundedDiscards := Batch{
 		Kind: BatchNormal, Source: SourceSystem, QueryStartedAt: testTime, StartedAt: testTime, FinishedAt: testTime,
-		SupportState: SupportSupported, CollectionState: CollectionPartial, ReasonCode: &reasonReader,
+		SupportState: SupportSupported, CollectionState: CollectionPartial, ReasonCode: &reasonInvalid,
 		Discards: []DiscardCount{{At: testTime, Count: MaxAcceptedEvents}}, ExaminedCount: MaxAcceptedEvents,
 		DiscardedCount: MaxAcceptedEvents, CaughtUp: true, NextOpaque: []byte("cursor"),
 	}
@@ -311,6 +317,31 @@ func TestBatchValidationBoundsAndResetState(t *testing.T) {
 		if err := stateBatch.Validate(); err == nil {
 			t.Fatalf("%s batch accepted", name)
 		}
+	}
+	for _, disallowed := range []ReasonCode{ReasonMissedCollection, ReasonNotYetObserved, ReasonLogStorageUnavailable, ReasonLogSourcesDisabled, ReasonSourcePartial} {
+		stateBatch := valid[2].Clone()
+		stateBatch.ReasonCode = &disallowed
+		if err := stateBatch.Validate(); err == nil {
+			t.Fatalf("non-reader reason %q accepted in native batch", disallowed)
+		}
+	}
+	for _, truncation := range []ReasonCode{ReasonDeadlineExceeded, ReasonResponseTooLarge, ReasonBacklogDeferred} {
+		stateBatch := valid[5].Clone()
+		stateBatch.ReasonCode = &truncation
+		if err := stateBatch.Validate(); err == nil {
+			t.Fatalf("truncated reason %q accepted with caught-up proof", truncation)
+		}
+	}
+	stateBatch := valid[5].Clone()
+	stateBatch.CollectionState = CollectionOK
+	stateBatch.ReasonCode = nil
+	if err := stateBatch.Validate(); err == nil {
+		t.Fatal("OK batch with discarded row accepted")
+	}
+	tooManyDiscardGroups := valid[2].Clone()
+	tooManyDiscardGroups.Discards = make([]DiscardCount, MaxAcceptedEvents+1)
+	if err := tooManyDiscardGroups.Validate(); err == nil {
+		t.Fatal("oversized discard group list accepted")
 	}
 
 	payload, err := json.Marshal(valid[0])
@@ -406,6 +437,27 @@ func TestSummaryValidationFixedGridCountsAndCoverage(t *testing.T) {
 	if err := wrongOrder.Validate(); err == nil {
 		t.Fatal("reversed source order accepted")
 	}
+
+	overflow := validFullSummary()
+	for i := range overflow.Sources[0].Buckets {
+		overflow.Sources[0].Buckets[i].Counts = &BucketCounts{}
+	}
+	overflow.Sources[0].Buckets[0].Counts.Captured = MaxSafeInteger
+	overflow.Sources[0].Buckets[0].Counts.Severity.Error = MaxSafeInteger
+	overflow.Sources[0].Counts = &Counts{Captured: MaxSafeInteger}
+	applicationSource := overflow.Sources[0]
+	applicationSource.Source = SourceApplication
+	applicationSource.Status = applicationSource.Status.Clone()
+	applicationSource.Buckets = make([]SummaryBucket, len(overflow.Sources[0].Buckets))
+	for i, bucket := range overflow.Sources[0].Buckets {
+		applicationSource.Buckets[i] = bucket
+		applicationSource.Buckets[i].Counts = cloneBucketCounts(bucket.Counts)
+	}
+	applicationSource.Counts = cloneCounts(overflow.Sources[0].Counts)
+	overflow.Sources = append(overflow.Sources, applicationSource)
+	if err := overflow.Validate(); err == nil {
+		t.Fatal("cross-source safe-integer overflow accepted")
+	}
 }
 
 func TestSummaryQueryRejectsNonContractGrid(t *testing.T) {
@@ -432,6 +484,16 @@ func TestSummaryQueryRejectsNonContractGrid(t *testing.T) {
 		if err := query.Validate(); err == nil {
 			t.Fatalf("%s query accepted", name)
 		}
+	}
+}
+
+func TestTimeValidationRejectsNonRFC3339Year(t *testing.T) {
+	event := Event{
+		ObservedAt: time.Date(10_000, 1, 1, 0, 0, 0, 0, time.UTC),
+		Source:     SourceSystem, Severity: SeverityInfo, EventCode: "WIN_1",
+	}
+	if err := event.Validate(); err == nil {
+		t.Fatal("year outside RFC3339 range accepted")
 	}
 }
 
