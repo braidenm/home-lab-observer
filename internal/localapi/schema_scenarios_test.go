@@ -11,6 +11,7 @@ import (
 	"github.com/braidenm/home-lab-observer/internal/containerobs"
 	"github.com/braidenm/home-lab-observer/internal/diagnostics"
 	"github.com/braidenm/home-lab-observer/internal/history"
+	"github.com/braidenm/home-lab-observer/internal/logobs"
 	"github.com/braidenm/home-lab-observer/internal/projection"
 )
 
@@ -91,6 +92,22 @@ func TestDiagnosticsSchemaScenarioContract(t *testing.T) {
 		t.Fatalf("diagnostics status=%d body=%s", response.Code, response.Body.String())
 	}
 	t.Logf("SCHEMA_SCENARIO diagnostics-health %s", strings.TrimSpace(response.Body.String()))
+}
+
+func TestLogSummarySchemaScenarioContract(t *testing.T) {
+	now := time.Date(2026, 9, 9, 19, 0, 17, 987_654_321, time.UTC)
+	source := &fakeLogSummarySource{build: func(query logobs.SummaryQuery) (logobs.Summary, error) {
+		return largePartialLogSummary(query), nil
+	}}
+	handler := newLogSummaryHandler(t, source, func() time.Time { return now })
+	response := serve(handler, http.MethodGet, "/api/v1/logs/summary?range=7d", testToken, "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("log summary status=%d body=%s", response.Code, response.Body.String())
+	}
+	if response.Body.Len() > logSummaryResponseLimit {
+		t.Fatalf("log summary exceeds response limit: %d", response.Body.Len())
+	}
+	t.Logf("SCHEMA_SCENARIO log-summary %s", strings.TrimSpace(response.Body.String()))
 }
 
 type schemaMetricSource struct {

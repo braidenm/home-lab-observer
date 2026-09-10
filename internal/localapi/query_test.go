@@ -1,6 +1,9 @@
 package localapi
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestCurrentQueryDefaultsAndStrictValidation(t *testing.T) {
 	query, err := parseCurrentQuery("")
@@ -54,6 +57,28 @@ func TestContainerQueryIsClosedAndBounded(t *testing.T) {
 	for _, raw := range []string{"limit=0", "limit=501", "limit=01", "limit=-1", "limit=1&limit=2", "limit=1&extra=value", "limit=", "limit=%20", "limit=1&" + oversizedValue()} {
 		if _, err := parseContainerQuery(raw); err == nil {
 			t.Errorf("accepted invalid container query %q", raw)
+		}
+	}
+}
+
+func TestLogSummaryQueryRequiresOneFixedRange(t *testing.T) {
+	for raw, expected := range map[string]logSummaryQuery{
+		"range=1h":  {rangeValue: "1h", interval: time.Minute, bucketCount: 60},
+		"range=6h":  {rangeValue: "6h", interval: 5 * time.Minute, bucketCount: 72},
+		"range=24h": {rangeValue: "24h", interval: 15 * time.Minute, bucketCount: 96},
+		"range=7d":  {rangeValue: "7d", interval: time.Hour, bucketCount: 168},
+	} {
+		actual, err := parseLogSummaryQuery(raw)
+		if err != nil || actual != expected {
+			t.Fatalf("query %q = %+v, err=%v", raw, actual, err)
+		}
+	}
+	for _, raw := range []string{
+		"", "range=", "range=30m", "range=1h&range=6h", "range=1h&source=system",
+		"range=%201h", "range=1h&" + oversizedValue(),
+	} {
+		if _, err := parseLogSummaryQuery(raw); err == nil {
+			t.Errorf("accepted invalid log summary query %q", raw)
 		}
 	}
 }
