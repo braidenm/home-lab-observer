@@ -20,12 +20,14 @@ an unexported `_test.go`-only factory that accepts one already-validated owned E
 
 The test fixture is generated only on an ephemeral GitHub-hosted Windows runner. A checked-in synthetic manifest
 defines one fixed provider GUID and two owned custom channels representing the fixture's logical system and
-application cases. A tiny test-only publisher registers that provider with `EventRegister` and writes fixed event
-descriptors with `EventWrite`. Manifest installation and removal use `wevtutil im` and `wevtutil um`. The manifest,
+application cases. A tiny test-only C publisher registers that provider with `EventRegister` and writes the exact
+`EVENT_DESCRIPTOR` constants produced from the manifest by Message Compiler with `EventWrite`; it does not recreate
+compiler-assigned routing metadata. Manifest installation and removal use `wevtutil im` and `wevtutil um`. The manifest,
 publisher and resource generation must follow Microsoft's supported manifest-provider process; no hand-authored EVTX
 writer or binary fixture copied from a real machine is acceptable.
 [developing a provider](https://learn.microsoft.com/en-us/windows/win32/wes/developing-a-provider),
 [writing manifest events](https://learn.microsoft.com/en-us/windows/win32/etw/writing-manifest-based-events),
+[`EVENT_DESCRIPTOR`](https://learn.microsoft.com/en-us/windows/win32/api/evntprov/ns-evntprov-event_descriptor),
 [wevtutil](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/wevtutil)
 
 The generator exports exact synthetic provider/event-ID selections into private EVTX files before and after clearing

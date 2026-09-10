@@ -181,7 +181,7 @@ try {
     }
     [IO.File]::WriteAllText((Join-Path $ownedRoot $markerName), $marker, [Text.UTF8Encoding]::new($false))
 
-    foreach ($tool in @('mc.exe', 'rc.exe', 'link.exe', 'go.exe', 'wevtutil.exe')) {
+    foreach ($tool in @('mc.exe', 'rc.exe', 'link.exe', 'cl.exe', 'go.exe', 'wevtutil.exe')) {
         if ($null -eq (Get-Command $tool -ErrorAction SilentlyContinue)) { Fail 'required hosted build tool is unavailable' }
     }
     $sourceManifest = Join-Path $PSScriptRoot '..\internal\eventnative\testdata\fixture.man'
@@ -203,8 +203,18 @@ try {
     }
     Assert-PrivateRegular $resourceDLL (2 * 1024 * 1024)
 
+    $publisherSource = Join-Path $PSScriptRoot '..\internal\eventnative\testdata\fixturepublisher\main_windows.c'
+    Assert-PrivateRegular $publisherSource 65536
+    $ownedPublisherSource = Join-Path $ownedRoot 'fixturepublisher.c'
+    [IO.File]::Copy([IO.Path]::GetFullPath($publisherSource), $ownedPublisherSource, $false)
     $publisher = Join-Path $ownedRoot 'fixture-publisher.exe'
-    Invoke-Quiet 'go.exe' @('build', '-trimpath', '-o', $publisher, './internal/eventnative/testdata/fixturepublisher')
+    Push-Location -LiteralPath $ownedRoot
+    try {
+        Invoke-Quiet 'cl.exe' @('/nologo', '/W4', '/WX', '/guard:cf', '/DUNICODE', '/D_UNICODE',
+            ('/Fe:' + $publisher), 'fixturepublisher.c', '/link', 'advapi32.lib')
+    } finally {
+        Pop-Location
+    }
     Assert-PrivateRegular $publisher (20 * 1024 * 1024)
 
     $registrationAttempted = $true
