@@ -57,6 +57,11 @@ telemetry must not automatically grant control. Docker, operating-system service
 their own adapters and permission models; none will be exposed through a generic shell-command endpoint.
 See the [threat model](docs/security/threat-model.md) for the separation between observation and future control.
 
+The [delivery roadmap](docs/delivery-plan.md) sequences native observations, Kubernetes visibility, hosted connection
+and separately permissioned Docker start, stop and restart. The [Kubernetes proposal](specs/010-kubernetes-inventory/spec.md)
+and [container-action proposal](specs/011-container-actions/spec.md) describe planned work and unresolved decisions,
+not capabilities available in the current preview. Monitoring access will not implicitly grant management access.
+
 ### Next: safe native log observations
 
 [Spec 009](specs/009-native-log-metadata/spec.md) is the active implementation plan, not a feature in preview 2.
