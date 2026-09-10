@@ -62,7 +62,7 @@ type collector struct {
 	UploadEligible     bool    `json:"upload_eligible"`
 }
 
-func buildCapabilities(version string, now time.Time, current projection.CurrentSnapshot, hasCurrent bool) capabilitiesResponse {
+func buildCapabilities(version string, now time.Time, current projection.CurrentSnapshot, hasCurrent, hasLogSource bool) capabilitiesResponse {
 	system := projection.NativeSystemInfo()
 	result := capabilitiesResponse{
 		SchemaVersion: capabilitiesSchemaVersion,
@@ -89,8 +89,13 @@ func buildCapabilities(version string, now time.Time, current projection.Current
 			classification, eligible = "LOCAL_SENSITIVE", false
 		}
 		state, reason := "SUPPORTED", (*string)(nil)
-		if name == "services" || name == "containers" || name == "logs" {
+		if name == "services" || name == "containers" || (name == "logs" && !hasLogSource) {
 			state, reason = "UNSUPPORTED", stringPointer("COLLECTOR_NOT_IMPLEMENTED")
+		} else if name == "logs" {
+			state, reason = states[name].SupportState, states[name].ReasonCode
+			if state == "" {
+				state, reason = "UNAVAILABLE", stringPointer("INVALID_RESPONSE")
+			}
 		} else if name != "observer" && hasCurrent {
 			state, reason = states[name].SupportState, states[name].ReasonCode
 			if state == "" {

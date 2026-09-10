@@ -285,6 +285,26 @@ describe("LocalHttpObserverDataSource", () => {
     const invalidRedactionCount = cloneFixture(logOptInSnapshot);
     invalidRedactionCount.sections.logs.items[0].body.redaction_count = -1;
     expect(() => mapCurrentSnapshot(invalidRedactionCount)).toThrow(/integer/);
+
+    const retainedAfterPermissionFailure = cloneFixture(linuxSnapshot);
+    retainedAfterPermissionFailure.sections.logs.support_state = "PERMISSION_DENIED";
+    retainedAfterPermissionFailure.sections.logs.collection_state = "NOT_RUN";
+    retainedAfterPermissionFailure.sections.logs.freshness = "STALE";
+    retainedAfterPermissionFailure.sections.logs.reason_code = "PERMISSION_DENIED";
+    expect(mapCurrentSnapshot(retainedAfterPermissionFailure).sections.logs).toMatchObject({ supportState: "PERMISSION_DENIED", freshness: "STALE", returnedCount: 1 });
+
+    const unknownWithRetainedData = cloneFixture(retainedAfterPermissionFailure);
+    unknownWithRetainedData.sections.logs.freshness = "UNKNOWN";
+    unknownWithRetainedData.sections.logs.observed_at = null;
+    expect(() => mapCurrentSnapshot(unknownWithRetainedData)).toThrow(/non-supported log section/);
+
+    const falselyHealthyRetainedData = cloneFixture(retainedAfterPermissionFailure);
+    falselyHealthyRetainedData.sections.logs.collection_state = "OK";
+    expect(() => mapCurrentSnapshot(falselyHealthyRetainedData)).toThrow(/non-supported log section/);
+
+    const retainedWithUnsafeField = cloneFixture(retainedAfterPermissionFailure);
+    retainedWithUnsafeField.sections.logs.items[0].checkpoint = "opaque-secret";
+    expect(() => mapCurrentSnapshot(retainedWithUnsafeField)).toThrow(/contract field/);
   });
 
   it("parses bounded Problem Details into a typed safe error", async () => {

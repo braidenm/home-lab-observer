@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/braidenm/home-lab-observer/internal/logobs"
 	"github.com/braidenm/home-lab-observer/internal/observation"
 )
 
@@ -74,14 +75,75 @@ func TestRecomputeSelectedCollectionState(t *testing.T) {
 
 func TestUnsupportedSectionsAreEmptyAndHonest(t *testing.T) {
 	snapshot := Current(observation.Snapshot{ObservedAt: time.Unix(0, 0), Quality: observation.Quality{State: observation.Failed}}, SystemInfo{})
-	for name, section := range map[string]EmptySection{"services": snapshot.Sections.Services, "containers": snapshot.Sections.Containers, "logs": snapshot.Sections.Logs} {
+	for name, section := range map[string]EmptySection{"services": snapshot.Sections.Services, "containers": snapshot.Sections.Containers} {
 		if section.SupportState != "UNSUPPORTED" || section.CollectionState != "NOT_RUN" || section.Items == nil || len(section.Items) != 0 {
 			t.Fatalf("%s=%+v", name, section)
 		}
 	}
+	logs := snapshot.Sections.Logs
+	if logs.SupportState != "UNSUPPORTED" || logs.CollectionState != "NOT_RUN" || logs.Items == nil || len(logs.Items) != 0 {
+		t.Fatalf("logs=%+v", logs)
+	}
 	observer := snapshot.Sections.Observer
 	if observer.SupportState != "UNSUPPORTED" || observer.CollectionState != "NOT_RUN" || observer.Items == nil || len(observer.Items) != 0 {
 		t.Fatalf("observer=%+v", observer)
+	}
+}
+
+func TestWithLogsProjectsBoundedMetadataAndOmittedBodiesWithoutMutatingSource(t *testing.T) {
+	at := time.Date(2026, 9, 9, 19, 0, 0, 0, time.UTC)
+	observed, attempted := at, at
+	snapshot := logobs.Snapshot{
+		Status:     logobs.Status{SupportState: logobs.SupportSupported, CollectionState: logobs.CollectionOK, Freshness: logobs.FreshnessCurrent, ObservedAt: &observed, AttemptedAt: &attempted},
+		TotalCount: 2,
+		Events: []logobs.Event{
+			{ObservedAt: at, Source: logobs.SourceSystem, Severity: logobs.SeverityError, EventCode: "SYSTEMD_PRIORITY_3"},
+			{ObservedAt: at.Add(-time.Second), Source: logobs.SourceApplication, Severity: logobs.SeverityInfo, EventCode: "WIN_100"},
+		},
+	}
+	before := snapshot.Clone()
+	current := WithLogs(CurrentSnapshot{}, snapshot, 1)
+	section := current.Sections.Logs
+	if section.TotalCount != 2 || section.ReturnedCount != 1 || !section.Truncated || len(section.Items) != 1 {
+		t.Fatalf("bounds=%+v", section.ListStatus)
+	}
+	item := section.Items[0]
+	if item.Metadata.Source != "system" || item.Metadata.Severity != "ERROR" || item.Metadata.EventCode != "SYSTEMD_PRIORITY_3" || item.Body.State != "OMITTED" {
+		t.Fatalf("item=%+v", item)
+	}
+	if !reflect.DeepEqual(snapshot, before) {
+		t.Fatal("projection mutated source snapshot")
+	}
+}
+
+func TestWithLogsRetainsStaleRingWithTruthfulLatestStatus(t *testing.T) {
+	attempted := time.Date(2026, 9, 9, 19, 0, 0, 0, time.UTC)
+	eventAt := attempted.Add(-time.Minute)
+	reason := logobs.ReasonPermissionDenied
+	snapshot := logobs.Snapshot{
+		Status:     logobs.Status{SupportState: logobs.SupportPermissionDenied, CollectionState: logobs.CollectionNotRun, Freshness: logobs.FreshnessUnknown, AttemptedAt: &attempted, ReasonCode: &reason},
+		TotalCount: 1,
+		Events:     []logobs.Event{{ObservedAt: eventAt, Source: logobs.SourceSystem, Severity: logobs.SeverityWarn, EventCode: "WIN_5"}},
+	}
+	section := WithLogs(CurrentSnapshot{}, snapshot, 1).Sections.Logs
+	if section.SupportState != "PERMISSION_DENIED" || section.CollectionState != "NOT_RUN" || section.Freshness != "STALE" || section.ObservedAt == nil || !section.ObservedAt.Equal(eventAt) || section.ReasonCode == nil || *section.ReasonCode != "PERMISSION_DENIED" || len(section.Items) != 1 {
+		t.Fatalf("retained section=%+v", section)
+	}
+}
+
+func TestWithLogsRejectsInvalidSnapshotAndLimit(t *testing.T) {
+	for _, snapshot := range []logobs.Snapshot{
+		{TotalCount: 1, Events: []logobs.Event{}},
+		{},
+	} {
+		limit := 1
+		if snapshot.TotalCount == 0 {
+			limit = MaxProjectedLogs + 1
+		}
+		section := WithLogs(CurrentSnapshot{}, snapshot, limit).Sections.Logs
+		if section.SupportState != "UNAVAILABLE" || section.CollectionState != "NOT_RUN" || section.Freshness != "UNKNOWN" || section.ObservedAt != nil || section.ReasonCode == nil || *section.ReasonCode != "INVALID_RESPONSE" || len(section.Items) != 0 {
+			t.Fatalf("invalid section=%+v", section)
+		}
 	}
 }
 

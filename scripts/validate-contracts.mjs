@@ -195,6 +195,28 @@ if (!validCount || !invalidCount) fail("Fixture manifest must include valid and 
 
 const snapshotSchema = schemas.find((item) => item.$id.includes("current-snapshot"));
 if (snapshotSchema.properties.privacy.properties.remote_projection.const !== "home-lab-server-snapshot/v1") fail("Legacy projection boundary is missing");
+const validateSnapshot = ajv.compile(snapshotSchema);
+const currentLogFixture = JSON.parse(fs.readFileSync(path.join(root, "schemas/v1/fixtures/valid/current-snapshot-linux.json"), "utf8"));
+currentLogFixture.sections.logs.support_state = "PERMISSION_DENIED";
+currentLogFixture.sections.logs.collection_state = "NOT_RUN";
+currentLogFixture.sections.logs.freshness = "STALE";
+currentLogFixture.sections.logs.reason_code = "PERMISSION_DENIED";
+if (!validateSnapshot(currentLogFixture)) fail(`Current logs rejected retained stale records: ${ajv.errorsText(validateSnapshot.errors)}`);
+const zeroLimitRetainedLogs = structuredClone(currentLogFixture);
+zeroLimitRetainedLogs.sections.logs.returned_count = 0;
+zeroLimitRetainedLogs.sections.logs.truncated = true;
+zeroLimitRetainedLogs.sections.logs.items = [];
+if (!validateSnapshot(zeroLimitRetainedLogs)) fail(`Current logs rejected a zero-limit stale ring: ${ajv.errorsText(validateSnapshot.errors)}`);
+const falselyHealthyRetainedLogs = structuredClone(currentLogFixture);
+falselyHealthyRetainedLogs.sections.logs.collection_state = "OK";
+if (validateSnapshot(falselyHealthyRetainedLogs)) fail("Current logs accepted non-supported retained records as successfully collected");
+const unknownRetainedLogs = structuredClone(currentLogFixture);
+unknownRetainedLogs.sections.logs.freshness = "UNKNOWN";
+unknownRetainedLogs.sections.logs.observed_at = null;
+if (validateSnapshot(unknownRetainedLogs)) fail("Current logs accepted retained records without explicit stale evidence");
+const unsafeRetainedLogs = structuredClone(currentLogFixture);
+unsafeRetainedLogs.sections.logs.items[0].checkpoint = "opaque-canary";
+if (validateSnapshot(unsafeRetainedLogs)) fail("Current logs accepted an extra private checkpoint field");
 const spec = fs.readFileSync(path.join(root, "specs/002-cross-platform-observer/spec.md"), "utf8");
 const trace = fs.readFileSync(path.join(root, "specs/002-cross-platform-observer/traceability.md"), "utf8");
 for (let index = 1; index <= 14; index += 1) {

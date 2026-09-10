@@ -145,9 +145,60 @@
       ]
     },
     "logSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["support_state", "collection_state", "freshness", "observed_at", "reason_code", "total_count", "returned_count", "truncated", "items"],
+      "properties": {
+        "support_state": { "$ref": "#/$defs/supportState" },
+        "collection_state": { "$ref": "#/$defs/collectionState" },
+        "freshness": { "$ref": "#/$defs/freshness" },
+        "observed_at": { "type": ["string", "null"], "format": "date-time" },
+        "reason_code": { "$ref": "#/$defs/reasonCode" },
+        "total_count": { "type": "integer", "minimum": 0, "maximum": 200 },
+        "returned_count": { "type": "integer", "minimum": 0, "maximum": 200 },
+        "truncated": { "type": "boolean" },
+        "items": { "type": "array", "maxItems": 200, "items": { "$ref": "#/$defs/logRecord" } }
+      },
       "allOf": [
-        { "$ref": "#/$defs/listSection" },
-        { "properties": { "items": { "type": "array", "maxItems": 200, "items": { "$ref": "#/$defs/logRecord" } } } }
+        {
+          "if": { "properties": { "support_state": { "not": { "const": "SUPPORTED" } } }, "required": ["support_state"] },
+          "then": {
+            "oneOf": [
+              {
+                "properties": {
+                  "collection_state": { "const": "NOT_RUN" },
+                  "freshness": { "const": "UNKNOWN" },
+                  "observed_at": { "type": "null" },
+                  "reason_code": { "type": "string" },
+                  "total_count": { "const": 0 },
+                  "returned_count": { "const": 0 },
+                  "truncated": { "const": false },
+                  "items": { "maxItems": 0 }
+                }
+              },
+              {
+                "properties": {
+                  "freshness": { "const": "STALE" },
+                  "observed_at": { "type": "string", "format": "date-time" },
+                  "reason_code": { "type": "string" },
+                  "total_count": { "type": "integer", "minimum": 1, "maximum": 200 },
+                  "returned_count": { "type": "integer", "minimum": 0, "maximum": 200 },
+                  "items": { "type": "array", "maxItems": 200, "items": { "$ref": "#/$defs/logRecord" } }
+                },
+                "allOf": [
+                  {
+                    "if": { "properties": { "support_state": { "enum": ["DISABLED", "PERMISSION_DENIED", "UNSUPPORTED"] } }, "required": ["support_state"] },
+                    "then": { "properties": { "collection_state": { "const": "NOT_RUN" } } }
+                  },
+                  {
+                    "if": { "properties": { "support_state": { "const": "UNAVAILABLE" } }, "required": ["support_state"] },
+                    "then": { "properties": { "collection_state": { "enum": ["FAILED", "NOT_RUN"] } } }
+                  }
+                ]
+              }
+            ]
+          }
+        }
       ]
     },
     "observerSection": {
