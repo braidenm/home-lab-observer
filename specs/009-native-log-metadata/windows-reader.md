@@ -1,7 +1,7 @@
 # Windows Event Log reader kernel
 
-Status: PROPOSED Windows amd64/arm64 WEVTAPI binding over the accepted synthetic kernel. Private-anchor generation
-policy is pending owner acceptance; no host-log fixture read, helper entrypoint or activation is supplied. The
+Status: Windows amd64/arm64 WEVTAPI binding over the accepted synthetic kernel. The owner accepted the documented
+private-anchor collision limitation on 2026-09-10; no host-log fixture read, helper entrypoint or activation is supplied. The
 same-binary hidden helper and its enforced kill/reap deadline remain separate requirements; a cooperative context
 cannot interrupt a stalled native call.
 
@@ -46,7 +46,7 @@ proof after clearing/reusing IDs. Bookmark construction, canonical private forma
 native error mapping require a separately reviewed binding and synthetic native fixture, not assumptions here.
 [bookmark API workflow](https://learn.microsoft.com/en-us/windows/win32/wes/bookmarking-events)
 
-### Proposed private anchor v1 (pending owner decision on generation evidence)
+### Accepted private anchor v1 (operational, not forensic)
 
 The native binding uses a closed binary envelope, never public JSON: eight-byte `HLOWEV1\0` magic; one-byte fixed
 source (`system=1`, `application=2`); one-byte flags with only TimeCreated-present, EventID-present and
@@ -70,10 +70,10 @@ After strict offset-zero seek, the verification record first creates its own bou
 saved versus newly selected fixed source, EventRecordID, presence-qualified TimeCreated, EventID and provider GUID; it
 does not compare bookmark XML bytes. This detects normal record-ID reuse with different selected identity. Microsoft
 documents no stable channel-generation identifier, however, and does not state that `EvtLogCreationTime` changes on
-`EvtClearLog`. Therefore this tuple is not yet accepted as absolute proof against a cleared channel recreating an
-identical tuple. The binding must not claim such a guarantee or use creation/last-write/count/oldest-record heuristics
-until the owner chooses the documented collision limitation, reset-every-cycle behavior, or a separately justified
-generation policy.
+`EvtClearLog`. Therefore a cleared channel recreating an identical tuple can evade reset detection. On 2026-09-10
+the owner accepted this documented limitation for an operational dashboard, not forensic or tamper-evident auditing.
+The binding must not claim absolute generation proof or substitute creation/last-write/count/oldest-record heuristics.
+This decision does not waive native fixture, process isolation, packaging or release acceptance requirements.
 
 Only `ErrBookmarkStale` during strict positioning or false exactness establishes reset. A missing probe row after a
 successful seek is a failed attempt, not independent stale proof. Generic `ERROR_EVT_QUERY_RESULT_STALE`, timeout,
