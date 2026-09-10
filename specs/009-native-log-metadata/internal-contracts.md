@@ -218,7 +218,8 @@ rows. For a normal batch, `len(Events) + DiscardedCount <= 512`, `DiscardedCount
 visited sentinel—never another accepted or discarded row—and `NextOpaque` must cause it to be read again. A normal
 adapter that needs a continuation probe reserves capacity for both that probe and a possible sentinel before reading:
 it processes at most 511 rows before one lookahead. A backend may return 512 processed rows plus one probe as caught up
-only when it has independent end-of-source proof that does not visit another record.
+only when it has independent end-of-source proof that does not visit another record. Any normal batch with a probe or
+an accepted/discarded row requires non-empty `NextOpaque`; the continuation probe may return the original cursor.
 A successful normal batch may advance the cursor; only `CaughtUp` may advance the persisted coverage-through watermark
 to `QueryStartedAt`. That watermark is status, never a start from which positive historical coverage is inferred.
 
@@ -330,6 +331,15 @@ type Store interface {
     QuerySummary(context.Context, []Source, SummaryQuery) (Summary, error)
 }
 ```
+
+Configured `SourceSummary.Status` values use a source-specific closed matrix even though the reusable `Status` type
+also represents aggregate snapshots. A source is never `DISABLED`. Supported partial reasons are only
+`CHECKPOINT_RESET`, `INVALID_RESPONSE`, `DEADLINE_EXCEEDED`, `RESPONSE_TOO_LARGE` or `BACKLOG_DEFERRED`; supported
+failed reasons are only the three fixed failure reasons, `READER_FAILED` or the volatile
+`LOG_STORAGE_UNAVAILABLE`. Unavailable not-run reasons are only `NO_VISIBLE_JOURNAL`, `LOG_HELPER_UNAVAILABLE`,
+`LOG_HELPER_MISMATCH` or `READER_FAILED`; unavailable failed is only `READER_FAILED` or
+`LOG_STORAGE_UNAVAILABLE`. Permission-denied and unsupported remain their matching not-run reasons.
+`LOG_SOURCES_DISABLED` and `SOURCE_PARTIAL` are aggregate-only and never appear in a source status.
 
 `history.Store` implements this port on the existing single SQLite connection and shared retention budget. The log
 collector borrows it and never closes it. `CommitBatch` validates first, then atomically CASes the source checkpoint

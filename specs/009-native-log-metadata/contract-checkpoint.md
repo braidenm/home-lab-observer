@@ -104,6 +104,9 @@ contains only explicitly configured presets (maximum two). `application` is Wind
 configuration. macOS performs no native call and reports a configured source as `UNSUPPORTED/NOT_RUN`.
 Linux reports only the caller-accessible local system-journal view. A missing helper/runtime/library or no visible
 initial journal evidence is unavailable, not a healthy empty source; inaccessible files cannot be claimed covered.
+Each configured source status uses the same closed source-specific reason matrix as the neutral contract. In
+particular, `LOG_SOURCES_DISABLED` and `SOURCE_PARTIAL` are top-level aggregate reasons only, while
+`LOG_STORAGE_UNAVAILABLE` is allowed for the explicit supported-or-unavailable failed storage overlay.
 
 Top-level support, collection, freshness, observed time, and reason use the existing generic enums. With no configured
 source they are `DISABLED/NOT_RUN/UNKNOWN/null/LOG_SOURCES_DISABLED`, `sources` is empty, `coverage_state` is `UNKNOWN`,

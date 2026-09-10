@@ -374,7 +374,7 @@ func (b Batch) Validate() error {
 	if b.CaughtUp && b.CollectionState == CollectionPartial && (b.ReasonCode == nil || *b.ReasonCode != ReasonInvalidResponse || b.DiscardedCount == 0) {
 		return errors.New("caught-up partial batch is inconsistent")
 	}
-	if acceptedAndDiscarded > 0 && len(b.NextOpaque) == 0 {
+	if (acceptedAndDiscarded > 0 || b.ProbeCount > 0) && len(b.NextOpaque) == 0 {
 		return errors.New("observed batch requires next checkpoint")
 	}
 	if b.CaughtUp && b.CollectionState == CollectionFailed {
@@ -526,6 +526,9 @@ func validateSourceSummary(source SourceSummary, query SummaryQuery) error {
 	if err := source.Status.Validate(); err != nil {
 		return err
 	}
+	if err := validateSourceStatus(source.Status); err != nil {
+		return err
+	}
 	if err := source.CoverageState.Validate(); err != nil {
 		return err
 	}
@@ -568,6 +571,49 @@ func validateSourceSummary(source SourceSummary, query SummaryQuery) error {
 		return errors.New("source coverage is inconsistent")
 	}
 	return nil
+}
+
+func validateSourceStatus(status Status) error {
+	reason := ReasonCode("")
+	if status.ReasonCode != nil {
+		reason = *status.ReasonCode
+	}
+	switch status.SupportState {
+	case SupportSupported:
+		switch status.CollectionState {
+		case CollectionOK:
+			if reason == "" {
+				return nil
+			}
+		case CollectionPartial:
+			if reason == ReasonCheckpointReset || reason == ReasonInvalidResponse || reason == ReasonDeadlineExceeded ||
+				reason == ReasonResponseTooLarge || reason == ReasonBacklogDeferred {
+				return nil
+			}
+		case CollectionFailed:
+			if reason == ReasonDeadlineExceeded || reason == ReasonInvalidResponse || reason == ReasonResponseTooLarge ||
+				reason == ReasonReaderFailed || reason == ReasonLogStorageUnavailable {
+				return nil
+			}
+		}
+	case SupportUnavailable:
+		if status.CollectionState == CollectionNotRun && (reason == ReasonNoVisibleJournal || reason == ReasonLogHelperUnavailable ||
+			reason == ReasonLogHelperMismatch || reason == ReasonReaderFailed) {
+			return nil
+		}
+		if status.CollectionState == CollectionFailed && (reason == ReasonReaderFailed || reason == ReasonLogStorageUnavailable) {
+			return nil
+		}
+	case SupportPermissionDenied:
+		if status.CollectionState == CollectionNotRun && reason == ReasonPermissionDenied {
+			return nil
+		}
+	case SupportUnsupported:
+		if status.CollectionState == CollectionNotRun && reason == ReasonPlatformUnsupported {
+			return nil
+		}
+	}
+	return errors.New("source summary status or reason is inconsistent")
 }
 
 func validateSummaryBucket(bucket SummaryBucket, intervalSeconds uint32) error {

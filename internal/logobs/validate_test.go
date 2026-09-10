@@ -386,6 +386,11 @@ func TestBatchProbeAccountingAndVisitBudget(t *testing.T) {
 	if err := initialEmptyTailProof.Validate(); err != nil {
 		t.Fatalf("empty-window tail proof rejected: %v", err)
 	}
+	missingProbeCursor := initialEmptyTailProof.Clone()
+	missingProbeCursor.NextOpaque = nil
+	if err := missingProbeCursor.Validate(); err == nil {
+		t.Fatal("normal probe without a checkpoint cursor accepted")
+	}
 
 	continuation := initialEmptyTailProof.Clone()
 	continuation.Events = make([]Event, 511)
@@ -532,6 +537,63 @@ func TestSummaryValidationFixedGridCountsAndCoverage(t *testing.T) {
 	overflow.Sources = append(overflow.Sources, applicationSource)
 	if err := overflow.Validate(); err == nil {
 		t.Fatal("cross-source safe-integer overflow accepted")
+	}
+}
+
+func TestSourceSummaryStatusReasonMatrix(t *testing.T) {
+	reset := ReasonCheckpointReset
+	storage := ReasonLogStorageUnavailable
+	reader := ReasonReaderFailed
+
+	valid := []Status{
+		{
+			SupportState: SupportSupported, CollectionState: CollectionPartial, Freshness: FreshnessUnknown,
+			AttemptedAt: &testTime, ReasonCode: &reset,
+		},
+		{
+			SupportState: SupportSupported, CollectionState: CollectionFailed, Freshness: FreshnessStale,
+			ObservedAt: &testTime, AttemptedAt: &testTime, ReasonCode: &storage,
+		},
+		{
+			SupportState: SupportUnavailable, CollectionState: CollectionFailed, Freshness: FreshnessStale,
+			ObservedAt: &testTime, AttemptedAt: &testTime, ReasonCode: &storage,
+		},
+		{
+			SupportState: SupportUnavailable, CollectionState: CollectionNotRun, Freshness: FreshnessUnknown,
+			AttemptedAt: &testTime, ReasonCode: &reader,
+		},
+	}
+	for i, status := range valid {
+		summary := validFullSummary()
+		summary.Sources[0].Status = status
+		if err := summary.Validate(); err != nil {
+			t.Fatalf("valid source status %d rejected: %v", i, err)
+		}
+	}
+
+	for name, status := range map[string]Status{
+		"aggregate-only partial reason": {
+			SupportState: SupportSupported, CollectionState: CollectionPartial, Freshness: FreshnessUnknown,
+			AttemptedAt: &testTime, ReasonCode: ptrReason(ReasonSourcePartial),
+		},
+		"disabled configured source": {
+			SupportState: SupportDisabled, CollectionState: CollectionNotRun, Freshness: FreshnessUnknown,
+			ReasonCode: ptrReason(ReasonLogSourcesDisabled),
+		},
+		"unavailable permission reason": {
+			SupportState: SupportUnavailable, CollectionState: CollectionNotRun, Freshness: FreshnessUnknown,
+			AttemptedAt: &testTime, ReasonCode: ptrReason(ReasonPermissionDenied),
+		},
+		"supported failed reset reason": {
+			SupportState: SupportSupported, CollectionState: CollectionFailed, Freshness: FreshnessUnknown,
+			AttemptedAt: &testTime, ReasonCode: &reset,
+		},
+	} {
+		summary := validFullSummary()
+		summary.Sources[0].Status = status
+		if err := summary.Validate(); err == nil {
+			t.Fatalf("%s accepted", name)
+		}
 	}
 }
 
