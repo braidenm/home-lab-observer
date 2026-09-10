@@ -1,8 +1,9 @@
 # Owned Windows native event fixture proposal
 
-Status: PROPOSED, unexecuted prototype. The test-only manifest, publisher, EVTX seam and guarded workflow exist on
-the prototype branch, but no registration workflow has been pushed or run and no native support claim exists yet.
-Activation requires a separate review and successful hosted evidence.
+Status: reviewed test-only prototype, not accepted native evidence. Guarded hosted workflows have executed on x64
+and ARM64, but the owned channels still contained zero records through run `34521098092`. Registration metadata
+checks pass; successful acquisition has not been demonstrated. No native support or release claim follows from
+these failed attempts. The current isolated-session experiment still requires successful hosted evidence.
 
 ## Purpose and boundary
 
@@ -155,6 +156,13 @@ existing ten-second deadline; neither longer waits nor a successful write call e
 After fresh registration, only the two newly owned channels undergo an explicit disabled-to-enabled transition before
 publishing any fixture events. This forces activation rather than relying on writing an already-true setting. No
 existing channel or service is restarted, and actual acquisition remains the acceptance criterion.
+
+The fixture now tests Custom isolation with explicit 100-ms publishing latency on only its two new Operational
+channels. Each receives a dedicated ETW session instead of depending on the runner's shared Application session.
+This is a bounded publishing-setup experiment, not a finding about the cause of the earlier empty channels. Cleanup
+disables only those owned channels before unregistration, including after partial setup failure; it still attempts
+unregistration when disabling fails, and uncertain cleanup prevents success or deletion of referenced resources.
+No existing channel, shared session, or service configuration is changed.
 
 The harness also classifies each owned channel's actual publishing-latency property as only `ZERO`, `WITHIN_10S`,
 `OVER_10S` or `UNAVAILABLE` before starting the publisher. This read-only diagnostic does not change isolation,

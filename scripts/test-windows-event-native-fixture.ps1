@@ -855,6 +855,18 @@ try {
         $testProcess.Dispose()
     }
     if ($registrationAttempted) {
+        # Stop only the freshly owned channel sessions, including on partial
+        # registration failure. Always attempt unregistration even if this fails.
+        foreach ($channel in @($systemChannel, $applicationChannel)) {
+            try {
+                if (-not (Test-WevtMissing 'channel' $channel)) {
+                    & wevtutil.exe sl $channel /e:false 1>$null 2>$null
+                    if ($LASTEXITCODE -ne 0) { $cleanupFailed = $true }
+                }
+            } catch {
+                $cleanupFailed = $true
+            }
+        }
         & wevtutil.exe um $manifest 1>$null 2>$null
         $providerMissing = (Test-WevtMissing 'provider' $provider)
         $systemMissing = (Test-WevtMissing 'channel' $systemChannel)
