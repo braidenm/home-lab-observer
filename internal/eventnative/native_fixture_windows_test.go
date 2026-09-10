@@ -273,6 +273,8 @@ func (a *checkedAPI) renderBookmark(bookmark handle, maximum uint32) (string, er
 		}
 		failure := ""
 		switch {
+		case properties == 1:
+			failure = "bookmark-render-property-count-one"
 		case properties != 0:
 			failure = "bookmark-render-property-count"
 		case len(buffer) < 2 || len(buffer)%2 != 0:

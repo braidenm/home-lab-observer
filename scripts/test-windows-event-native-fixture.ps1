@@ -812,6 +812,7 @@ try {
     if ($exitCode -ne 0) {
         $allowedStages = @(
             'bookmark-render-property-count',
+            'bookmark-render-property-count-one',
             'bookmark-render-byte-length',
             'bookmark-render-terminator',
             'bookmark-render-zero-padding',
