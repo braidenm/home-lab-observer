@@ -13,11 +13,12 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
+	goruntime "runtime"
 	"strconv"
 	"syscall"
 	"time"
 
+	"github.com/braidenm/home-lab-observer/internal/buildidentity"
 	"github.com/braidenm/home-lab-observer/internal/collector"
 	"github.com/braidenm/home-lab-observer/internal/containerobs"
 	"github.com/braidenm/home-lab-observer/internal/diagnostics"
@@ -53,7 +54,7 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "invalid Docker endpoint: use an explicit local unix:///absolute/path socket or npipe:////./pipe/name")
 		return 2
 	}
-	sources, sourceErr := logobs.ParseSources(runtime.GOOS, sourceFlags)
+	sources, sourceErr := logobs.ParseSources(goruntime.GOOS, sourceFlags)
 	if sourceErr != nil {
 		fmt.Fprintln(stderr, "invalid native log sources: Linux supports system only")
 		return 2
@@ -202,13 +203,18 @@ func serveRuntime(ctx context.Context, address, stateDir string, output io.Write
 	cfg := collector.DefaultConfig()
 	cfg.CollectorVersion, cfg.MaxProcesses = version, 200
 	containers := options.containers
+	runtimeResourcesJoined := true
 	if containers == nil {
 		containers, err = containerobs.New(containerobs.Config{Endpoint: options.dockerEndpoint})
 		if err != nil {
 			_ = store.Close()
 			return err
 		}
-		defer containers.Close()
+		defer func() {
+			if runtimeResourcesJoined {
+				containers.Close()
+			}
+		}()
 	}
 	collect := collectWithContainers(collector.New(collector.RealClock{}, collector.GopsutilProvider{}, cfg).Collect, containers)
 	runtime, err := scheduler.New(collect, borrowedHistory{store}, scheduler.DefaultConfig())
@@ -222,9 +228,12 @@ func serveRuntime(ctx context.Context, address, stateDir string, output io.Write
 	}
 	reader := options.logReader
 	if reader == nil && len(options.logSources) > 0 {
-		// Release identity integration supplies the verified Linux helper digest.
-		// An absent digest fails closed, never discovers an arbitrary helper.
-		reader = logprocess.NewReader(version, commit, "")
+		identity, identityErr := buildidentity.Resolve(releaseIdentity, version, commit, "observer", goruntime.GOOS, goruntime.GOARCH)
+		if identityErr != nil {
+			_ = store.Close()
+			return identityErr
+		}
+		reader = logprocess.NewReader(identity.Version, identity.Commit, identity.HelperSHA256)
 	}
 	logs, err := newLogs(logobs.Config{Sources: options.logSources, Reader: reader, Store: store})
 	if err != nil {
@@ -244,13 +253,17 @@ func serveRuntime(ctx context.Context, address, stateDir string, output io.Write
 		_ = store.Close()
 		return err
 	}
+	runtimeResourcesJoined = false
+	stopCollection := func() error {
+		return stopCollectors(logs, runtime, func() error {
+			runtimeResourcesJoined = true
+			return store.Close()
+		})
+	}
 	if len(options.logSources) > 0 {
 		if err := logs.Start(context.WithoutCancel(ctx)); err != nil {
-			return errors.Join(err, stopCollectors(logs, runtime, store.Close))
+			return errors.Join(err, stopCollection())
 		}
-	}
-	stopCollection := func() error {
-		return stopCollectors(logs, runtime, store.Close)
 	}
 	server := &http.Server{Handler: handler, ErrorLog: log.New(safeHTTPLog{logger: logger, diagnostics: diagnosticWriter}, "", 0), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8192}
 	stopped := make(chan error, 1)
