@@ -1,8 +1,8 @@
 # Tasks
 
-- [x] Merge and publish Spec 008 before starting implementation of this slice (independent provenance lookup follow-up recorded).
+- [x] Merge, publish and independently verify Spec 008 before starting implementation of this slice.
 - [x] Accept the optional bundled Linux native helper and separate portability/packaging ADR.
-- [ ] Accept native metadata acquisition/privacy ADR and exact closed cross-slice contracts, including source aliases,
+- [x] Accept native metadata acquisition/privacy ADR and exact closed cross-slice contracts, including source aliases,
   severity/event-code vocabulary, fixed grids, count/coverage semantics and JSON-safe integer rejection.
 - [ ] Implement bounded fixed-source native readers and honest unsupported states.
 - [ ] Add digest-bound Linux helper packaging, closed manifest-v2 profiles, v1 rollback and missing-runtime core smoke.

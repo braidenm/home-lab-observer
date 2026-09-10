@@ -1,6 +1,6 @@
 # Spec 009 review record
 
-## Contract checkpoint — in progress
+## Contract checkpoint — reviewed; required CI pending
 
 This review does not approve native readers, persistence, API handlers, UI integration or a new release. Those are
 separate acceptance steps in [the evidence ledger](traceability.md).
@@ -37,5 +37,16 @@ The closed release-v2 profile was independently reviewed: Linux requires its dig
 retain their exact content set, and v1 rollback validation remains unchanged. Build and installer behavior has not yet
 switched to v2.
 
-The summary schema, executable semantic fixtures and latest-quality aggregation still require final cross-slice review.
-The draft PR must not be marked ready on the strength of the neutral-contract review alone.
+The summary schema and semantic module were independently reviewed, then re-reviewed after closing source-specific
+reason branches in `1e63a6e` (author commit `c7dbc41`). The reviewer reported no remaining blockers and ran full
+`npm test`. Tests cover nanosecond status ordering, exact whole-second grids, Go zero-time rejection, nullable counts,
+cross-source overflow, deterministic latest-quality reduction and the two-source seven-day response-size budget.
+Root strengthened that budget fixture with large safe counters, nine-digit timestamp precision and non-null gap reasons.
+
+Native planning also exposed metadata probes missing from the original record budget. `073bd3a` counts those visits
+explicitly without raising the 513-record ceiling, and `d7f875a` requires a valid continuation cursor for a normal probe.
+Source-summary reasons now match the closed wire matrix while the generic aggregate status remains reusable.
+
+Root combined verification passed: `go test ./...`, `go vet ./...`, `npm run test:contracts`, and repository policy.
+The complete checkpoint must pass all required PR checks before merge; this does not authorize release claims for the
+unimplemented native, storage or UI slices. The private helper codec is the next separately reviewed contract slice.
