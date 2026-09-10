@@ -4,6 +4,7 @@ go 1.27
 
 require (
 	github.com/Microsoft/go-winio v0.6.2
+	github.com/ebitengine/purego v0.10.0
 	github.com/shirou/gopsutil/v4 v4.26.6
 	golang.org/x/sys v0.47.0
 	modernc.org/sqlite v1.58.0
@@ -11,7 +12,6 @@ require (
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/ebitengine/purego v0.10.0 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
