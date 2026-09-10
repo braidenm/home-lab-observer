@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -307,5 +308,149 @@ func TestLogUint64RevisionDoesNotNarrowToSQLiteSignedInteger(t *testing.T) {
 	b.FinishedAt = b.QueryStartedAt
 	if err := s.CommitBatch(ctx, b); err == nil {
 		t.Fatal("revision wrapped")
+	}
+}
+
+func TestConcurrentLogCASOnlyOneBatchCanApply(t *testing.T) {
+	s := openTestStore(t, DefaultConfig(filepath.Join(t.TempDir(), "history.db")))
+	ctx := context.Background()
+	const workers = 12
+	results := make(chan error, workers)
+	start := make(chan struct{})
+	var group sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		group.Add(1)
+		go func() { defer group.Done(); <-start; results <- s.CommitBatch(ctx, logSuccess(logTestNow)) }()
+	}
+	close(start)
+	group.Wait()
+	close(results)
+	applied, conflicts := 0, 0
+	for err := range results {
+		if err == nil {
+			applied++
+		} else if errors.Is(err, logobs.ErrRevisionConflict) {
+			conflicts++
+		} else {
+			t.Fatal(err)
+		}
+	}
+	if applied != 1 || conflicts != workers-1 {
+		t.Fatalf("applied=%d conflicts=%d", applied, conflicts)
+	}
+	cp, err := s.LoadCheckpoint(ctx, logobs.SourceSystem)
+	if err != nil || cp.Revision != 1 {
+		t.Fatalf("checkpoint %#v %v", cp, err)
+	}
+}
+
+func TestLogCancellationWhileDatabaseBusyDoesNotAdvanceState(t *testing.T) {
+	s := openTestStore(t, DefaultConfig(filepath.Join(t.TempDir(), "history.db")))
+	ctx := context.Background()
+	if _, err := s.LoadCheckpoint(ctx, logobs.SourceSystem); err != nil {
+		t.Fatal(err)
+	}
+	hold, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocked, cancel := context.WithCancel(ctx)
+	cancel()
+	if err := s.CommitBatch(blocked, logSuccess(logTestNow)); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancel %v", err)
+	}
+	if err := hold.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	cp, err := s.LoadCheckpoint(ctx, logobs.SourceSystem)
+	if err != nil || cp.Revision != 0 {
+		t.Fatal("cancelled commit advanced state")
+	}
+}
+
+func TestLogEarliestYearDerivedFloorsDoNotUnderflow(t *testing.T) {
+	for _, q := range []time.Time{earliestLogTime, time.Date(1, 1, 1, 0, 1, 0, 0, time.UTC), time.Date(1, 1, 3, 12, 0, 0, 0, time.UTC)} {
+		s := openTestStore(t, DefaultConfig(filepath.Join(t.TempDir(), "history.db")))
+		b := logSuccess(q)
+		if err := s.CommitBatch(context.Background(), b); err != nil {
+			t.Fatalf("q=%s err=%v", q, err)
+		}
+		cp, err := s.LoadCheckpoint(context.Background(), b.Source)
+		if err != nil || cp.Revision != 1 || !cp.CoverageThrough.Equal(q) {
+			t.Fatalf("q=%s checkpoint=%#v err=%v", q, cp, err)
+		}
+	}
+}
+
+func TestLogEvictionFrontierPreventsFutureCoverageReconstruction(t *testing.T) {
+	s := openTestStore(t, DefaultConfig(filepath.Join(t.TempDir(), "history.db")))
+	ctx := context.Background()
+	q := logTestNow.Add(59 * time.Second)
+	b := logSuccess(q)
+	b.ExaminedCount = 1
+	b.NextOpaque = []byte("synthetic-cursor")
+	b.Events = []logobs.Event{{ObservedAt: q.Add(2 * time.Second), Source: b.Source, Severity: logobs.SeverityInfo, EventCode: "WIN_1"}}
+	if err := s.CommitBatch(ctx, b); err != nil {
+		t.Fatal(err)
+	}
+	frontier := logTestNow.Add(2 * time.Minute)
+	encoded, _ := encodeLogTime(frontier)
+	key, _ := logEvictionKey(b.Source)
+	// Model maintenance's atomic count/proof removal and monotonic frontier.
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`DELETE FROM log_metadata_minutes`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`DELETE FROM log_metadata_coverage`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`INSERT INTO store_metadata(key,value) VALUES(?,?)`, key, encoded); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 3; i++ {
+		next := logSuccess(q.Add(time.Duration(i) * time.Minute))
+		next.ExpectedRevision = uint64(i)
+		if err := s.CommitBatch(ctx, next); err != nil {
+			t.Fatal(err)
+		}
+	}
+	query := logobs.SummaryQuery{WindowStart: logTestNow.Add(-56 * time.Minute), WindowEnd: logTestNow.Add(4 * time.Minute), BucketInterval: time.Minute, BucketCount: 60}
+	got, err := s.QuerySummary(ctx, []logobs.Source{b.Source}, query)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, index := range []int{56, 57} {
+		if got.Sources[0].Buckets[index].CoverageState != logobs.CoverageUnknown || got.Sources[0].Buckets[index].Counts != nil {
+			t.Fatalf("evicted minute was reconstructed: %+v", got.Sources[0].Buckets[index])
+		}
+	}
+	if got.Sources[0].Buckets[58].CoverageState != logobs.CoverageFull {
+		t.Fatal("new post-frontier coverage suppressed")
+	}
+}
+
+func TestLogStoragePressureRefusesGrowthWithoutAdvancingCursor(t *testing.T) {
+	s := openTestStore(t, DefaultConfig(filepath.Join(t.TempDir(), "history.db")))
+	ctx := context.Background()
+	if _, err := s.LoadCheckpoint(ctx, logobs.SourceSystem); err != nil {
+		t.Fatal(err)
+	}
+	s.config.MaxBytes = 1
+	if err := s.CommitBatch(ctx, logSuccess(logTestNow)); !errors.Is(err, ErrLogStorageUnavailable) {
+		t.Fatalf("pressure=%v", err)
+	}
+	cp, err := s.LoadCheckpoint(ctx, logobs.SourceSystem)
+	if err != nil || cp.Revision != 0 {
+		t.Fatal("pressure advanced cursor")
+	}
+	s.config.MaxBytes = defaultMaxBytes
+	if err := s.CommitBatch(ctx, logSuccess(logTestNow)); err != nil {
+		t.Fatalf("recovered space cannot commit: %v", err)
 	}
 }

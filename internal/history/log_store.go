@@ -100,11 +100,18 @@ func (s *Store) commitLogBatch(ctx context.Context, batch logobs.Batch) error {
 	if err := s.ensureLogSchema(ctx); err != nil {
 		return err
 	}
+	defer s.refreshSize()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	// Recheck after acquiring the shared connection, not before waiting behind
+	// another writer. A pressure failure leaves the checkpoint untouched.
+	s.refreshSize()
+	if s.Health().DatabaseBytes > s.config.MaxBytes {
+		return ErrLogStorageUnavailable
+	}
 	prior, err := loadLogState(ctx, tx, batch.Source)
 	if err != nil {
 		return err
@@ -119,7 +126,7 @@ func (s *Store) commitLogBatch(ctx context.Context, batch logobs.Batch) error {
 	if err != nil {
 		return err
 	}
-	floor := batch.QueryStartedAt.Add(-min(s.config.RetentionAge, logRetention))
+	floor := logRetentionFloor(batch.QueryStartedAt, min(s.config.RetentionAge, logRetention))
 	if err := writeLogMinutes(ctx, tx, batch, floor); err != nil {
 		return err
 	}
@@ -127,9 +134,19 @@ func (s *Store) commitLogBatch(ctx context.Context, batch logobs.Batch) error {
 	if err != nil {
 		return err
 	}
-	segments, err := mergeLogCoverage(oldSegments, addition, floor, batch.QueryStartedAt)
+	frontier, err := loadLogEvictionFrontier(ctx, tx, batch.Source)
 	if err != nil {
 		return err
+	}
+	if frontier != nil && frontier.After(floor) {
+		floor = *frontier
+	}
+	var segments []logCoverageSegment
+	if floor.Before(batch.QueryStartedAt) {
+		segments, err = mergeLogCoverage(oldSegments, addition, floor, batch.QueryStartedAt)
+		if err != nil {
+			return err
+		}
 	}
 	if len(segments) > maxLogCoverageRows {
 		return ErrLogStorageUnavailable

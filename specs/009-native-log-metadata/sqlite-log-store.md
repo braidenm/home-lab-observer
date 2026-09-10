@@ -34,6 +34,17 @@ Known counts do not promote gaps to full coverage; unknown/gap cells without rec
 failure does not erase historical counts. Every returned object is independently owned and validated before leaving
 the Store boundary. Query/read failures never turn into fabricated empty history.
 
+Size eviction also records a monotonic per-source frontier in the two fixed `store_metadata` keys
+`log_metadata_evicted_before_system` and `log_metadata_evicted_before_application`. Later commits cannot recreate
+coverage before that frontier, even when accepted within-horizon future events were removed before the next poll.
+Counts may remain known-positive independently; missing proof is unknown, never a reconstructed full healthy zero.
+Each log write rechecks shared database/WAL size after acquiring the connection and refuses further growth while
+already over budget. Maintenance can recover space; failed pressure writes do not advance checkpoints.
+
+Independent review identified derived lower-bound underflow for valid early year-1 timestamps. Retention/initial
+bounds now clamp to the earliest valid non-zero UTC instant; empty clipped intervals add no evidence. Tests cover
+that edge, uint64 revisions, concurrent CAS contenders, cancelled writes and future-skew eviction/reconstruction.
+
 Remaining before delivery: share the existing seven-day/250-MiB maintenance budget with log rows (including WAL),
 verify bounded eviction under storage pressure, complete independent review and cancellation/concurrency tests,
 integrate collector lifecycle ordering, and run all required cross-platform checks.
