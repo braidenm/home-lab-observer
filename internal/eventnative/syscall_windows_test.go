@@ -8,6 +8,8 @@ import (
 	"testing"
 	"unsafe"
 
+	"golang.org/x/sys/windows"
+
 	"github.com/braidenm/home-lab-observer/internal/eventreader"
 )
 
@@ -42,7 +44,7 @@ func TestParseValuesPreservesPerFieldMissingAndInvalid(t *testing.T) {
 	buffer := make([]byte, len(selectedPaths)*variantBytes)
 	variants := unsafe.Slice((*evtVariant)(unsafe.Pointer(&buffer[0])), len(selectedPaths))
 	variants[0] = evtVariant{typeID: evtVariantNull}
-	variants[1] = evtVariant{value: 256, typeID: evtVariantByte}
+	variants[1] = evtVariant{value: 3, typeID: evtVariantUInt16}
 	variants[2] = evtVariant{value: 7, typeID: evtVariantUInt16 | evtVariantArray}
 	variants[3] = evtVariant{value: 1, typeID: evtVariantGUID}
 	variants[4] = evtVariant{value: 4, typeID: evtVariantUInt64 | evtVariantArray}
@@ -114,5 +116,96 @@ func TestUTF16ValidationRejectsUnpairedSurrogates(t *testing.T) {
 		if validUTF16(value) {
 			t.Fatalf("accepted invalid %#v", value)
 		}
+	}
+}
+
+func TestNarrowVariantsReadOnlyActiveUnionMember(t *testing.T) {
+	// Native C unions do not define inactive upper bytes as part of ByteVal or
+	// UInt16Val. These are valid scalar values, not numeric overflows.
+	level, err := optionalByte(evtVariant{value: uintptr(0xabcdef1234560104), typeID: evtVariantByte})
+	if err != nil || level != 4 {
+		t.Fatal("ByteVal read inactive upper union storage")
+	}
+	id, err := requiredUint16(evtVariant{value: uintptr(0xabcdef1234560037), typeID: evtVariantUInt16})
+	if err != nil || id != 55 {
+		t.Fatal("UInt16Val read inactive upper union storage")
+	}
+	for _, value := range []evtVariant{{value: 4, typeID: evtVariantUInt16}, {value: 4, typeID: evtVariantByte | evtVariantArray}} {
+		if _, err := optionalByte(value); err != eventreader.ErrFieldInvalid {
+			t.Fatal("wrong ByteVal type accepted")
+		}
+	}
+	for _, value := range []evtVariant{{value: 55, typeID: evtVariantByte}, {value: 55, typeID: evtVariantUInt16 | evtVariantArray}} {
+		if _, err := requiredUint16(value); err != eventreader.ErrFieldInvalid {
+			t.Fatal("wrong UInt16Val type accepted")
+		}
+	}
+}
+
+func TestNextSyscallResultsCloseEveryFailureHandle(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		result, event uintptr
+		returned      uint32
+		native        error
+		want          error
+		eof           bool
+	}{
+		{"permission-handle", 0, 42, 1, windows.ERROR_ACCESS_DENIED, errNativePermission, false},
+		{"generic-handle", 0, 42, 1, syscall.Errno(1460), errNativeFailed, false},
+		{"eof-handle", 0, 42, 1, errorNoMoreItems, errNativeFailed, false},
+		{"eof-count-without-handle", 0, 0, 1, errorNoMoreItems, errNativeFailed, false},
+		{"eof", 0, 0, 0, errorNoMoreItems, nil, true},
+		{"success-wrong-count", 1, 42, 0, nil, errNativeFailed, false},
+		{"success-null", 1, 0, 1, nil, errNativeFailed, false},
+		{"success", 1, 42, 1, nil, nil, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var closed []handle
+			event, eof, err := nextResult(test.result, test.event, test.returned, test.native, func(value handle) { closed = append(closed, value) })
+			if err != test.want || eof != test.eof {
+				t.Fatal("syscall result classification mismatch")
+			}
+			if test.name == "success" {
+				if event != 42 || len(closed) != 0 {
+					t.Fatal("successful handle not transferred")
+				}
+				return
+			}
+			if event != 0 {
+				t.Fatal("failed syscall leaked ownership to caller")
+			}
+			wantClosed := 0
+			if test.event != 0 {
+				wantClosed = 1
+			}
+			if len(closed) != wantClosed || (wantClosed == 1 && closed[0] != 42) {
+				t.Fatal("returned failure handle not closed exactly once")
+			}
+		})
+	}
+}
+
+func TestRenderSizeSyscallResultPreservesPermissionAndBounds(t *testing.T) {
+	for _, test := range []struct {
+		name            string
+		result          uintptr
+		needed, maximum uint32
+		native          error
+		want            error
+	}{
+		{"permission", 0, 0, 4096, windows.ERROR_ACCESS_DENIED, errNativePermission},
+		{"unavailable", 0, 0, 4096, errorEventChannelMissing, errNativeUnavailable},
+		{"generic", 0, 0, 4096, syscall.Errno(1460), errNativeFailed},
+		{"unexpected-success", 1, 64, 4096, windows.ERROR_ACCESS_DENIED, errNativeFailed},
+		{"zero", 0, 0, 4096, windows.ERROR_INSUFFICIENT_BUFFER, errNativeFailed},
+		{"exact", 0, 4096, 4096, windows.ERROR_INSUFFICIENT_BUFFER, nil},
+		{"over", 0, 4097, 4096, windows.ERROR_INSUFFICIENT_BUFFER, eventreader.ErrFieldTooLarge},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if err := renderSizeResult(test.result, test.needed, test.maximum, test.native); err != test.want {
+				t.Fatal("render size result mapping mismatch")
+			}
+		})
 	}
 }

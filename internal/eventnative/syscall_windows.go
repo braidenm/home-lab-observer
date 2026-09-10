@@ -125,15 +125,27 @@ func (a *systemAPI) next(query handle) (handle, bool, error) {
 	var event uintptr
 	var returned uint32
 	result, _, callErr := a.nextProc.Call(uintptr(query), 1, uintptr(unsafe.Pointer(&event)), 0, 0, uintptr(unsafe.Pointer(&returned)))
+	return nextResult(result, event, returned, callErr, a.close)
+}
+
+// The native return boundary owns all returned handles, even on failure. Keeping
+// it separate permits synthetic syscall-result tests without host event access.
+func nextResult(result, event uintptr, returned uint32, callErr error, closeHandle func(handle)) (handle, bool, error) {
 	if result == 0 {
+		if event != 0 {
+			closeHandle(handle(event))
+		}
 		if errnoIs(callErr, errorNoMoreItems) {
+			if event != 0 || returned != 0 {
+				return 0, false, errNativeFailed
+			}
 			return 0, true, nil
 		}
 		return 0, false, classifySyscall(callErr)
 	}
 	if returned != 1 || event == 0 {
 		if event != 0 {
-			a.close(handle(event))
+			closeHandle(handle(event))
 		}
 		return 0, false, errNativeFailed
 	}
@@ -211,19 +223,35 @@ func (a *systemAPI) renderBookmark(bookmark handle, maximum uint32) (string, err
 func (a *systemAPI) render(context, fragment handle, flags uintptr, maximum uint32) ([]byte, uint32, error) {
 	var needed, properties uint32
 	result, _, callErr := a.renderProc.Call(uintptr(context), uintptr(fragment), flags, 0, 0, uintptr(unsafe.Pointer(&needed)), uintptr(unsafe.Pointer(&properties)))
-	if result != 0 || !errnoIs(callErr, windows.ERROR_INSUFFICIENT_BUFFER) || needed == 0 {
-		return nil, 0, errNativeFailed
-	}
-	if needed > maximum {
-		return nil, 0, eventreader.ErrFieldTooLarge
+	if err := renderSizeResult(result, needed, maximum, callErr); err != nil {
+		return nil, 0, err
 	}
 	buffer := make([]byte, needed)
 	result, _, callErr = a.renderProc.Call(uintptr(context), uintptr(fragment), flags, uintptr(len(buffer)), uintptr(unsafe.Pointer(&buffer[0])), uintptr(unsafe.Pointer(&needed)), uintptr(unsafe.Pointer(&properties)))
 	runtime.KeepAlive(buffer)
-	if result == 0 || needed > uint32(len(buffer)) {
+	if result == 0 {
 		return nil, 0, classifySyscall(callErr)
 	}
+	if needed > uint32(len(buffer)) {
+		return nil, 0, errNativeFailed
+	}
 	return buffer[:needed], properties, nil
+}
+
+func renderSizeResult(result uintptr, needed, maximum uint32, callErr error) error {
+	if result != 0 {
+		return errNativeFailed
+	}
+	if !errnoIs(callErr, windows.ERROR_INSUFFICIENT_BUFFER) {
+		return classifySyscall(callErr)
+	}
+	if needed == 0 {
+		return errNativeFailed
+	}
+	if needed > maximum {
+		return eventreader.ErrFieldTooLarge
+	}
+	return nil
 }
 
 func (a *systemAPI) close(value handle) {
@@ -260,7 +288,7 @@ func optionalByte(value evtVariant) (uint8, error) {
 	if value.typeID == evtVariantNull {
 		return 0, eventreader.ErrFieldMissing
 	}
-	if value.typeID != evtVariantByte || value.value > 255 {
+	if value.typeID != evtVariantByte {
 		return 0, eventreader.ErrFieldInvalid
 	}
 	return uint8(value.value), nil
@@ -270,7 +298,7 @@ func requiredUint16(value evtVariant) (uint16, error) {
 	if value.typeID == evtVariantNull {
 		return 0, eventreader.ErrFieldMissing
 	}
-	if value.typeID != evtVariantUInt16 || value.value > 65535 {
+	if value.typeID != evtVariantUInt16 {
 		return 0, eventreader.ErrFieldInvalid
 	}
 	return uint16(value.value), nil

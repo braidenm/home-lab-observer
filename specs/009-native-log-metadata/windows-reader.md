@@ -33,9 +33,17 @@ close. The binding renders only those selected values using a fixed render conte
 full event XML, formatted messages or provider names. Native null/wrong type/oversized values have separate bounded
 errors. No borrowed native buffer crosses a subsequent native call. Level is uint8, EventID uint16 (widened into the
 existing uint32 code grammar), GUID is canonical UUID-byte order, and FILETIME is uint64.
+The EVT_VARIANT discriminator selects the active union member. Byte/UInt16 reads
+use only their respective low 8/16 bits on supported little-endian Windows targets;
+inactive upper union storage is not a range check and need not be zero. Wrong
+types/array flags still fail closed. Every nonzero event handle from EvtNext is
+closed on failed or contradictory results, including a handle accompanying EOF.
+Initial render size-probe permission errors retain their closed permission code;
+only ERROR_INSUFFICIENT_BUFFER permits allocation, within the configured bound.
 [render context](https://learn.microsoft.com/en-us/windows/win32/api/winevt/nf-winevt-evtcreaterendercontext),
 [selected rendering](https://learn.microsoft.com/en-us/windows/win32/api/winevt/nf-winevt-evtrender),
-[property types](https://learn.microsoft.com/en-us/windows/win32/api/winevt/ne-winevt-evt_system_property_id)
+[property types](https://learn.microsoft.com/en-us/windows/win32/api/winevt/ne-winevt-evt_system_property_id),
+[active variant union members](https://learn.microsoft.com/en-us/windows/win32/api/winevt/ns-winevt-evt_variant)
 
 ## Bookmark proof and intentionally unresolved binding work
 
@@ -61,7 +69,7 @@ to reconstruct WEVTAPI's bookmark handle; it is never logged, rendered publicly,
 EventRecordID is mandatory and a missing, malformed or out-of-range value fails the attempt. A native Null
 TimeCreated, EventID or provider GUID has its present bit clear and canonical value bytes zero; exactness compares
 both presence and value. This lets a validly bookmarkable row with a missing selected public field be discarded and
-advanced without inventing that field. A wrong native type, range, pointer or attributed oversize for any identity
+advanced without inventing that field. A wrong native type, pointer or attributed oversize for any identity
 field fails the attempt because equating different malformed raw values is not proof; malformed native bytes are
 never persisted. Level is deliberately absent from the identity anchor: it affects severity normalization but does
 not strengthen the fixed record identity. An overall render/protocol/combined-size failure also fails the attempt.
@@ -114,7 +122,7 @@ are discarded at q. No pre-window row is included by rounding down.
 [FILETIME](https://learn.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-filetime)
 
 Level 1→CRITICAL, 2→ERROR, 3→WARN, 4→INFO, 5→TRACE; zero/missing/unknown→UNKNOWN. A native Null TimeCreated or
-EventID is bookmarkable with explicit absence and then discards; a wrong-type/range identity field fails the attempt
+EventID is bookmarkable with explicit absence and then discards; a wrong-type identity field fails the attempt
 because its exact continuation identity is unprovable. Valid EventID plus an absent GUID uses WIN_id, or a valid GUID
 uses WIN_32lowerhex_id. An attributed oversized non-identity field discards the whole row; identity or combined-render
 oversize fails the attempt rather than accepting fallback. Native operation errors reject the tentative prefix with fixed reasons.
