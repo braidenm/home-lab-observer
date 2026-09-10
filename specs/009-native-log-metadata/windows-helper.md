@@ -22,6 +22,6 @@ environment and working directory, while the shared dispatcher still runs its re
 
 Synthetic tests inject the reader and preparation seams; they do not read or register a host event channel. They prove
 identity and argument rejection before private input, malformed request rejection before native open, cleanup before a
-closed response, protocol correlation, canary non-reflection and exact hidden dispatch. Packaged process deadline,
-kill/reap and trusted-executable resolution remain covered by the shared transport tests. Actual owned Windows event
+closed response, protocol correlation, canary non-reflection and exact hidden dispatch. Shared transport tests cover
+process deadline, kill/reap and trusted-executable resolution boundaries, not the final packaged composition. Actual owned Windows event
 fixtures, runtime activation and release publication are still required before claiming end-to-end support.

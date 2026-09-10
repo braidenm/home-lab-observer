@@ -21,7 +21,7 @@ Status: implementation contract; native activation and packaged proof pending.
 
 Verification includes strict option parsing, legacy/opt-in background persistence, no-source inactivity,
 independent scheduling/cache-only API behavior, shutdown order, and actual packaged helper identity/process tests.
-Windows continuation policy remains unaccepted until the owner resolves the documented generation-ID limitation.
+Windows continuation policy is accepted in ADR 011; actual owned native fixture acceptance remains required.
 
 ## Implementation evidence (not a release-completion claim)
 
@@ -33,5 +33,5 @@ after shutdown. Current and summary ports receive the same collector.
 The fixed Linux helper entrypoint has independent review and passed its synthetic entrypoint tests under Ubuntu WSL.
 Those tests use injected native-open/hardening seams and read no host logs. Linux test compilation/vet and the Linux
 main dependency inspection pass; the main imports neither native journal bindings, journal hardening nor purego.
-Full combined Windows Go tests/vet pass. Packaged end-to-end native activation and Windows policy acceptance remain
-separate gates, so no new preview is published from this integration branch yet.
+Full combined Windows Go tests/vet pass. Packaged end-to-end native activation remains a separate gate, so no new
+preview is published from this integration branch yet.
