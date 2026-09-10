@@ -97,6 +97,15 @@ limitations. Request the unified engine explicitly and continue requiring that e
 changed value. Check its effective in-memory COM property and the real saved-task lifecycle; neither inference from
 the diagnostic nor an in-memory test alone proves that registration succeeds. This choice changes no user authority.
 
+Run `34411927905` passed the engine comparison and identified a value difference only in the logon trigger's user.
+Microsoft documents [LogonTrigger.UserId](https://learn.microsoft.com/en-us/windows/win32/taskschd/logontrigger-userid)
+as accepting either a SID or account name; an empty identifier instead matches any user. The comparison may recognize
+only aliases resolved from the current process owner's trusted SID, never resolve a name supplied by the task.
+Accept a qualified account alias and, only for a proved local account, its bare name using Windows ordinal comparison.
+Keep the principal SID exact and reject empty, different, duplicated, attributed or nested trigger identities.
+Resolve the trusted alias through a fixed, hidden, timeout-bounded subprocess; do not add an unbounded domain lookup
+to lifecycle operations. Native no-registration tests and synthetic identity failures precede the saved-task gate.
+
 ## Acceptance and rollback
 
 Fake adapters verify exact arguments and manager states; native CI verifies syntax and isolated registrations when a
