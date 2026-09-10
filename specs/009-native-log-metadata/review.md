@@ -1,5 +1,19 @@
 # Spec 009 review record
 
+## Windows reader kernel review
+
+Root independently read the complete fixed-seam implementation, specification and
+synthetic tests. No blocker remains in this kernel slice. Review covers per-query
+and per-record close ownership, same-thread lifetime, strict bookmark proof versus
+generic failure, visited-row/byte limits, safe typed normalization and private
+checkpoint exclusion. An initial EOF/tail race was caught during design review;
+the tail must now prove a timestamp strictly older than the exact initial window
+before claiming zero coverage. Tests include the concurrent-arrival boundary.
+
+Native WEVTAPI binding, private bookmark anchor exactness against cleared/reused
+record IDs, owned native fixtures and the hidden helper entrypoint are still
+required. This review does not claim that Windows event acquisition is enabled.
+
 ## Contract checkpoint — reviewed; required CI pending
 
 This review does not approve native readers, persistence, API handlers, UI integration or a new release. Those are
@@ -64,6 +78,23 @@ successive minute attempts retaining one coalesced row. Full Go tests, vet and r
 SQLite transactions, shared age/size maintenance and native integration remain outstanding; this evidence does not
 claim those features are delivered.
 
+## Collector/cache implementation review
+
+Root and an independent reviewer examined the fixed-cadence collector, immutable commit retry, request correlation,
+latest-status overlays and session-only cache. Review found and corrected: an older volatile write-failure overlay
+overwriting newer durable status; storage time consuming the shared native deadline; treating definite revision
+conflicts as ambiguous confirmation; and retaining discarded cache records in an oversized backing array. Reset and
+summary-grid correlation were tightened as well. Root re-read the corrected implementation and ran the regressions.
+
+The collector now preloads checkpoints before the native lane and commits only after readers finish. Every Store
+phase has a fixed two-second context; native readers share a separate four-second context. Stop cancels and joins
+without closing the borrowed Store. Definite conflicts cannot append rejected events; uncertain commits retain only
+the documented one-retry/revision-resolution flow. The 200-event ring owns bounded retained storage.
+
+Root replaced a wall-clock sleep in the load/lane test with direct phase-order/deadline assertions; thirty repeated
+domain test runs and vet passed. Native process kill/reap remains the responsibility of the fixed reader adapters,
+not a capability claimed by cooperative test fakes. Application lifecycle wiring remains pending.
+
 ## Summary HTTP implementation review
 
 The optional authenticated GET/HEAD summary handler was independently reviewed by root, including strict query
@@ -77,3 +108,20 @@ response is validated by the closed JSON schema and shared semantic validator, i
 non-null partial reasons, large safe counters and nanosecond timestamps. Root independently ran all 12 emitted
 handler scenarios, focused API/domain tests, vet and repository policy successfully. Native wiring, current-event
 projection and UI remain pending; this endpoint slice does not claim those are enabled.
+## SQLite transaction and shared-maintenance review
+
+The optional log Store implementation received independent review of CAS atomicity, rollback, schema isolation,
+timestamp representation, privacy, safe counters and fixed-grid projection. Review found an early year-1 subtraction
+edge; derived floors now clamp without wrapping. Full history tests passed twenty repetitions and vet before the
+maintenance integration. No message body, event code or arbitrary native field is stored in minute history.
+
+Shared maintenance was separately implemented and reviewed by root. All historical row deletions/coverage trims share
+the configured work budget across host and log data, with actual chronological ordering and no host-first starvation.
+Review exposed a future-skew eviction case that could later reconstruct a false full zero. Two bounded durable
+eviction frontiers now prevent that reconstruction, and injected failures prove count/proof/frontier writes roll back
+together. The reviewer independently inspected the root frontier/pressure fixes and reported no blocker.
+
+Combined tests cover a one-row maintenance budget, 5,000 host plus 5,000 log records under pressure, actual combined
+allocation reclamation, fixed-width dates through year 9999, malformed/incompatible optional schema fallback,
+checkpoint preservation, concurrent CAS contenders and cancellation. Root full Go tests, vet, repository policy and
+diff checks pass. This is storage-library evidence; production/native wiring and release proof remain separate gates.

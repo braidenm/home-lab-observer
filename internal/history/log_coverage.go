@@ -10,6 +10,18 @@ import (
 
 const logRetention = 7 * 24 * time.Hour
 
+// Derived bounds must not wrap below the public timestamp domain. The zero
+// instant itself is excluded by the neutral contract.
+var earliestLogTime = time.Date(1, 1, 1, 0, 0, 0, 1, time.UTC)
+
+func logRetentionFloor(now time.Time, age time.Duration) time.Time {
+	floor := now.Add(-age)
+	if floor.Before(earliestLogTime) {
+		return earliestLogTime
+	}
+	return floor
+}
+
 var errLogCoverage = errors.New("invalid log coverage evidence")
 
 // A blank reason is positive evidence. UNKNOWN is absence, never a stored row.
@@ -68,9 +80,12 @@ func deriveLogCoverage(cp logobs.Checkpoint, b logobs.Batch) ([]logCoverageSegme
 	if cp.PreviousAttemptAt != nil {
 		start = *cp.PreviousAttemptAt
 	}
-	floor := q.Add(-logRetention)
+	floor := logRetentionFloor(q, logRetention)
 	if start.Before(floor) {
 		start = floor
+	}
+	if !start.Before(q) {
+		return nil, nil
 	}
 	var out []logCoverageSegment
 	if b.Kind == logobs.BatchNormal && b.CaughtUp {

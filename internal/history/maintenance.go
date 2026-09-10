@@ -165,6 +165,22 @@ func (s *Store) pruneAge(ctx context.Context, cutoff time.Time) (int64, error) {
 	}
 	defer tx.Rollback()
 	total := int64(0)
+	if validateLogSchema(ctx, tx) == nil {
+		total, err = s.pruneShared(ctx, tx, &cutoff)
+		if err != nil {
+			return 0, err
+		}
+		if total > 0 {
+			if err := incrementCounter(ctx, tx, "age_dropped", total); err != nil {
+				return 0, err
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			return 0, err
+		}
+		s.addHealthCounter("age_dropped", uint64(total))
+		return total, nil
+	}
 	result, err := tx.ExecContext(ctx, `DELETE FROM samples WHERE (metric,observed_at_ns) IN (SELECT metric,observed_at_ns FROM samples WHERE observed_at_ns<? ORDER BY observed_at_ns,metric LIMIT ?)`, cutoff.UnixNano(), s.config.BatchSize)
 	if err != nil {
 		return 0, err
@@ -200,6 +216,21 @@ func (s *Store) pruneSize(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	defer tx.Rollback()
+	if validateLogSchema(ctx, tx) == nil {
+		count, err := s.pruneShared(ctx, tx, nil)
+		if err != nil {
+			return 0, err
+		}
+		if count > 0 {
+			if err := incrementCounter(ctx, tx, "size_dropped", count); err != nil {
+				return 0, err
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			return 0, err
+		}
+		return count, nil
+	}
 	type candidate struct {
 		kind       string
 		metric     MetricID

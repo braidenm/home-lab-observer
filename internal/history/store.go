@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"modernc.org/sqlite"
@@ -54,6 +55,7 @@ type Store struct {
 	lock           *fileLock
 	health         Health
 	recoveryReason string
+	logReady       atomic.Bool
 }
 
 func Open(ctx context.Context, config Config, clock Clock) (*Store, error) {
