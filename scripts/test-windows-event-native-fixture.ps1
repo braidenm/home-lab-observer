@@ -386,6 +386,22 @@ try {
     }
     Assert-PrivateRegular $resourceDLL (2 * 1024 * 1024)
 
+    # Event Log consumes the generated resource independently of the publisher.
+    # Hosted runner temp ACLs need not grant LocalService access. Grant only
+    # traversal of this newly owned directory and read/execute of the public,
+    # synthetic resource DLL; never grant access to fixture exports or host data.
+    $eventLogAccount = [Security.Principal.SecurityIdentifier]::new('S-1-5-19')
+    $directoryAcl = Get-Acl -LiteralPath $ownedRoot
+    $directoryAcl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
+        $eventLogAccount, [Security.AccessControl.FileSystemRights]::Traverse,
+        [Security.AccessControl.AccessControlType]::Allow))
+    Set-Acl -LiteralPath $ownedRoot -AclObject $directoryAcl
+    $resourceAcl = Get-Acl -LiteralPath $resourceDLL
+    $resourceAcl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
+        $eventLogAccount, [Security.AccessControl.FileSystemRights]::ReadAndExecute,
+        [Security.AccessControl.AccessControlType]::Allow))
+    Set-Acl -LiteralPath $resourceDLL -AclObject $resourceAcl
+
     $publisherSource = Join-Path $PSScriptRoot '..\internal\eventnative\testdata\fixturepublisher\main_windows.c'
     Assert-PrivateRegular $publisherSource 65536
     $ownedPublisherSource = Join-Path $ownedRoot 'fixturepublisher.c'

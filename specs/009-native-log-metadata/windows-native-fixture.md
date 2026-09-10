@@ -136,6 +136,13 @@ child reap or owned-directory cleanup fails the job and must not be reported as 
 
 ## Honest coverage gaps and prototype gate
 
+The generated public synthetic resource DLL explicitly grants LocalService read/execute, with non-inherited traversal
+on its newly owned parent directory. This addresses a possible difference between the publisher's and Event Log
+service's access to runner temporary files; it is not a claim about the failure cause until hosted evidence confirms it.
+No ACL on an ancestor, host file, exported event file or installed product is changed. Removing the owned fixture after
+confirmed unregistration removes these temporary grants with it. Record-count diagnostics validate the exact scalar
+UInt64 variant but do not interpret its inactive array-count member.
+
 This fixture would prove the real Windows ABI, selected render types, bookmark mechanics, strict seek/reset behavior,
 thread lifetime and private-file continuation. Because it deliberately never queries production channels, it does
 not natively prove that a particular user's live `System` or `Application` permissions contain readable events;
