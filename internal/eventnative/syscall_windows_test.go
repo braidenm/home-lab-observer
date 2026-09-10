@@ -69,6 +69,11 @@ func TestParseBookmarkBufferRejectsInvalidShapeAndEncoding(t *testing.T) {
 			if _, err := parseBookmarkBuffer(test.buffer, test.properties); !errors.Is(err, errNativeFailed) {
 				t.Fatal("invalid bookmark render buffer was accepted")
 			}
+			if test.properties == 0 {
+				if _, err := parseBookmarkBuffer(test.buffer, 1); !errors.Is(err, errNativeFailed) {
+					t.Fatal("property-count compatibility bypassed buffer validation")
+				}
+			}
 		})
 	}
 }

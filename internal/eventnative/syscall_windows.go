@@ -205,6 +205,9 @@ func (a *systemAPI) renderBookmark(bookmark handle, maximum uint32) (string, err
 }
 
 func parseBookmarkBuffer(buffer []byte, properties uint32) (string, error) {
+	// Hosted Windows x64 and ARM64 return one for bookmark strings despite
+	// EvtRender documenting zero. Neither value describes an array here.
+	// Keep this compatibility exception separate from event-value rendering.
 	if properties > 1 || len(buffer) > int(maxBookmarkXMLBytes) || len(buffer)%2 != 0 || len(buffer) < 2 {
 		return "", errNativeFailed
 	}
