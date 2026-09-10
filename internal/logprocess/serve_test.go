@@ -43,7 +43,7 @@ func TestChildHardensBeforePrivateInput(t *testing.T) {
 			t.Fatal("private input before hardening")
 		}
 		return errors.New("private-hardening-error")
-	}, Open: func() (logobs.Reader, func(), error) { opened = true; return nil, nil, nil }}
+	}, Open: func() (logobs.Reader, func() error, error) { opened = true; return nil, nil, nil }}
 	var out bytes.Buffer
 	if Serve(context.Background(), cfg, trackedInput{bytes.NewReader(p), &read}, &out) == 0 || read || opened || out.Len() != 0 {
 		t.Fatal("failed hardening did not fail closed")
@@ -53,7 +53,7 @@ func TestChildInvalidPacketNeverOpensNative(t *testing.T) {
 	b, _, _ := serveFixture(t)
 	for _, p := range [][]byte{[]byte("private-invalid-cursor"), bytes.Repeat([]byte(" "), logprotocol.MaxRequestBytes+1)} {
 		opened := false
-		cfg := HelperConfig{Build: b, Harden: func() error { return nil }, Open: func() (logobs.Reader, func(), error) { opened = true; return nil, nil, nil }}
+		cfg := HelperConfig{Build: b, Harden: func() error { return nil }, Open: func() (logobs.Reader, func() error, error) { opened = true; return nil, nil, nil }}
 		var out bytes.Buffer
 		if Serve(context.Background(), cfg, bytes.NewReader(p), &out) == 0 || opened || out.Len() != 0 {
 			t.Fatal("invalid packet reached native or output")
@@ -63,8 +63,8 @@ func TestChildInvalidPacketNeverOpensNative(t *testing.T) {
 func TestChildNormalizesOpenFailureAndClosesBeforeOutput(t *testing.T) {
 	b, q, p := serveFixture(t)
 	closed := false
-	cfg := HelperConfig{Build: b, Harden: func() error { return nil }, Open: func() (logobs.Reader, func(), error) {
-		return nil, func() { closed = true }, errors.New("private-loader-error")
+	cfg := HelperConfig{Build: b, Harden: func() error { return nil }, Open: func() (logobs.Reader, func() error, error) {
+		return nil, func() error { closed = true; return nil }, errors.New("private-loader-error")
 	}}
 	var out bytes.Buffer
 	if Serve(context.Background(), cfg, bytes.NewReader(p), &out) != 0 || !closed {
@@ -79,29 +79,33 @@ func TestChildNormalizesOpenFailureAndClosesBeforeOutput(t *testing.T) {
 	}
 }
 func TestChildRejectsCleanupCancellationAndWrongBatch(t *testing.T) {
-	for _, mode := range []string{"cancel-close", "wrong-batch", "reader-failure"} {
+	for _, mode := range []string{"cancel-close", "wrong-batch", "reader-failure", "close-failure"} {
 		t.Run(mode, func(t *testing.T) {
 			b, q, p := serveFixture(t)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			closed := false
-			cfg := HelperConfig{Build: b, Harden: func() error { return nil }, Open: func() (logobs.Reader, func(), error) {
+			cfg := HelperConfig{Build: b, Harden: func() error { return nil }, Open: func() (logobs.Reader, func() error, error) {
 				return readerFunc(func(_ context.Context, _ logobs.ReadRequest) (logobs.Batch, error) {
-					if mode == "reader-failure" {
-						return logobs.Batch{}, errors.New("private-reader-error")
-					}
-					reason := logobs.ReasonLogHelperUnavailable
-					batch := logobs.Batch{Kind: logobs.BatchNormal, Source: q.Source, QueryStartedAt: q.QueryStartedAt, StartedAt: q.QueryStartedAt, FinishedAt: q.QueryStartedAt, SupportState: logobs.SupportUnavailable, CollectionState: logobs.CollectionNotRun, ReasonCode: &reason}
-					if mode == "wrong-batch" {
-						batch.ExpectedRevision = 2
-					}
-					return batch, nil
-				}), func() {
-					closed = true
-					if mode == "cancel-close" {
-						cancel()
-					}
-				}, nil
+						if mode == "reader-failure" {
+							return logobs.Batch{}, errors.New("private-reader-error")
+						}
+						reason := logobs.ReasonLogHelperUnavailable
+						batch := logobs.Batch{Kind: logobs.BatchNormal, Source: q.Source, QueryStartedAt: q.QueryStartedAt, StartedAt: q.QueryStartedAt, FinishedAt: q.QueryStartedAt, SupportState: logobs.SupportUnavailable, CollectionState: logobs.CollectionNotRun, ReasonCode: &reason}
+						if mode == "wrong-batch" {
+							batch.ExpectedRevision = 2
+						}
+						return batch, nil
+					}), func() error {
+						closed = true
+						if mode == "cancel-close" {
+							cancel()
+						}
+						if mode == "close-failure" {
+							return errors.New("private-cleanup-error")
+						}
+						return nil
+					}, nil
 			}}
 			var out bytes.Buffer
 			if Serve(ctx, cfg, bytes.NewReader(p), &out) == 0 || !closed || out.Len() != 0 {

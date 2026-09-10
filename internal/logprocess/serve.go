@@ -14,7 +14,7 @@ import (
 type HelperConfig struct {
 	Build  logprotocol.Build
 	Harden func() error
-	Open   func() (logobs.Reader, func(), error)
+	Open   func() (logobs.Reader, func() error, error)
 }
 
 // Serve processes exactly one bounded private request. The caller maps a nonzero
@@ -39,11 +39,12 @@ func Serve(parent context.Context, config HelperConfig, input io.Reader, output 
 	}
 	reader, closeReader, openErr := config.Open()
 	closed := false
+	var closeErr error
 	closeOnce := func() {
 		if !closed {
 			closed = true
 			if closeReader != nil {
-				closeReader()
+				closeErr = closeReader()
 			}
 		}
 	}
@@ -68,7 +69,7 @@ func Serve(parent context.Context, config HelperConfig, input io.Reader, output 
 		}
 	}
 	closeOnce()
-	if ctx.Err() != nil {
+	if ctx.Err() != nil || closeErr != nil {
 		return 1
 	}
 	response, err := logprotocol.EncodeResponse(config.Build, request, batch)
