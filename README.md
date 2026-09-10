@@ -1,20 +1,22 @@
 # Home Lab Observer
 
-Home Lab Observer is a cross-platform, headless-first observability service for a single machine. The downloadable preview collects host and process signals, optionally observes local Docker containers, keeps bounded numeric host history, and serves an authenticated local dashboard. Service observations, opt-in native logs and secure upload to a management application such as Platform Demo are planned extensions.
+Home Lab Observer is a cross-platform, headless-first observability service for a single machine. The downloadable preview collects host and process signals, optionally observes local Docker containers and native Windows/Linux log metadata, keeps bounded local history, and serves an authenticated local dashboard. Secure upload to a management application such as Platform Demo remains a planned extension.
 
 The project is intentionally public and self-contained. It does not contain, build from, or grant access to the private home-lab infrastructure repository.
 
 ## Project status
 
 The preview includes the [Spec 005](specs/005-local-data-plane/spec.md) loopback service, bounded history,
-real trends, and embedded local dashboard, plus [Spec 006](specs/006-container-observations/spec.md)
-opt-in container inventory and resource readings. See [build and run instructions](docs/local-service.md)
-and [connect a local Docker engine](docs/container-observations.md).
+real trends and embedded local dashboard; [Spec 006](specs/006-container-observations/spec.md) opt-in container
+inventory and resource readings; and [Spec 009](specs/009-native-log-metadata/spec.md) opt-in Windows/Linux native log
+metadata and bounded severity history. See [build and run instructions](docs/local-service.md),
+[connect a local Docker engine](docs/container-observations.md), and [native log guidance](docs/native-log-history.md).
 The project remains pre-release. [Native delivery instructions](docs/install.md) describe the verified preview archives
 and per-user helpers; [GitHub Releases](https://github.com/braidenm/home-lab-observer/releases) lists published versions.
 Windows/macOS previews are explicitly not publisher-signed/notarized.
-[Preview 2](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-preview.2) includes optional user-session
-background operation and bounded self-diagnostics. Remote sync remains a separate milestone.
+[Preview 3](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-preview.3) adds opt-in native Windows/Linux
+log metadata, bounded local severity summaries and a digest-bound Linux journal helper. Background operation remains
+per-user and headless; remote sync remains a separate milestone.
 
 ## Try it without development tools
 
@@ -28,11 +30,12 @@ Docker readings require an explicit local socket/pipe option. Installation does 
 
 ## Target product shape
 
-- One native download for Windows, macOS, and Linux, with no runtime language installation. Planned Linux log
-  observations use an optional bundled helper so the main observer retains its portability.
+- One native download for Windows, macOS, and Linux, with no runtime language installation. Linux native log
+  observations use a digest-bound bundled helper so the main observer retains its portability when logs are disabled.
 - Headless collection by default; an optional responsive dashboard is served on loopback only.
 - Host health, CPU, memory, disks, network, sensors when available, processes, services, Docker workloads, events, and bounded trends.
-- Logs from explicit sources such as journald, Windows Event Log, macOS unified logging, and Docker, with conservative privacy defaults.
+- Opt-in metadata from the local system journal on Linux and the System/Application event logs on Windows, with no
+  message bodies, remote upload or elevated installation. macOS native logs and Docker log bodies are not supported.
 - Versioned JSON and OpenMetrics-compatible endpoints for local and remote clients.
 - Optional signed Linux container for container-oriented deployments; native installs remain the authoritative source for full host metrics on Windows and macOS.
 - Read-only in the initial release. Permissioned operational actions are a separately specified capability.
@@ -42,6 +45,7 @@ Docker readings require an explicit local socket/pipe option. Installation does 
 ```text
 Native host/process adapters -> current reads + bounded numeric host history --+
 Optional local Docker adapter -> current in-memory container inventory --------+-> authenticated local API + embedded UI
+Optional Windows/Linux log adapters -> safe current metadata + bounded rollups-+
 
 Future: an explicitly enrolled outbound uploader -> Platform Demo or another compatible client
 ```
@@ -57,15 +61,16 @@ telemetry must not automatically grant control. Docker, operating-system service
 their own adapters and permission models; none will be exposed through a generic shell-command endpoint.
 See the [threat model](docs/security/threat-model.md) for the separation between observation and future control.
 
-### Next: safe native log observations
+### Native log metadata and history
 
-[Spec 009](specs/009-native-log-metadata/spec.md) is the active implementation plan, not a feature in preview 2.
-It adds opt-in Windows/Linux event metadata and meaningful severity trends without reading message bodies. The
+[Preview 3](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-preview.3) implements
+[Spec 009](specs/009-native-log-metadata/spec.md): opt-in Windows/Linux event metadata and meaningful severity trends
+without reading message bodies. The
 [Linux helper decision](docs/adr/010-optional-linux-journal-helper.md) keeps native-library failures separate from
 host/Docker monitoring. Charts distinguish captured counts, proven empty periods and missing coverage; Linux results
 describe only logs accessible to the running account. macOS native logs, raw bodies and remote log upload remain later
 work. No installation grants elevated permissions or enables log collection automatically.
-The [in-development operator guide](docs/native-log-history.md) explains source selection, history, rollback and
+The [operator guide](docs/native-log-history.md) explains source selection, history, rollback and
 the [accepted Windows reset-detection limitation](docs/adr/011-windows-log-continuation-proof.md).
 
 ## Native snapshot preview
@@ -96,12 +101,12 @@ exits 1 but cannot guarantee a complete JSON document.
 
 ## Supported delivery targets
 
-| Target | Native binary | Background service | Local UI | Docker observations |
-| --- | --- | --- | --- | --- |
-| Linux amd64/arm64 | Downloadable preview | Spec 008: systemd user service | Embedded preview | Opt-in local Unix socket |
-| macOS Intel/Apple silicon | Downloadable preview | Spec 008: user LaunchAgent | Embedded preview | Opt-in local Unix socket; Desktop live validation pending |
-| Windows amd64/arm64 | Downloadable preview | Spec 008: signed-in user task; machine-wide service later | Embedded preview | Opt-in local named pipe; Desktop live validation pending |
-| Linux container amd64/arm64 | Planned | Container restart policy | Planned | Planned through a constrained proxy |
+| Target | Native binary | Per-user background mode | Local UI | Docker observations | Native log metadata |
+| --- | --- | --- | --- | --- | --- |
+| Linux amd64/arm64 | Downloadable preview | systemd user service | Embedded preview | Opt-in local Unix socket | Opt-in local system journal; bundled helper and compatible libsystemd required |
+| macOS Intel/Apple silicon | Downloadable preview | User LaunchAgent | Embedded preview | Opt-in local Unix socket; Desktop live validation pending | Unsupported in Preview 3 |
+| Windows amd64/arm64 | Downloadable preview | Signed-in user task; machine-wide service later | Embedded preview | Opt-in local named pipe; Desktop live validation pending | Opt-in System and Application event metadata |
+| Linux container amd64/arm64 | Planned | Container restart policy | Planned | Planned through a constrained proxy | Not supported |
 
 ## License
 

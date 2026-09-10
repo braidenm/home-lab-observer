@@ -1,15 +1,16 @@
 # Install and run the native preview
 
 Home Lab Observer runs on your machine. It collects host/process readings and serves a private local dashboard; Docker
-observations are optional. You do **not** need Docker, Go, Node, a GitHub account, or a GitHub token to run the native
-package. Nothing is sent to Platform Demo by this preview.
+and Windows/Linux native log metadata are separate, explicit options. You do **not** need Docker, Go, Node, a GitHub
+account, or a GitHub token to run the native package. Nothing is sent to Platform Demo by this preview.
 
 ## Choose your download
 
 The examples below use published
-[0.1.0-preview.2](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-preview.2), which includes optional
-background operation. Preview 1 supports foreground operation only. Always use an installer from the chosen release;
-do not combine installers and archives from different versions.
+[0.1.0-preview.3](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-preview.3), which includes optional
+per-user background operation and opt-in native log metadata on Windows/Linux. Older previews remain valid rollback
+targets for their documented feature sets. Always use an installer from the chosen release; do not combine installers,
+manifests, checksums and archives from different versions.
 Choose your **host OS**, not Docker's virtual-machine OS:
 
 | Machine | Archive suffix |
@@ -21,9 +22,11 @@ Choose your **host OS**, not Docker's virtual-machine OS:
 | Linux Intel/AMD | `linux_amd64.tar.gz` |
 | Linux ARM64 | `linux_arm64.tar.gz` |
 
-Each archive contains the observer executable, a launch helper, `START-HERE.md`, and the MIT license. Match its filename
-and SHA-256 to that release's `SHA256SUMS` **before** extracting/running. Do not accept checksums from an unrelated site.
-The release manifest includes exact versioned URLs, sizes and hashes for all six archives.
+Each archive contains the observer executable, a launch helper, `START-HERE.md`, and the MIT license. Preview 3 Linux
+archives also contain the matching `observer-journal-helper`; Windows and macOS archives retain the four-file profile.
+Match the archive filename and SHA-256 to that release's `SHA256SUMS` **before** extracting/running. Do not accept
+checksums from an unrelated site. The release manifest includes exact versioned URLs, sizes, hashes and content profiles
+for all six archives.
 
 Windows/macOS previews do not yet have publisher signing/notarization. A checksum checks bytes against a release you
 trust; it does not establish publisher identity. Build attestations can separately verify the GitHub repository/workflow.
@@ -49,6 +52,8 @@ For headless use, leave the observer running without opening a browser. To inspe
 On Windows, use `.\observer.exe version --json`. [Local service options](local-service.md) cover a different local port,
 state directory and authentication. [Docker observations](container-observations.md) explains explicit local socket/pipe
 configuration. The observer never discovers credentials or installs/enables Docker.
+[Native log metadata](native-log-history.md) explains the separately enabled Windows/Linux sources. Log message bodies
+are not collected, macOS native logs are unsupported, and this preview does not upload log metadata.
 
 ## Optional per-user installation helpers
 
@@ -59,14 +64,17 @@ version; there is no auto-update or moving `latest` execution target.
 Linux/macOS:
 
 ```sh
-bash ./install.sh --version 0.1.0-preview.2
+bash ./install.sh --version 0.1.0-preview.3
 ```
 
 Windows PowerShell:
 
 ```powershell
-.\install.ps1 -Version 0.1.0-preview.2
+.\install.ps1 -Version 0.1.0-preview.3
 ```
+
+For Preview 3, an online install also downloads the same release's `release-manifest.json` and `SHA256SUMS`, validates
+their bounded contents, and asks the staged observer to verify that its build identity matches the selected archive.
 
 The helper prints the installed launcher path. It does not start the observer, change your PATH, request administrator
 access, register a service or open a browser. If script execution is restricted by your organization, use the verified
@@ -84,18 +92,36 @@ An unmanaged nonempty directory is rejected rather than overwritten.
 
 ## Offline install, upgrade, rollback and removal
 
-For an offline installation, provide the downloaded archive and its independently verified SHA-256:
+Preview 3 uses the v2 package profile. Its offline installation requires the downloaded archive, its independently
+verified SHA-256, and the matching `release-manifest.json` and `SHA256SUMS` from the same release:
 
 ```sh
-bash ./install.sh --version 0.1.0-preview.2 --archive ./home-lab-observer_0.1.0-preview.2_linux_amd64.tar.gz --checksum YOUR_64_HEX_SHA256
+bash ./install.sh --version 0.1.0-preview.3 \
+  --archive ./home-lab-observer_0.1.0-preview.3_linux_amd64.tar.gz \
+  --checksum YOUR_64_HEX_SHA256 \
+  --manifest ./release-manifest.json \
+  --checksums ./SHA256SUMS
 ```
 
-PowerShell uses `-Version`, `-Archive`, and `-Checksum` with the same meaning. Replace the illustrative checksum; it is
-not a token or secret. The helper rejects a mismatch or unsafe archive without switching the current version.
+PowerShell uses the same required inputs:
+
+```powershell
+.\install.ps1 -Version 0.1.0-preview.3 `
+  -Archive .\home-lab-observer_0.1.0-preview.3_windows_amd64.zip `
+  -Checksum YOUR_64_HEX_SHA256 `
+  -Manifest .\release-manifest.json `
+  -Checksums .\SHA256SUMS
+```
+
+Replace the illustrative checksum; it is not a token or secret. The installer verifies the archive checksum, the
+manifest's checksum and the archive/build identity before switching the current version. Supplying only the legacy
+archive/checksum pair is deliberately rejected for a v2 package.
 
 Stop the observer before upgrading. Install a new explicit version with the same helper/root; the previous version is
 retained. To select a previously installed version, use `--rollback VERSION` or `-Rollback VERSION`. These are program
 rollbacks, not database backups: check release compatibility notes before opening newer state with an older binary.
+Before rolling back from Preview 3 to a version without native log settings, disable the background registration using
+Preview 3, then re-enable the older version without `--log-source`; see [native log metadata](native-log-history.md).
 
 `--uninstall` / `-Uninstall` removes only recognized managed program files. Observation history and the local token are
 preserved. Installation never enables background startup. If you explicitly enabled it afterward, use
