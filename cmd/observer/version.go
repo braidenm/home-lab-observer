@@ -5,9 +5,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/braidenm/home-lab-observer/internal/buildidentity"
 	"io"
+	"os"
 	"runtime"
+	"strings"
+
+	"github.com/braidenm/home-lab-observer/internal/buildidentity"
+	"github.com/braidenm/home-lab-observer/internal/releasepack"
 )
 
 // Authoritative for v2 releases; empty only for legacy builds and development.
@@ -24,12 +28,19 @@ type buildVersion struct {
 
 func runVersion(args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("version", flag.ContinueOnError)
-	flags.SetOutput(stderr)
+	var diagnostics strings.Builder
+	flags.SetOutput(&diagnostics)
 	asJSON := flags.Bool("json", false, "write the observer-build/v1 description")
+	releaseSchema := flags.Bool("release-schema", false, "write the required release manifest schema without collection")
+	manifest := flags.String("release-manifest", "", "verify a bounded staged release manifest without starting the observer")
+	archiveHash := flags.String("archive-sha256", "", "already verified archive SHA-256 (manifest verification only)")
+	archiveSize := flags.Int64("archive-size", 0, "already verified archive byte size (manifest verification only)")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
+			_, _ = io.WriteString(stderr, diagnostics.String())
 			return 0
 		}
+		fmt.Fprintln(stderr, "invalid version options")
 		return 2
 	}
 	if flags.NArg() != 0 {
@@ -40,6 +51,35 @@ func runVersion(args []string, stdout, stderr io.Writer) int {
 	if identityErr != nil {
 		fmt.Fprintln(stderr, "BUILD_IDENTITY_INVALID")
 		return 1
+	}
+	if *releaseSchema {
+		if *asJSON || *manifest != "" || *archiveHash != "" || *archiveSize != 0 {
+			fmt.Fprintln(stderr, "invalid version options")
+			return 2
+		}
+		schema := releasepack.SchemaVersion
+		if releaseIdentity != "" {
+			schema = releasepack.SchemaVersionV2
+		}
+		if _, err := fmt.Fprintln(stdout, schema); err != nil {
+			return 1
+		}
+		return 0
+	}
+	if *manifest != "" || *archiveHash != "" || *archiveSize != 0 {
+		if *manifest == "" || *archiveHash == "" || *archiveSize <= 0 || *asJSON {
+			fmt.Fprintln(stderr, "invalid version options")
+			return 2
+		}
+		executable, err := os.Executable()
+		if err != nil || releasepack.VerifyInstalled(releasepack.Installed{ManifestPath: *manifest, ExecutablePath: executable, Identity: identity, ArchiveSHA256: *archiveHash, ArchiveSize: *archiveSize}) != nil {
+			fmt.Fprintln(stderr, "INSTALLED_RELEASE_INVALID")
+			return 1
+		}
+		if _, err := fmt.Fprintln(stdout, "RELEASE_MANIFEST_VERIFIED"); err != nil {
+			return 1
+		}
+		return 0
 	}
 	info := buildVersion{SchemaVersion: "observer-build/v1", Version: identity.Version, Commit: identity.Commit, OS: runtime.GOOS, Arch: runtime.GOARCH, GoVersion: runtime.Version()}
 	var err error

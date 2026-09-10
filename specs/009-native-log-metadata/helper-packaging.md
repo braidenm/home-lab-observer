@@ -57,8 +57,26 @@ atomic version selection. Installation never starts the helper, elevates,
 installs libsystemd or restarts a running instance. Existing v1 directories remain
 valid rollback targets; explicit restart and observation-state preservation remain.
 
-Installer implementation is the next commit; this first contract/library slice
-does not yet claim installer acceptance. Verification uses synthetic archives and temporary program roots. Required
+The static `observer version --release-manifest PATH --archive-sha256 HASH
+--archive-size BYTES` verifier runs only after checksum verification and fixed
+private archive extraction. It derives its executable from `os.Executable()` and
+its identity from the embedded record; no helper execution, network or permission
+change occurs. It checks the closed manifest, exact selected archive metadata,
+exact adjacent file set and actual helper hash/build record. Successful output is
+the fixed `RELEASE_MANIFEST_VERIFIED` line, otherwise only fixed errors. Ordinary
+version and version --json retain the original six-field observer-build/v1 wire.
+
+New online installers refuse older binaries lacking this hook with guidance to
+use that release's installer; there is no insecure online fallback. Offline
+no-manifest exact-four-file v1 installation and retained-v1 rollback remain.
+After the ordinary version identity check succeeds, the fixed additive
+`version --release-schema` probe detects new v2 records and refuses missing
+manifests even for four-file Windows/macOS profiles or a missing Linux helper.
+Old binaries may reject that option; only the explicit offline four-file path
+allows this legacy result. Malformed new identity fails the earlier ordinary
+version check, so it cannot use the fallback. The schema probe is mutually
+exclusive with JSON/manifest modes and emits no private record or digest.
+Verification uses synthetic archives and temporary program roots. Required
 cases include missing/extra/linked helpers, mixed version/commit/architecture,
 wrong embedded digest, helper tampering, malformed profile metadata, bounded
 expansion, interrupted pair staging and v2-to-v1 rollback. Native release smoke

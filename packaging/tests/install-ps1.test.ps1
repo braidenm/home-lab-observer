@@ -23,11 +23,15 @@ function Invoke-Installer([string[]] $Arguments, [bool] $ExpectSuccess = $true) 
     return $output
 }
 
-function New-TestBinary([string] $Path, [string] $Version) {
+function New-TestBinary([string] $Path, [string] $Version, [string] $Profile = 'legacy') {
     $source = @"
 using System;
 public static class ObserverFixture {
     public static int Main(string[] args) {
+        if (args.Length > 1 && args[0] == "version" && args[1] == "--release-schema" && "$Profile" == "v2-core") {
+            Console.WriteLine("observer-release/v2");
+            return 0;
+        }
         if (args.Length > 1 && args[0] == "version" && args[1] == "--json") {
             Console.WriteLine("{\"schema_version\":\"observer-build/v1\",\"version\":\"$Version\",\"commit\":\"0123456789abcdef0123456789abcdef01234567\",\"os\":\"windows\",\"arch\":\"$Architecture\",\"go_version\":\"go1.27.1\"}");
             return 0;
@@ -49,7 +53,7 @@ function New-Archive([string] $Version, [string] $IdentityVersion = $Version, [s
     $build = Join-Path $Temporary "build-$Version-$IdentityVersion-$Unsafe"
     $root = Join-Path $build $rootName
     [IO.Directory]::CreateDirectory($root) | Out-Null
-    New-TestBinary (Join-Path $root 'observer.exe') $IdentityVersion
+    New-TestBinary (Join-Path $root 'observer.exe') $IdentityVersion $Unsafe
     [IO.File]::Copy((Join-Path $RepositoryRoot 'packaging\resources\LICENSE'), (Join-Path $root 'LICENSE'))
     [IO.File]::Copy((Join-Path $RepositoryRoot 'packaging\resources\START-HERE.md'), (Join-Path $root 'START-HERE.md'))
     [IO.File]::Copy((Join-Path $RepositoryRoot 'packaging\resources\Run-Observer.cmd'), (Join-Path $root 'Run-Observer.cmd'))
@@ -147,6 +151,20 @@ try {
     $previous = ([IO.File]::ReadAllText((Join-Path $InstallRoot 'previous'))).Trim()
     Assert-True -Condition ($selected -ceq $V1) -Message 'rollback did not select v1'
     Assert-True -Condition ($previous -ceq $V3) -Message 'rollback did not retain v3'
+    $V2Core = New-Archive '0.1.0-preview.4' '0.1.0-preview.4' 'v2-core'
+    $v2Refusal = Invoke-Installer @('-Version', '0.1.0-preview.4', '-Archive', $V2Core, '-Checksum', (Get-FileHash $V2Core -Algorithm SHA256).Hash, '-InstallRoot', $InstallRoot) $false
+    Assert-True -Condition ($v2Refusal.Contains('requires -Manifest and -Checksums')) -Message 'v2 four-file profile silently fell back to legacy'
+
+    $ManifestPath = Join-Path $Temporary 'release-manifest.json'
+    $ManifestSums = Join-Path $Temporary 'manifest-checksums'
+    [IO.File]::WriteAllText($ManifestPath, '{"synthetic":"legacy verification dispatch"}')
+    [IO.File]::WriteAllText($ManifestSums, ((Get-FileHash $ManifestPath -Algorithm SHA256).Hash.ToLowerInvariant() + "  release-manifest.json`n"))
+    # Legacy executables do not support the manifest hook; no online-style fallback.
+    $refusal = Invoke-Installer @('-Version', $V2, '-Archive', $Archive2, '-Checksum', (Get-FileHash $Archive2 -Algorithm SHA256).Hash, '-Manifest', $ManifestPath, '-Checksums', $ManifestSums, '-InstallRoot', $InstallRoot) $false
+    Assert-True -Condition ($refusal.Contains('installer from that release')) -Message 'legacy manifest refusal omitted remediation'
+    Assert-True -Condition (([IO.File]::ReadAllText((Join-Path $InstallRoot 'current'))).Trim() -ceq $V1) -Message 'manifest failure changed current version'
+    [IO.File]::WriteAllText($ManifestSums, (('0' * 64) + "  release-manifest.json`n"))
+    Invoke-Installer @('-Version', $V2, '-Archive', $Archive2, '-Checksum', (Get-FileHash $Archive2 -Algorithm SHA256).Hash, '-Manifest', $ManifestPath, '-Checksums', $ManifestSums, '-InstallRoot', $InstallRoot) $false | Out-Null
 
     $Background = Join-Path $InstallRoot 'background'
     [IO.Directory]::CreateDirectory($Background) | Out-Null

@@ -35,6 +35,14 @@ make_archive() {
   cat > "$build/$root/observer" <<EOF
 #!/bin/sh
 if [ "\${1:-}" = version ]; then
+  if [ "\${2:-}" = --release-schema ] && { [ "$unsafe" = v2 ] || [ "$unsafe" = v2-missing ]; }; then
+    printf '%s\n' observer-release/v2
+    exit 0
+  fi
+  if [ "\${2:-}" = --release-manifest ] && [ "$unsafe" = v2 ]; then
+    printf '%s\n' RELEASE_MANIFEST_VERIFIED
+    exit 0
+  fi
   printf '%s\n' 'Home Lab Observer $identity_version ($observer_os/$observer_arch, commit 0123456789abcdef0123456789abcdef01234567)'
   exit 0
 fi
@@ -50,6 +58,8 @@ EOF
     ln -s LICENSE "$build/$root/START-HERE.md"
   elif [ "$unsafe" = extra ]; then
     printf 'unexpected\n' > "$build/$root/secret.txt"
+  elif [ "$unsafe" = v2 ]; then
+    printf 'synthetic-never-executed-helper\n' > "$build/$root/observer-journal-helper"
   fi
   archive="$temporary/$root-$identity_version-$unsafe.tar.gz"
   tar -czf "$archive" -C "$build" "$root"
@@ -164,4 +174,43 @@ expect_failure bash "$installer" --rollback "$v1" --archive "$archive1" --checks
 bash "$installer" --uninstall --install-root "$install_root"
 test ! -e "$install_root"
 test "$(cat "$state_root/sentinel")" = keep-token-and-history
+# These synthetic fixtures exercise installer dispatch/staging only. The Go
+# tests separately verify real embedded records and manifest content.
+if [ "$observer_os" = linux ]; then
+  pair_root="$temporary/pair installation"
+  pair_archive=$(make_archive 0.1.0-preview.4 0.1.0-preview.4 v2)
+  pair_hash=$(sha256_file "$pair_archive")
+  printf '%s\n' '{"synthetic":"manifest dispatch fixture"}' > "$temporary/release-manifest.json"
+  printf '%s  release-manifest.json\n' "$(sha256_file "$temporary/release-manifest.json")" > "$temporary/pair-checksums"
+  expect_failure bash "$installer" --version 0.1.0-preview.4 --archive "$pair_archive" --checksum "$pair_hash" --install-root "$pair_root"
+  test ! -e "$pair_root"
+  missing_archive=$(make_archive 0.1.0-preview.5 0.1.0-preview.5 v2-missing)
+  expect_failure bash "$installer" --version 0.1.0-preview.5 --archive "$missing_archive" --checksum "$(sha256_file "$missing_archive")" --install-root "$pair_root"
+  test ! -e "$pair_root"
+  bash "$installer" --version "$v1" --archive "$archive1" --checksum "$checksum1" --install-root "$pair_root"
+  mkdir "$temporary/interrupted-copy-bin"
+  real_cp=$(command -v cp)
+  cat > "$temporary/interrupted-copy-bin/cp" <<EOF
+#!/bin/sh
+for destination do :; done
+case "\$destination" in */.incoming-*/observer-journal-helper) exit 1 ;; esac
+exec "$real_cp" "\$@"
+EOF
+  chmod 700 "$temporary/interrupted-copy-bin/cp"
+  expect_failure env PATH="$temporary/interrupted-copy-bin:$PATH" bash "$installer" --version 0.1.0-preview.4 --archive "$pair_archive" --checksum "$pair_hash" --manifest "$temporary/release-manifest.json" --checksums "$temporary/pair-checksums" --install-root "$pair_root"
+  test "$(cat "$pair_root/current")" = "$v1"
+  test ! -e "$pair_root/versions/0.1.0-preview.4"
+  test -z "$(find "$pair_root/versions" -mindepth 1 -maxdepth 1 -name '.incoming-*' -print -quit)"
+  bash "$installer" --version 0.1.0-preview.4 --archive "$pair_archive" --checksum "$pair_hash" --manifest "$temporary/release-manifest.json" --checksums "$temporary/pair-checksums" --install-root "$pair_root"
+  test -f "$pair_root/versions/0.1.0-preview.4/observer-journal-helper"
+  test "$(cat "$pair_root/current")" = 0.1.0-preview.4
+  bash "$installer" --rollback "$v1" --install-root "$pair_root"
+  test "$(cat "$pair_root/current")" = "$v1"
+  expect_failure bash "$installer" --version "$v2" --archive "$archive2" --checksum "$checksum2" --manifest "$temporary/release-manifest.json" --checksums "$temporary/pair-checksums" --install-root "$pair_root"
+  test "$(cat "$pair_root/current")" = "$v1"
+  printf '%s  release-manifest.json\n' "$(printf '%064d' 0)" > "$temporary/bad-manifest-checksums"
+  expect_failure bash "$installer" --version 0.1.0-preview.4 --archive "$pair_archive" --checksum "$pair_hash" --manifest "$temporary/release-manifest.json" --checksums "$temporary/bad-manifest-checksums" --install-root "$pair_root"
+  bash "$installer" --uninstall --install-root "$pair_root"
+  test ! -e "$pair_root"
+fi
 printf 'Bash installer lifecycle and safety tests passed.\n'
