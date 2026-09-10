@@ -131,7 +131,9 @@ type checkedAPI struct {
 	inner        eventAPI
 	thread       uint32
 	open         map[handle]bool
-	allowedFiles map[string]bool
+	allowedFiles map[string]string
+	queryStages  map[handle]string
+	eventStages  map[handle]string
 	calls        int
 }
 
@@ -154,10 +156,15 @@ func (a *checkedAPI) own(value handle, err error) (handle, error) {
 }
 func (a *checkedAPI) query(path, expression string, flags uint32) (handle, error) {
 	a.check()
-	if !a.allowedFiles[path] || expression != "*" || (flags != queryFilePath|queryForwardDirection && flags != queryFilePath|queryReverseDirection) {
+	stage, allowed := a.allowedFiles[path]
+	if !allowed || expression != "*" || (flags != queryFilePath|queryForwardDirection && flags != queryFilePath|queryReverseDirection) {
 		a.t.Fatal("native fixture query escaped its fixed private EVTX boundary")
 	}
-	return a.own(a.inner.query(path, expression, flags))
+	value, err := a.own(a.inner.query(path, expression, flags))
+	if value != 0 {
+		a.queryStages[value] = stage
+	}
+	return value, err
 }
 func (a *checkedAPI) renderContext(paths []string) (handle, error) {
 	a.check()
@@ -168,9 +175,21 @@ func (a *checkedAPI) renderContext(paths []string) (handle, error) {
 }
 func (a *checkedAPI) next(query handle) (handle, bool, error) {
 	a.check()
+	stage := a.queryStages[query]
 	value, exhausted, err := a.inner.next(query)
+	switch {
+	case err != nil:
+		markFixtureStage(a.t, stage+"-native-next-error")
+	case exhausted:
+		markFixtureStage(a.t, stage+"-native-next-eof")
+	case value == 0:
+		markFixtureStage(a.t, stage+"-native-next-invalid")
+	default:
+		markFixtureStage(a.t, stage+"-native-next-record")
+	}
 	if value != 0 {
 		a.open[value] = true
+		a.eventStages[value] = stage
 	}
 	return value, exhausted, err
 }
@@ -188,7 +207,15 @@ func (a *checkedAPI) updateBookmark(bookmark, event handle) error {
 }
 func (a *checkedAPI) renderValues(context, event handle, maximum uint32) (nativeValues, error) {
 	a.check()
-	return a.inner.renderValues(context, event, maximum)
+	stage := a.eventStages[event]
+	markFixtureStage(a.t, stage+"-render-start")
+	values, err := a.inner.renderValues(context, event, maximum)
+	if err != nil {
+		markFixtureStage(a.t, stage+"-render-error")
+	} else {
+		markFixtureStage(a.t, stage+"-render-ok")
+	}
+	return values, err
 }
 func (a *checkedAPI) renderBookmark(bookmark handle, maximum uint32) (string, error) {
 	a.check()
@@ -200,6 +227,8 @@ func (a *checkedAPI) close(value handle) {
 		a.t.Fatal("native fixture closed an unknown or already closed handle")
 	}
 	delete(a.open, value)
+	delete(a.queryStages, value)
+	delete(a.eventStages, value)
 	a.inner.close(value)
 }
 
@@ -210,10 +239,10 @@ func TestOwnedWindowsNativeFixture(t *testing.T) {
 		t.Fatal("WEVTAPI is unavailable on a supported fixture runner")
 	}
 	api := &checkedAPI{
-		t: t, inner: native, open: make(map[handle]bool),
-		allowedFiles: map[string]bool{
-			files.systemBefore: true, files.systemAfter: true,
-			files.applicationBefore: true, files.applicationAfter: true,
+		t: t, inner: native, open: make(map[handle]bool), queryStages: make(map[handle]string), eventStages: make(map[handle]string),
+		allowedFiles: map[string]string{
+			files.systemBefore: "system-before", files.systemAfter: "system-after",
+			files.applicationBefore: "application-before", files.applicationAfter: "application-after",
 		},
 	}
 	runtime.LockOSThread()
