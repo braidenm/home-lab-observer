@@ -12,8 +12,9 @@ opt-in container inventory and resource readings. See [build and run instruction
 and [connect a local Docker engine](docs/container-observations.md).
 The project remains pre-release. [Native delivery instructions](docs/install.md) describe the verified preview archives
 and per-user helpers; [GitHub Releases](https://github.com/braidenm/home-lab-observer/releases) lists published versions.
-Windows/macOS previews are explicitly not publisher-signed/notarized. Spec 008 adds optional user-session background
-operation; choose a release whose notes include that support. Remote sync remains a separate milestone.
+Windows/macOS previews are explicitly not publisher-signed/notarized.
+[Preview 2](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-preview.2) includes optional user-session
+background operation and bounded self-diagnostics. Remote sync remains a separate milestone.
 
 ## Try it without development tools
 

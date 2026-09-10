@@ -2,7 +2,7 @@
 
 The foreground local service is the native preview. [Verified archives and per-user installation helpers](install.md)
 provide a path without development tools. [Optional user-session background operation](background-operation.md) is
-specified separately; check release notes for availability. Publisher-signed installers remain a later milestone.
+available in preview 2. Publisher-signed installers remain a later milestone.
 No GitHub token, Platform Demo account, or Docker installation is needed to build and run this preview.
 
 ## Build and run

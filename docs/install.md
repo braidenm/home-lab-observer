@@ -6,10 +6,10 @@ package. Nothing is sent to Platform Demo by this preview.
 
 ## Choose your download
 
-Open [GitHub Releases](https://github.com/braidenm/home-lab-observer/releases) and choose the explicitly labeled preview.
-The first published version is [0.1.0-preview.1](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-preview.1).
-The examples below target `0.1.0-preview.2`, which adds optional background operation. Confirm that version is listed
-before running them; preview 1 supports foreground operation only. Always use an installer from the chosen release.
+The examples below use published
+[0.1.0-preview.2](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-preview.2), which includes optional
+background operation. Preview 1 supports foreground operation only. Always use an installer from the chosen release;
+do not combine installers and archives from different versions.
 Choose your **host OS**, not Docker's virtual-machine OS:
 
 | Machine | Archive suffix |
