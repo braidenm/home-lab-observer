@@ -1,9 +1,11 @@
-# Owned Windows native event fixture proposal
+# Owned Windows native event fixture
 
-Status: reviewed test-only prototype, not accepted native evidence. Guarded hosted workflows have executed on x64
-and ARM64, but the owned channels still contained zero records through run `34521098092`. Registration metadata
-checks pass; successful acquisition has not been demonstrated. No native support or release claim follows from
-these failed attempts. The current isolated-session experiment still requires successful hosted evidence.
+Status: native acceptance passed on hosted Windows x64 and ARM64 at commit `68cefe0`, run
+[`34525324243`](https://github.com/braidenm/home-lab-observer/actions/runs/34525324243).
+The x64 job completed in 1m13s and ARM64 in 1m54s. Both proved owned acquisition/export, five selected values,
+bookmark round trips, reverse tail, System and Application post-clear reset, thread affinity, and cleanup.
+This is synthetic native evidence, not a claim that a particular user's ordinary channels are accessible.
+Publication remains a separate release gate. The failed experiments below are retained as investigation history.
 
 ## Purpose and boundary
 
@@ -187,7 +189,8 @@ previously rejected the observed one. All five selected event fields, bookmark c
 had passed before this validation failure. The scoped compatibility candidate accepts only zero or one for bookmark
 string rendering, never uses that count to size the buffer, and retains byte bounds, termination, UTF-16, and anchor
 validation. Selected event-value rendering still requires exactly five properties. Full native acceptance remains
-open until the candidate passes both architectures.
+closed by run `34525324243` after the compatibility fix and correction of the fixture's required previous-attempt
+checkpoint timestamp. Production checkpoint validation was not relaxed.
 
 The harness also classifies each owned channel's actual publishing-latency property as only `ZERO`, `WITHIN_10S`,
 `OVER_10S` or `UNAVAILABLE` before starting the publisher. This read-only diagnostic does not change isolation,
