@@ -42,7 +42,7 @@ static BOOL generated_manifest_matches(void) {
             }                                                                \
             Sleep(25);                                                       \
         }                                                                    \
-        status = HLO_CONCAT(EventWrite, event_name)();                       \
+        status = HLO_CONCAT(EventWrite, event_name)(1UL);                    \
         if (status != ERROR_SUCCESS) {                                       \
             return status;                                                   \
         }                                                                    \

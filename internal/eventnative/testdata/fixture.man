@@ -21,13 +21,18 @@
         <keywords>
           <keyword name="Fixture" symbol="HLO_FIXTURE_KEYWORD" mask="0x1"/>
         </keywords>
+        <templates>
+          <template tid="SyntheticMarker">
+            <data name="Marker" inType="win:UInt32"/>
+          </template>
+        </templates>
         <events>
-          <event symbol="HLO_SYSTEM_INFO" value="101" version="0" channel="FixtureSystem" level="win:Informational" keywords="Fixture" message="$(string.Event.SystemInfo)"/>
-          <event symbol="HLO_SYSTEM_WARN" value="102" version="0" channel="FixtureSystem" level="win:Warning" keywords="Fixture" message="$(string.Event.SystemWarn)"/>
-          <event symbol="HLO_SYSTEM_AFTER" value="103" version="0" channel="FixtureSystem" level="win:Error" keywords="Fixture" message="$(string.Event.SystemAfter)"/>
-          <event symbol="HLO_APPLICATION_ERROR" value="201" version="0" channel="FixtureApplication" level="win:Error" keywords="Fixture" message="$(string.Event.ApplicationError)"/>
-          <event symbol="HLO_APPLICATION_CRITICAL" value="202" version="0" channel="FixtureApplication" level="win:Critical" keywords="Fixture" message="$(string.Event.ApplicationCritical)"/>
-          <event symbol="HLO_APPLICATION_AFTER" value="203" version="0" channel="FixtureApplication" level="win:Informational" keywords="Fixture" message="$(string.Event.ApplicationAfter)"/>
+          <event symbol="HLO_SYSTEM_INFO" value="101" version="0" channel="FixtureSystem" level="win:Informational" keywords="Fixture" template="SyntheticMarker" message="$(string.Event.SystemInfo)"/>
+          <event symbol="HLO_SYSTEM_WARN" value="102" version="0" channel="FixtureSystem" level="win:Warning" keywords="Fixture" template="SyntheticMarker" message="$(string.Event.SystemWarn)"/>
+          <event symbol="HLO_SYSTEM_AFTER" value="103" version="0" channel="FixtureSystem" level="win:Error" keywords="Fixture" template="SyntheticMarker" message="$(string.Event.SystemAfter)"/>
+          <event symbol="HLO_APPLICATION_ERROR" value="201" version="0" channel="FixtureApplication" level="win:Error" keywords="Fixture" template="SyntheticMarker" message="$(string.Event.ApplicationError)"/>
+          <event symbol="HLO_APPLICATION_CRITICAL" value="202" version="0" channel="FixtureApplication" level="win:Critical" keywords="Fixture" template="SyntheticMarker" message="$(string.Event.ApplicationCritical)"/>
+          <event symbol="HLO_APPLICATION_AFTER" value="203" version="0" channel="FixtureApplication" level="win:Informational" keywords="Fixture" template="SyntheticMarker" message="$(string.Event.ApplicationAfter)"/>
         </events>
       </provider>
     </events>

@@ -37,7 +37,7 @@ function Invoke-Quiet([string] $File, [string[]] $Arguments) {
         default { Fail 'unknown fixture command' }
     }
     & $File @Arguments 1>$null 2>$null
-    if ($LASTEXITCODE -ne 0) { Fail "required fixture command failed at $stage" }
+    if ($LASTEXITCODE -ne 0) { Fail "required fixture command failed at $stage (exit $LASTEXITCODE)" }
 }
 
 function Invoke-OwnedPublisher([string] $Path, [string] $Phase) {

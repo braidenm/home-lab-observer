@@ -170,6 +170,11 @@ the documented schema permits the prior configuration, so this is not evidence o
 failures now expose only a fixed stage name, never command arguments, paths, or native output. Native acceptance
 also checks both System and Application post-clear continuation/reset behavior.
 
+Run `34522551903` registered Custom channels successfully with default latency, but the channels still had zero
+records. The next bounded discriminator adds one fixed synthetic UInt32 marker (`1`) through the generated
+publisher wrappers. Zero-payload events are documented as valid; this is an experiment, not an established cause.
+The observer still renders only the existing five allowlisted System properties, never the marker or event body.
+
 The harness also classifies each owned channel's actual publishing-latency property as only `ZERO`, `WITHIN_10S`,
 `OVER_10S` or `UNAVAILABLE` before starting the publisher. This read-only diagnostic does not change isolation,
 channel configuration, the fixed readiness deadline or acceptance; it prevents a documented default from being
