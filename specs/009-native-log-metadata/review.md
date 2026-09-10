@@ -1,5 +1,19 @@
 # Spec 009 review record
 
+## Windows reader kernel review
+
+Root independently read the complete fixed-seam implementation, specification and
+synthetic tests. No blocker remains in this kernel slice. Review covers per-query
+and per-record close ownership, same-thread lifetime, strict bookmark proof versus
+generic failure, visited-row/byte limits, safe typed normalization and private
+checkpoint exclusion. An initial EOF/tail race was caught during design review;
+the tail must now prove a timestamp strictly older than the exact initial window
+before claiming zero coverage. Tests include the concurrent-arrival boundary.
+
+Native WEVTAPI binding, private bookmark anchor exactness against cleared/reused
+record IDs, owned native fixtures and the hidden helper entrypoint are still
+required. This review does not claim that Windows event acquisition is enabled.
+
 ## Contract checkpoint — reviewed; required CI pending
 
 This review does not approve native readers, persistence, API handlers, UI integration or a new release. Those are
