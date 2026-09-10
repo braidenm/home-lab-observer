@@ -82,6 +82,16 @@ function Get-DirectText($Node) {
   }
   return $text.Trim()
 }
+function Get-ComparableText($Node,[string]$LogicalPath) {
+  $text=Get-DirectText $Node
+  if ($LogicalPath -ceq 'Task/Triggers/LogonTrigger/UserId' -and [string]$Node.NamespaceURI -ceq 'http://schemas.microsoft.com/windows/2004/02/mit/task' -and $script:TaskOwnerSid) {
+    if ($text -ceq $script:TaskOwnerSid) { return $script:TaskOwnerSid }
+    foreach ($alias in @($script:TaskOwnerName,$script:TaskOwnerBare)) {
+      if ($alias -and [string]::Equals($text,$alias,[StringComparison]::OrdinalIgnoreCase)) { return $script:TaskOwnerSid }
+    }
+  }
+  return $text
+}
 function Test-NormalizedElement($Node,[string]$LogicalPath) {
   if ([string]$Node.NamespaceURI -cne 'http://schemas.microsoft.com/windows/2004/02/mit/task') { return $false }
   if (@($Node.Attributes).Count -ne 0 -or @($Node.ChildNodes | Where-Object {$_.NodeType -eq [Xml.XmlNodeType]::Element}).Count -ne 0) { return $false }
@@ -148,7 +158,7 @@ function Compare-TaskElement($Expected,$Actual,[string]$LogicalPath,[string]$Dis
     if ([string]$expectedAttributes[$index].NamespaceURI -cne [string]$actualAttributes[$index].NamespaceURI) { return New-Comparison 'ATTRIBUTE_NAMESPACE' $DisplayPath $field }
     if ([string]$expectedAttributes[$index].Value -cne [string]$actualAttributes[$index].Value) { return New-Comparison 'ATTRIBUTE_VALUE' $DisplayPath $field }
   }
-  if ((Get-DirectText $Expected) -cne (Get-DirectText $Actual)) { return New-Comparison 'TEXT_VALUE' $DisplayPath '' }
+  if ((Get-ComparableText $Expected $LogicalPath) -cne (Get-ComparableText $Actual $LogicalPath)) { return New-Comparison 'TEXT_VALUE' $DisplayPath '' }
   $expectedChildren=@(Get-ComparableChildren $Expected $LogicalPath)
   $actualChildren=@(Get-ComparableChildren $Actual $LogicalPath)
   $shared=[Math]::Min($expectedChildren.Count,$actualChildren.Count)
@@ -259,6 +269,18 @@ function Read-SchtasksBytes {
   }
 }
 try {
+  $script:TaskOwnerSid=$null;$script:TaskOwnerName=$null;$script:TaskOwnerBare=$null
+  try {
+    $identity=[Security.Principal.WindowsIdentity]::GetCurrent()
+    try {
+      $sid=[string]$identity.User.Value;$name=[string]$identity.Name
+      if ($sid.Length -le 184 -and $sid -cmatch '^S-[0-9]+(?:-[0-9]+)+$' -and $name.Length -le 512) {
+        $script:TaskOwnerSid=$sid;$script:TaskOwnerName=$name
+        $parts=$name.Split([char]'\')
+        if ($parts.Length -eq 2 -and [string]::Equals($parts[0],[Environment]::MachineName,[StringComparison]::OrdinalIgnoreCase)) { $script:TaskOwnerBare=$parts[1] }
+      }
+    } finally { $identity.Dispose() }
+  } catch {}
   $expectedPath=[IO.Path]::Combine($env:OBSERVER_SMOKE_INSTALL_ROOT,'background','task.xml')
   $expectedItem=Get-Item -LiteralPath $expectedPath -Force
   if ($expectedItem.PSIsContainer -or ($expectedItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $expectedItem.Length -gt 131072) { throw 'unsafe expected task file' }
