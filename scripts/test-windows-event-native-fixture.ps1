@@ -282,7 +282,32 @@ try {
             Fail 'native fixture test output is linked, missing, or oversized'
         }
     }
-    if ($exitCode -ne 0) { Fail 'native fixture assertions failed' }
+    if ($exitCode -ne 0) {
+        $allowedStages = @(
+            'system-before-query-open',
+            'system-before-next',
+            'system-before-selected-types',
+            'system-before-selected-values',
+            'system-before-forward-eof',
+            'application-before-query-open',
+            'application-before-next',
+            'application-before-selected-types',
+            'application-before-selected-values',
+            'application-before-forward-eof',
+            'system-reverse-tail',
+            'system-bookmark-roundtrip',
+            'system-reset',
+            'handle-accounting'
+        )
+        $stage = 'unknown'
+        foreach ($line in [IO.File]::ReadLines($stdoutPath, [Text.Encoding]::UTF8)) {
+            if ($line -match 'owned-fixture-stage: ([a-z-]+)') {
+                $candidateStage = $Matches[1]
+                if ($allowedStages -ccontains $candidateStage) { $stage = $candidateStage }
+            }
+        }
+        Fail ("native fixture assertions failed at fixed stage $stage")
+    }
     $fixturePassed = $true
 } finally {
     $cleanupFailed = $false

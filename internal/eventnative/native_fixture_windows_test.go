@@ -220,20 +220,30 @@ func TestOwnedWindowsNativeFixture(t *testing.T) {
 	defer runtime.UnlockOSThread()
 
 	before := &fileFactory{api: api, system: files.systemBefore, application: files.applicationBefore}
-	systemBookmark := assertFixtureSequence(t, before, logobs.SourceSystem, []uint16{101, 102}, []uint8{4, 3})
-	_ = assertFixtureSequence(t, before, logobs.SourceApplication, []uint16{201, 202}, []uint8{2, 1})
+	systemBookmark := assertFixtureSequence(t, before, logobs.SourceSystem, "system-before", []uint16{101, 102}, []uint8{4, 3})
+	_ = assertFixtureSequence(t, before, logobs.SourceApplication, "application-before", []uint16{201, 202}, []uint8{2, 1})
+	markFixtureStage(t, "system-reverse-tail")
 	assertReverseTail(t, before, logobs.SourceSystem, 102)
+	markFixtureStage(t, "system-bookmark-roundtrip")
 	assertBookmarkRoundTrip(t, before, logobs.SourceSystem, systemBookmark, 101)
 
 	after := &fileFactory{api: api, system: files.systemAfter, application: files.applicationAfter}
+	markFixtureStage(t, "system-reset")
 	assertReset(t, after, systemBookmark)
+	markFixtureStage(t, "handle-accounting")
 	if len(api.open) != 0 || api.calls < 20 {
 		t.Fatalf("native handle evidence incomplete: open=%d calls=%d", len(api.open), api.calls)
 	}
 }
 
-func assertFixtureSequence(t *testing.T, factory *fileFactory, source logobs.Source, wantIDs []uint16, wantLevels []uint8) []byte {
+func markFixtureStage(t *testing.T, stage string) {
 	t.Helper()
+	t.Log("owned-fixture-stage: " + stage)
+}
+
+func assertFixtureSequence(t *testing.T, factory *fileFactory, source logobs.Source, stagePrefix string, wantIDs []uint16, wantLevels []uint8) []byte {
+	t.Helper()
+	markFixtureStage(t, stagePrefix+"-query-open")
 	queryValue, err := factory.OpenContinuation(source)
 	if err != nil {
 		t.Fatal(err)
@@ -241,6 +251,7 @@ func assertFixtureSequence(t *testing.T, factory *fileFactory, source logobs.Sou
 	defer queryValue.Close()
 	var firstBookmark []byte
 	for index, wantID := range wantIDs {
+		markFixtureStage(t, stagePrefix+"-next")
 		recordValue, err := queryValue.Next()
 		if err != nil || recordValue == nil {
 			if recordValue != nil {
@@ -248,12 +259,14 @@ func assertFixtureSequence(t *testing.T, factory *fileFactory, source logobs.Sou
 			}
 			t.Fatalf("fixture record %d unavailable: %v", index, err)
 		}
+		markFixtureStage(t, stagePrefix+"-selected-types")
 		at, timeErr := recordValue.TimeCreated()
 		level, levelErr := recordValue.Level()
 		id, idErr := recordValue.EventID()
 		guid, guidErr := recordValue.ProviderGUID()
 		bookmark, bookmarkErr := recordValue.Bookmark()
 		decoded, decodeErr := decodeAnchor(bookmark)
+		markFixtureStage(t, stagePrefix+"-selected-values")
 		if timeErr != nil || levelErr != nil || idErr != nil || guidErr != nil || bookmarkErr != nil || decodeErr != nil ||
 			at == 0 || level != wantLevels[index] || id != wantID || guid != fixtureProviderGUID || decoded.recordID == 0 ||
 			decoded.fileTime != at || decoded.eventID != id || decoded.guid != guid || decoded.flags != anchorTimePresent|anchorEventPresent|anchorGUIDPresent {
@@ -265,6 +278,7 @@ func assertFixtureSequence(t *testing.T, factory *fileFactory, source logobs.Sou
 		}
 		recordValue.Close()
 	}
+	markFixtureStage(t, stagePrefix+"-forward-eof")
 	extra, err := queryValue.Next()
 	if err != nil || extra != nil {
 		if extra != nil {
