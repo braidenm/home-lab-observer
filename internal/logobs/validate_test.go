@@ -208,12 +208,12 @@ func TestBatchValidationBoundsAndResetState(t *testing.T) {
 		},
 		{
 			Kind: BatchResetPending, Source: SourceSystem, QueryStartedAt: testTime, StartedAt: testTime, FinishedAt: testTime,
-			SupportState: SupportUnavailable, CollectionState: CollectionFailed, ReasonCode: &reasonReader, ExaminedCount: 1,
+			SupportState: SupportUnavailable, CollectionState: CollectionFailed, ReasonCode: &reasonReader, ExaminedCount: 1, ProbeCount: 1,
 		},
 		{
 			Kind: BatchResetEstablished, Source: SourceSystem, QueryStartedAt: testTime, StartedAt: testTime, FinishedAt: testTime,
 			SupportState: SupportSupported, CollectionState: CollectionPartial, ReasonCode: &reasonReset,
-			ExaminedCount: 1, NextOpaque: []byte("new-cursor"),
+			ExaminedCount: 1, ProbeCount: 1, NextOpaque: []byte("new-cursor"),
 		},
 		{
 			Kind: BatchNormal, Source: SourceSystem, QueryStartedAt: testTime, StartedAt: testTime, FinishedAt: testTime,
@@ -271,6 +271,27 @@ func TestBatchValidationBoundsAndResetState(t *testing.T) {
 	badReset.CollectionState = CollectionFailed
 	if err := badReset.Validate(); err == nil {
 		t.Fatal("failed established reset accepted")
+	}
+	badReset = valid[4].Clone()
+	badReset.ProbeCount = 0
+	if err := badReset.Validate(); err == nil {
+		t.Fatal("established reset without a probe accepted")
+	}
+	badReset = valid[4].Clone()
+	badReset.ProbeCount = 2
+	badReset.ExaminedCount = 2
+	if err := badReset.Validate(); err != nil {
+		t.Fatalf("two-probe established reset rejected: %v", err)
+	}
+	badReset = valid[3].Clone()
+	badReset.ProbeCount = 2
+	badReset.ExaminedCount = 2
+	if err := badReset.Validate(); err != nil {
+		t.Fatalf("two-probe pending reset rejected: %v", err)
+	}
+	badReset.ExaminedCount = 1
+	if err := badReset.Validate(); err == nil {
+		t.Fatal("reset probe/examined mismatch accepted")
 	}
 	badNormal := valid[0].Clone()
 	badNormal.NextOpaque = nil
@@ -348,8 +369,62 @@ func TestBatchValidationBoundsAndResetState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(payload), "cursor") || strings.Contains(string(payload), "NextOpaque") {
+	if strings.Contains(string(payload), "cursor") || strings.Contains(string(payload), "NextOpaque") || strings.Contains(string(payload), "ProbeCount") {
 		t.Fatalf("private next checkpoint serialized: %s", payload)
+	}
+}
+
+func TestBatchProbeAccountingAndVisitBudget(t *testing.T) {
+	event := Event{ObservedAt: testTime.Add(-time.Second), Source: SourceSystem, Severity: SeverityInfo, EventCode: "SYSTEMD_PRIORITY_6"}
+
+	initialEmptyTailProof := Batch{
+		Kind: BatchNormal, Source: SourceSystem,
+		QueryStartedAt: testTime, StartedAt: testTime, FinishedAt: testTime,
+		SupportState: SupportSupported, CollectionState: CollectionOK,
+		ExaminedCount: 1, ProbeCount: 1, CaughtUp: true, NextOpaque: []byte("tail-cursor"),
+	}
+	if err := initialEmptyTailProof.Validate(); err != nil {
+		t.Fatalf("empty-window tail proof rejected: %v", err)
+	}
+
+	continuation := initialEmptyTailProof.Clone()
+	continuation.Events = make([]Event, 511)
+	for i := range continuation.Events {
+		continuation.Events[i] = event
+	}
+	continuation.ExaminedCount = 512
+	if err := continuation.Validate(); err != nil {
+		t.Fatalf("511 rows plus continuation probe rejected: %v", err)
+	}
+	independentEOF := continuation.Clone()
+	independentEOF.Events = append(independentEOF.Events, event)
+	independentEOF.ExaminedCount = MaxExaminedEvents
+	if err := independentEOF.Validate(); err != nil {
+		t.Fatalf("512 rows plus probe with independent EOF proof rejected: %v", err)
+	}
+
+	deferredReason := ReasonBacklogDeferred
+	continuation.CollectionState = CollectionPartial
+	continuation.ReasonCode = &deferredReason
+	continuation.CaughtUp = false
+	continuation.Deferred = true
+	continuation.ExaminedCount = MaxExaminedEvents
+	if err := continuation.Validate(); err != nil {
+		t.Fatalf("511 rows plus probe and reserved sentinel rejected: %v", err)
+	}
+
+	overBudget := continuation.Clone()
+	overBudget.Events = append(overBudget.Events, event)
+	overBudget.ExaminedCount++
+	if err := overBudget.Validate(); err == nil {
+		t.Fatal("512 rows plus probe and sentinel accepted")
+	}
+
+	twoNormalProbes := initialEmptyTailProof.Clone()
+	twoNormalProbes.ProbeCount = 2
+	twoNormalProbes.ExaminedCount = 2
+	if err := twoNormalProbes.Validate(); err == nil {
+		t.Fatal("normal batch with two probes accepted")
 	}
 }
 

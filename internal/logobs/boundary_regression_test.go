@@ -13,14 +13,14 @@ func TestPrivateCheckpointJSONExcludesEncodedValues(t *testing.T) {
 	for name, value := range map[string]any{
 		"checkpoint": checkpoint,
 		"request":    ReadRequest{Checkpoint: checkpoint},
-		"batch":      Batch{NextOpaque: private},
+		"batch":      Batch{NextOpaque: private, ProbeCount: 2},
 	} {
 		t.Run(name, func(t *testing.T) {
 			payload, err := json.Marshal(value)
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, forbidden := range []string{string(private), base64.StdEncoding.EncodeToString(private), "Opaque"} {
+			for _, forbidden := range []string{string(private), base64.StdEncoding.EncodeToString(private), "Opaque", "ProbeCount"} {
 				if strings.Contains(string(payload), forbidden) {
 					t.Fatal("private checkpoint crossed JSON boundary")
 				}

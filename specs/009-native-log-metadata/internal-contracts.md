@@ -121,6 +121,7 @@ const (
     MaxSources                   = 2
     MaxAcceptedEvents            = 512
     MaxExaminedEvents            = 513 // all accepted/discarded rows plus optional deferred lookahead
+    MaxProbeEvents               = 2   // reset-only maximum; NORMAL permits at most one
     MaxSourceBytes               = 2 << 20
     MaxNativeFieldBytes          = 4 << 10
     MaxCheckpointBytes           = 16 << 10
@@ -168,6 +169,7 @@ type Batch struct {
     Events           []Event
     Discards         []DiscardCount
     ExaminedCount    uint32
+    ProbeCount       uint32 // internal-only cursor/tail visits; excluded from public JSON
     DiscardedCount   uint32
     Deferred         bool
     CaughtUp         bool
@@ -208,11 +210,15 @@ pipes and discarded stderr, not cursor staging files. Private request framing is
 2 MiB including protocol overhead. Native helper identity and environment checks precede execution. Missing Linux
 loader/library/helper degrades only logs. No cursor contents enter argv or environment.
 
-Every batch has `ExaminedCount <= 513`; the cap applies to all examined rows, not accepted rows alone. For a normal
-batch, `len(Events) + DiscardedCount <= 512`, `DiscardedCount == sum(Discards.Count)`, and `ExaminedCount` equals that
-sum plus one only when a lookahead was examined and `Deferred` is true. The 513th row can only be that deferred
-sentinel—never another accepted or discarded row. After 512 discarded rows, at most one sentinel may be examined even
-when no event was accepted. The sentinel is absent from events/discards and `NextOpaque` must cause it to be read again.
+Every batch has `ExaminedCount <= 513`; the cap applies to every native record visit, not accepted rows alone.
+`ProbeCount` is internal accounting, excluded from public JSON and limited to one for `NORMAL` or two for a reset
+transition. It counts cursor-presence and metadata-only tail probes that contribute neither captured nor discarded
+rows. For a normal batch, `len(Events) + DiscardedCount <= 512`, `DiscardedCount == sum(Discards.Count)`, and
+`ExaminedCount == len(Events) + DiscardedCount + ProbeCount + bool(Deferred)`. The optional deferred lookahead is a
+visited sentinel—never another accepted or discarded row—and `NextOpaque` must cause it to be read again. A normal
+adapter that needs a continuation probe reserves capacity for both that probe and a possible sentinel before reading:
+it processes at most 511 rows before one lookahead. A backend may return 512 processed rows plus one probe as caught up
+only when it has independent end-of-source proof that does not visit another record.
 A successful normal batch may advance the cursor; only `CaughtUp` may advance the persisted coverage-through watermark
 to `QueryStartedAt`. That watermark is status, never a start from which positive historical coverage is inferred.
 
@@ -250,8 +256,9 @@ discarded rows.
 Reset recovery happens within the attempt that proves the ordinary checkpoint stale/invalid, not in an unconditional
 extra cycle. The adapter immediately switches to one bounded metadata-only newest-record tail probe outside the
 initial-read five-minute filter: Windows performs its fixed reverse-channel query for at most one event; Linux uses
-native seek-tail/previous/get-cursor after seek/next/test-cursor exactness validation. It requests no body; a returned record makes
-`ExaminedCount` one but contributes no captured or discarded count. If a cursor is proved, `RESET_ESTABLISHED`
+native seek-tail/previous/get-cursor after seek/next/test-cursor exactness validation. It requests no body. Reset
+batches contain no ingested rows and require `ExaminedCount == ProbeCount`; reset establishment requires one or two
+probes, while pending reset permits zero to two. If a cursor is proved, `RESET_ESTABLISHED`
 atomically commits that `NextOpaque`, clears `ResetPending`, records `CHECKPOINT_RESET` plus the bounded attempt-window
 gap, and advances no caught-up coverage. If the source is empty or the expected probe cannot prove a cursor,
 `RESET_PENDING` atomically clears the stale opaque value, keeps `ResetPending`, records the bounded latest state/gap
@@ -259,6 +266,10 @@ and zero counts. A later 60-second attempt with
 `ResetPending` repeats only this same tail probe until it returns `RESET_ESTABLISHED`; normal after-cursor reading starts
 on the following cycle. Any checkpoint with nil `Opaque` and `ResetPending == false` performs a `NORMAL` fixed
 five-minute read regardless of `Revision`; revision is CAS state, not an initialization/reset signal.
+The initial empty-window path may use one metadata-only tail probe to prove a continuation cursor without adding
+counts. A row whose selected metadata can be discarded still requires a valid cursor; failure to acquire a bounded
+cursor for any visited row rejects the whole attempt rather than committing counts that could replay. Helper protocol
+identity and framing use a separate closed private DTO; adapters never serialize `Batch` as their wire protocol.
 
 ## Store port and CAS
 

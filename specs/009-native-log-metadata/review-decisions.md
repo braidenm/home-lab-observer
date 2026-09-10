@@ -48,7 +48,11 @@ spec/ports are authoritative. Native field caps replace journal-line caps; byte,
 6. **Intersecting limits:** four KiB is a per-line maximum, not a promise that 513 maximum-sized lines fit into two MiB.
    A stream byte cap may end sooner; only fully examined complete rows can contribute to a trustworthy completed batch.
    Preserve the last complete cursor, disclose partial/deferred status and reap the reader. Accepted plus discarded
-   records total at most 512; a 513th examined record is only a deferred sentinel and must be read again, not discarded.
+   records total at most 512; cursor/tail probes and a deferred sentinel count against the 513-visit ceiling without
+   becoming captured/discarded rows. Normal reads use at most one probe and reset transitions at most two. A normal
+   continuation reader reserves both its probe and possible sentinel, so it processes at most 511 rows before
+   lookahead. A 512-row caught-up result with one probe is valid only with backend EOF proof that visits no other row.
+   The deferred sentinel must be read again, not discarded.
    Reject more than 512 discard groups before iterating them. `OK` has zero discards and requires caught-up proof.
    Caught-up `PARTIAL` is limited to `INVALID_RESPONSE` for known rejected selected-field rows after EOF; deadline,
    byte, backlog and protocol truncation never claim caught-up coverage.

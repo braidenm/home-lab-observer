@@ -20,7 +20,8 @@ required before enabling or publishing the feature.
 ## Reviewed contract boundaries
 
 - Private checkpoints are excluded from JSON, including their default base64 representation.
-- A deferred 513th examined row cannot become a captured/discarded row or a caught-up proof.
+- Cursor/tail probes and a deferred lookahead count toward 513 native visits without becoming captured/discarded rows;
+  a continuation reader reserves its probe and sentinel budget before ingesting.
 - Individually valid counters must also remain safe after bucket, source and window aggregation.
 - A reset is not a successful collection; source status and historical coverage are separate dimensions.
 - Missing Linux helper/runtime support must not add a dynamic loader dependency to the main observer executable.

@@ -13,6 +13,7 @@ const (
 	MaxSources                          = 2
 	MaxAcceptedEvents                   = 512
 	MaxExaminedEvents                   = 513
+	MaxProbeEvents                      = 2
 	MaxSourceBytes                      = 2 << 20
 	MaxNativeFieldBytes                 = 4 << 10
 	MaxCheckpointBytes                  = 16 << 10
@@ -145,6 +146,7 @@ type Batch struct {
 	Events           []Event
 	Discards         []DiscardCount
 	ExaminedCount    uint32
+	ProbeCount       uint32 `json:"-"`
 	DiscardedCount   uint32
 	Deferred         bool
 	CaughtUp         bool

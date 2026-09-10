@@ -296,7 +296,7 @@ func (b Batch) Validate() error {
 	if len(b.NextOpaque) > MaxCheckpointBytes {
 		return errors.New("next checkpoint exceeds size bound")
 	}
-	if len(b.Events) > MaxAcceptedEvents || len(b.Discards) > MaxAcceptedEvents || b.ExaminedCount > MaxExaminedEvents {
+	if len(b.Events) > MaxAcceptedEvents || len(b.Discards) > MaxAcceptedEvents || b.ExaminedCount > MaxExaminedEvents || b.ProbeCount > MaxProbeEvents {
 		return errors.New("batch exceeds event bounds")
 	}
 	if b.CollectionState == CollectionOK {
@@ -348,11 +348,14 @@ func (b Batch) Validate() error {
 	if b.Kind != BatchNormal {
 		return b.validateResetBatch()
 	}
+	if b.ProbeCount > 1 {
+		return errors.New("normal batch exceeds probe bound")
+	}
 	acceptedAndDiscarded := uint64(len(b.Events)) + discarded
 	if acceptedAndDiscarded > MaxAcceptedEvents {
 		return errors.New("batch exceeds accepted event bound")
 	}
-	expectedExamined := acceptedAndDiscarded
+	expectedExamined := acceptedAndDiscarded + uint64(b.ProbeCount)
 	if b.Deferred {
 		expectedExamined++
 	}
@@ -378,7 +381,7 @@ func (b Batch) Validate() error {
 		return errors.New("failed batch cannot be caught up")
 	}
 	if b.CollectionState == CollectionFailed || b.CollectionState == CollectionNotRun {
-		if len(b.Events) != 0 || len(b.Discards) != 0 || b.ExaminedCount != 0 || b.DiscardedCount != 0 || b.Deferred || b.CaughtUp || len(b.NextOpaque) != 0 {
+		if len(b.Events) != 0 || len(b.Discards) != 0 || b.ExaminedCount != 0 || b.ProbeCount != 0 || b.DiscardedCount != 0 || b.Deferred || b.CaughtUp || len(b.NextOpaque) != 0 {
 			return errors.New("failed or not-run batch cannot carry observations")
 		}
 	}
@@ -430,14 +433,17 @@ func (b Batch) validateResetBatch() error {
 	if len(b.Events) != 0 || len(b.Discards) != 0 || b.DiscardedCount != 0 || b.Deferred || b.CaughtUp {
 		return errors.New("reset batch cannot carry observations")
 	}
+	if b.ExaminedCount != b.ProbeCount {
+		return errors.New("reset examined count is inconsistent")
+	}
 	if b.Kind == BatchResetEstablished {
-		if b.ExaminedCount != 1 || len(b.NextOpaque) == 0 || b.ReasonCode == nil || *b.ReasonCode != ReasonCheckpointReset ||
+		if b.ProbeCount == 0 || b.ProbeCount > MaxProbeEvents || len(b.NextOpaque) == 0 || b.ReasonCode == nil || *b.ReasonCode != ReasonCheckpointReset ||
 			b.SupportState != SupportSupported || b.CollectionState != CollectionPartial {
 			return errors.New("established reset batch is inconsistent")
 		}
 		return nil
 	}
-	if b.ExaminedCount > 1 || len(b.NextOpaque) != 0 || b.CollectionState == CollectionOK || b.ReasonCode == nil {
+	if b.ProbeCount > MaxProbeEvents || len(b.NextOpaque) != 0 || b.CollectionState == CollectionOK || b.ReasonCode == nil {
 		return errors.New("pending reset batch is inconsistent")
 	}
 	return nil

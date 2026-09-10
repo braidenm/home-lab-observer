@@ -11,7 +11,8 @@
    Enforce Windows deadlines with a fixed same-executable helper process, preserving query-handle thread affinity and
    cancellation-before-close ordering inside the child. Linux uses private pipes, exact native cursor tests and the
    caller-accessible journal view. No visible initial tail means unavailable, not zero. Keep loader imports outside the
-   main executable and test missing-helper/runtime fallback. Bound accepted-plus-discarded records to 512 and one deferred
+   main executable and test missing-helper/runtime fallback. Bound accepted-plus-discarded records to 512, count
+   private cursor/tail probes against the same 513-visit ceiling, and reserve one deferred
    sentinel. Test actual child timeout/reaping, not only context-aware fakes.
 3. Store/domain slice: one bounded session-only current ring, compact minute source/severity rollups, coalesced coverage,
    latest-attempt metadata, atomic checkpoint transaction, coverage queries and bounded retention/migration tests.

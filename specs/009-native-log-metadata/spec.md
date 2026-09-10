@@ -23,7 +23,8 @@ useful without Platform Demo, with honest cross-platform gaps.
   once immediately and then at fixed 60-second intervals and is single-flight. Native acquisition never runs in or
   reschedules the host lane; brief bounded serialization on the shared SQLite writer is expected. It is bounded to
   two sources maximum, a four-second overall deadline, two seconds per source, 512 accepted-plus-discarded records
-  plus one deferred lookahead (at most 513 examined), two MiB output per source including protocol framing, four KiB
+  plus private cursor/tail probes and one deferred lookahead (at most 513 native record visits), two MiB output per
+  source including protocol framing, four KiB
   selected native fields (private cursors have their separate bound),
   16 KiB checkpoints and 200 recent in-memory records. Windows reads run in a fixed hidden helper process using the
   same verified executable, with bounded stdin/stdout and parent-enforced kill/wait on timeout; query handles stay on
@@ -50,6 +51,11 @@ useful without Platform Demo, with honest cross-platform gaps.
   selected-field rows after still proving source exhaustion; this per-row rejection is distinct from a malformed
   helper response, which produces no trustworthy batch. Deadline, byte, backlog and protocol truncation never claim
   caught-up coverage. More than 512 discard groups is rejected before iteration.
+  Internal probe accounting is excluded from public JSON: normal batches allow at most one probe, reset transitions
+  allow at most two, and every probe plus captured, discarded and deferred-lookahead visit counts toward 513. A
+  continuation adapter reserves room for its probe and a possible sentinel before ingesting, so it processes at most
+  511 rows before lookahead. Failure to acquire a bounded cursor for any visited row rejects the whole attempt. Native
+  helpers use a separate closed private protocol DTO and never serialize the internal batch model directly.
 - L4: Normalize only UTC time, exact lowercase source alias (`system` or Windows-only `application`), seven code-owned
   severities and a validated bounded event code. Map journald priority 0..2 to CRITICAL, 3 to ERROR, 4 to WARN, 5..6
   to INFO and 7 to DEBUG. Map Windows Level 1 to CRITICAL, 2 to ERROR, 3 to WARN, 4 to INFO, 5 to TRACE, and 0,
