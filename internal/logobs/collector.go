@@ -120,55 +120,91 @@ func (c *Collector) collectOnce(parent context.Context) {
 	if len(c.sources) == 0 {
 		return
 	}
-	laneCtx, cancel := context.WithTimeout(parent, collectionTimeout)
-	defer cancel()
+	type preparedSource struct {
+		source     Source
+		checkpoint Checkpoint
+		ready      bool
+	}
+	prepared := make([]preparedSource, 0, len(c.sources))
 	for _, source := range c.sources {
 		if parent.Err() != nil {
 			return
 		}
-		c.collectSource(parent, laneCtx, source)
+		loadCtx, cancelLoad := context.WithTimeout(parent, storageOperationTimeout)
+		checkpoint, err := c.store.LoadCheckpoint(loadCtx, source)
+		loadContextErr := loadCtx.Err()
+		cancelLoad()
+		if err != nil || loadContextErr != nil || checkpoint.Validate() != nil {
+			if parent.Err() == nil {
+				c.recordStorageFailure(source, c.clock.Now().UTC(), nil)
+			}
+			prepared = append(prepared, preparedSource{source: source})
+			continue
+		}
+		prepared = append(prepared, preparedSource{source: source, checkpoint: checkpoint.Clone(), ready: true})
+	}
+
+	type readResult struct {
+		source Source
+		batch  Batch
+	}
+	results := make([]readResult, 0, len(prepared))
+	laneCtx, cancel := context.WithTimeout(parent, collectionTimeout)
+	defer cancel()
+	for _, item := range prepared {
+		if parent.Err() != nil {
+			return
+		}
+		if !item.ready {
+			continue
+		}
+		batch, ok := c.readSource(parent, laneCtx, item.source, item.checkpoint)
+		if !ok {
+			if parent.Err() != nil {
+				return
+			}
+			continue
+		}
+		results = append(results, readResult{source: item.source, batch: batch.Clone()})
+	}
+	cancel()
+
+	// Persistence starts only after all native readers have left the shared lane,
+	// so checkpoint I/O cannot consume another source's fixed native deadline.
+	for _, result := range results {
+		if parent.Err() != nil {
+			return
+		}
+		commitCtx, cancelCommit := context.WithTimeout(parent, storageOperationTimeout)
+		confirmed := c.commitConfirmed(commitCtx, result.source, result.batch)
+		cancelCommit()
+		if !confirmed {
+			if parent.Err() == nil {
+				c.recordStorageFailure(result.source, result.batch.QueryStartedAt, &result.batch)
+			}
+			continue
+		}
+		c.recordCommit(result.batch)
 	}
 }
 
-func (c *Collector) collectSource(parent, readerCtx context.Context, source Source) {
+func (c *Collector) readSource(parent, readerCtx context.Context, source Source, checkpoint Checkpoint) (Batch, bool) {
 	queryStartedAt := c.clock.Now().UTC()
-	loadCtx, cancelLoad := context.WithTimeout(parent, storageOperationTimeout)
-	checkpoint, err := c.store.LoadCheckpoint(loadCtx, source)
-	loadContextErr := loadCtx.Err()
-	cancelLoad()
-	if err != nil || loadContextErr != nil || checkpoint.Validate() != nil {
-		if parent.Err() == nil {
-			c.recordStorageFailure(source, queryStartedAt, nil)
-		}
-		return
-	}
 	request := ReadRequest{Source: source, Checkpoint: checkpoint.Clone(), QueryStartedAt: queryStartedAt}
 	if request.Validate() != nil {
 		if parent.Err() == nil {
 			c.recordStorageFailure(source, queryStartedAt, nil)
 		}
-		return
+		return Batch{}, false
 	}
-
 	batch, readErr := c.reader.Read(readerCtx, request.Clone())
 	if parent.Err() != nil {
-		return
+		return Batch{}, false
 	}
-	validAttempt := readErr == nil && readerCtx.Err() == nil && validBatchForRequest(batch, request)
-	if !validAttempt {
+	if readErr != nil || readerCtx.Err() != nil || !validBatchForRequest(batch, request) {
 		batch = c.readerFailureBatch(request)
 	}
-	frozen := batch.Clone()
-	commitCtx, cancelCommit := context.WithTimeout(parent, storageOperationTimeout)
-	confirmed := c.commitConfirmed(commitCtx, source, frozen)
-	cancelCommit()
-	if !confirmed {
-		if parent.Err() == nil {
-			c.recordStorageFailure(source, queryStartedAt, &frozen)
-		}
-		return
-	}
-	c.recordCommit(frozen)
+	return batch.Clone(), true
 }
 
 func validBatchForRequest(batch Batch, request ReadRequest) bool {
@@ -208,6 +244,8 @@ func (c *Collector) commitConfirmed(ctx context.Context, source Source, batch Ba
 	}
 	if err := c.store.CommitBatch(ctx, batch.Clone()); err == nil {
 		return ctx.Err() == nil
+	} else if errors.Is(err, ErrRevisionConflict) {
+		return false
 	}
 	if ctx.Err() != nil || batch.ExpectedRevision == ^uint64(0) {
 		return false
@@ -224,6 +262,8 @@ func (c *Collector) commitConfirmed(ctx context.Context, source Source, batch Ba
 	}
 	if err := c.store.CommitBatch(ctx, batch.Clone()); err == nil {
 		return ctx.Err() == nil
+	} else if errors.Is(err, ErrRevisionConflict) {
+		return false
 	}
 	if ctx.Err() != nil {
 		return false
@@ -244,7 +284,9 @@ func (c *Collector) recordCommit(batch Batch) {
 	c.events = append(c.events, batch.Events...)
 	sort.SliceStable(c.events, func(i, j int) bool { return c.events[i].ObservedAt.After(c.events[j].ObservedAt) })
 	if len(c.events) > MaxRecentEvents {
-		c.events = c.events[:MaxRecentEvents]
+		bounded := make([]Event, MaxRecentEvents)
+		copy(bounded, c.events[:MaxRecentEvents])
+		c.events = bounded
 	}
 }
 

@@ -225,6 +225,44 @@ func TestCollectorSharesOneFourSecondLaneAcrossSources(t *testing.T) {
 	}
 }
 
+func TestCollectorLoadsCheckpointsBeforeStartingNativeLane(t *testing.T) {
+	var loads atomic.Int32
+	loadFinished := make(chan time.Time, 1)
+	store := &collectorStore{load: func(context.Context, Source) (Checkpoint, error) {
+		if loads.Add(1) == 2 {
+			time.Sleep(600 * time.Millisecond)
+			loadFinished <- time.Now()
+		}
+		return Checkpoint{}, nil
+	}}
+	reader := collectorReader(func(ctx context.Context, request ReadRequest) (Batch, error) {
+		if request.Source == SourceSystem {
+			finished := <-loadFinished
+			deadline, ok := ctx.Deadline()
+			if !ok || deadline.Sub(finished) < 3700*time.Millisecond {
+				return Batch{}, errors.New("native lane deadline was consumed by checkpoint loading")
+			}
+		}
+		reason := ReasonPlatformUnsupported
+		return Batch{
+			Kind: BatchNormal, Source: request.Source, ExpectedRevision: request.Checkpoint.Revision,
+			QueryStartedAt: request.QueryStartedAt, StartedAt: request.QueryStartedAt, FinishedAt: request.QueryStartedAt,
+			SupportState: SupportUnsupported, CollectionState: CollectionNotRun, ReasonCode: &reason,
+		}, nil
+	})
+	collector, err := New(Config{
+		Sources: []Source{SourceSystem, SourceApplication}, Reader: reader, Store: store, Clock: collectorClock{testTime},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	collector.collectOnce(context.Background())
+	current := collector.Current()
+	if current.Status.ReasonCode == nil || *current.Status.ReasonCode != ReasonPlatformUnsupported {
+		t.Fatalf("preloaded native lane failed: %+v", current.Status)
+	}
+}
+
 func TestCollectorBoundsEveryStorePhase(t *testing.T) {
 	deadlineErrors := make(chan error, 3)
 	assertBounded := func(ctx context.Context) {
@@ -348,22 +386,19 @@ func TestCollectorReaderErrorCommitsOnlyFixedFailure(t *testing.T) {
 }
 
 func TestCollectorRejectsSuccessReturnedAfterReaderDeadline(t *testing.T) {
-	committed := make(chan Batch, 1)
-	store := &collectorStore{commit: func(_ context.Context, batch Batch) error {
-		committed <- batch.Clone()
-		return nil
-	}}
 	reader := collectorReader(func(_ context.Context, request ReadRequest) (Batch, error) {
 		return successfulBatch(request, nil), nil
 	})
-	collector, err := New(Config{Sources: []Source{SourceSystem}, Reader: reader, Store: store, Clock: collectorClock{testTime}})
+	collector, err := New(Config{Sources: []Source{SourceSystem}, Reader: reader, Store: &collectorStore{}, Clock: collectorClock{testTime}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	expired, cancel := context.WithCancel(context.Background())
 	cancel()
-	collector.collectSource(context.Background(), expired, SourceSystem)
-	batch := <-committed
+	batch, ok := collector.readSource(context.Background(), expired, SourceSystem, Checkpoint{})
+	if !ok {
+		t.Fatal("expired reader attempt was not reduced to a fixed batch")
+	}
 	if batch.CollectionState != CollectionFailed || batch.ReasonCode == nil || *batch.ReasonCode != ReasonReaderFailed || batch.CaughtUp {
 		t.Fatalf("late success escaped as trustworthy: %+v", batch)
 	}
@@ -460,6 +495,47 @@ func TestCollectorAmbiguousCommitUsesSameBatchWithoutSecondRead(t *testing.T) {
 	}
 }
 
+func TestCollectorDefiniteRevisionConflictNeverConfirmsOrCachesRejectedBatch(t *testing.T) {
+	for _, ambiguousFirst := range []bool{false, true} {
+		t.Run(map[bool]string{false: "initial conflict", true: "retry conflict"}[ambiguousFirst], func(t *testing.T) {
+			var loads, commits atomic.Int32
+			store := &collectorStore{
+				load: func(context.Context, Source) (Checkpoint, error) {
+					loads.Add(1)
+					return Checkpoint{}, nil
+				},
+				commit: func(context.Context, Batch) error {
+					attempt := commits.Add(1)
+					if ambiguousFirst && attempt == 1 {
+						return errors.New("synthetic ambiguous write")
+					}
+					return ErrRevisionConflict
+				},
+			}
+			reader := collectorReader(func(_ context.Context, request ReadRequest) (Batch, error) {
+				event := Event{ObservedAt: request.QueryStartedAt, Source: request.Source, Severity: SeverityInfo, EventCode: "SYSTEMD_PRIORITY_6"}
+				return successfulBatch(request, []Event{event}), nil
+			})
+			collector, err := New(Config{Sources: []Source{SourceSystem}, Reader: reader, Store: store, Clock: collectorClock{testTime}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			collector.collectOnce(context.Background())
+			current := collector.Current()
+			wantLoads, wantCommits := int32(1), int32(1)
+			if ambiguousFirst {
+				wantLoads, wantCommits = 2, 2
+			}
+			if loads.Load() != wantLoads || commits.Load() != wantCommits {
+				t.Fatalf("definite conflict triggered further ambiguity resolution: loads=%d commits=%d", loads.Load(), commits.Load())
+			}
+			if current.TotalCount != 0 || len(current.Events) != 0 || current.Status.ReasonCode == nil || *current.Status.ReasonCode != ReasonLogStorageUnavailable {
+				t.Fatalf("definitely rejected batch entered cache: %+v", current)
+			}
+		})
+	}
+}
+
 func TestCollectorBoundsAndDeepClonesCurrentRing(t *testing.T) {
 	events := make([]Event, 205)
 	for i := range events {
@@ -478,6 +554,12 @@ func TestCollectorBoundsAndDeepClonesCurrentRing(t *testing.T) {
 	first := collector.Current()
 	if len(first.Events) != MaxRecentEvents || first.Events[0].ObservedAt.Before(first.Events[len(first.Events)-1].ObservedAt) {
 		t.Fatalf("bounded ring is not newest first: %d", len(first.Events))
+	}
+	collector.mu.RLock()
+	retainedCapacity := cap(collector.events)
+	collector.mu.RUnlock()
+	if retainedCapacity != MaxRecentEvents {
+		t.Fatalf("bounded ring retained oversized backing storage: cap=%d", retainedCapacity)
 	}
 	first.Events[0].EventCode = "WIN_1"
 	*first.Status.ObservedAt = time.Time{}

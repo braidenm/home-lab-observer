@@ -354,7 +354,8 @@ failed reasons are only the three fixed failure reasons, `READER_FAILED` or the 
 collector borrows it and never closes it. `CommitBatch` validates first, then atomically CASes the source checkpoint
 at `ExpectedRevision`, writes minute source/severity rollups, discard-attribution counts, latest attempt, coalesced
 coverage intervals and the next revision. Zero CAS rows returns `ErrRevisionConflict`. A failed write advances nothing.
-After an ambiguous commit error, the single-flight collector reloads: revision `expected+1` means applied, unchanged
+`ErrRevisionConflict` is a definite rejection: the collector does not reload, retry, or append that rejected batch to
+the process cache. After any other ambiguous commit error, the single-flight collector reloads: revision `expected+1` means applied, unchanged
 revision permits one retry of the exact same immutable validated `Batch` (including its kind, times, cursor and counts),
 and any other revision is a conflict/reload. It never reruns `Reader`, substitutes a new batch, clears reset state, or
 blindly increments twice.
@@ -453,7 +454,8 @@ type Snapshot struct {
 events to the bounded memory ring. A failed or ambiguous store write keeps prior events, marks the cache stale/failed
 with a fixed reason, and does not claim persistence. `Current` and `Summary` return deep clones.
 
-The four-second context is shared by the native reads for all enabled sources. Checkpoint load and the complete
+The collector loads every enabled source checkpoint before it starts the four-second context shared only by the
+native reads, then begins persistence after all native reads have returned. Checkpoint load and the complete
 commit/revision-resolution sequence each receive their own fixed two-second Store context per source; summary Store
 reads also receive a two-second context. The fresh commit context intentionally remains available after a native
 deadline so a typed deadline batch can durably record its gap, while neither SQLite access nor ambiguity resolution
