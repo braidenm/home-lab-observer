@@ -26,6 +26,8 @@ All timestamps are UTC RFC 3339 values ending in `Z`. All counts are non-negativ
 `Number.MAX_SAFE_INTEGER` (9007199254740991); acquisition and persistence reject an overflowing increment before
 commit rather than wrap or project an imprecise number. Reasons are code-owned `^[A-Z0-9_]{1,64}$` values; clients
 format them as labels and never treat them as log text.
+Producer timestamps are non-zero UTC values in years 1 through 9999. Summary window boundaries have no fractional
+seconds and are aligned exactly to their UTC-epoch bucket interval.
 The following structural illustration shortens one 72-bucket array to two entries; executable fixtures must contain
 the exact bucket count required below.
 
@@ -128,6 +130,17 @@ otherwise, and recomputes top-level latest quality from those overlaid statuses.
 counts, coverage state/seconds, or creates a gap/previous-attempt value. It is explicitly volatile and may disappear
 after restart; the next successful commit derives any retained-window gap from the last durable attempt. If stored
 history itself is unreadable, the endpoint returns its fixed unavailable Problem rather than synthesizing a summary.
+
+Latest-quality aggregation is deterministic. With one configured source, top-level support, collection, freshness and
+observed time copy that source; a partial source is the one exception for reason, using aggregate
+`SOURCE_PARTIAL` while retaining its specific reason within the source. With two sources, top observed time is the
+latest non-null source observed time. Freshness is `UNKNOWN` when neither has one, otherwise `STALE` when any source
+with an observed time is stale, otherwise `CURRENT`. Any supported source makes top support `SUPPORTED`; with no
+supported source, identical support states are preserved and differing states reduce to `UNAVAILABLE`, never
+`SUPPORTED`. A supported/non-supported mixture is `PARTIAL`; two supported sources preserve a common collection state
+or reduce differing states to `PARTIAL`; with no supported source, any failed source makes the aggregate `FAILED`,
+otherwise it is `NOT_RUN`. Every `PARTIAL` aggregate uses `SOURCE_PARTIAL`; `OK` has null reason. Other aggregates
+preserve a reason only when both complete source outcome tuples agree, otherwise they use `SOURCE_PARTIAL`.
 
 Coverage states have exact meanings:
 

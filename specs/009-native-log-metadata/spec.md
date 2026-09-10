@@ -46,6 +46,10 @@ useful without Platform Demo, with honest cross-platform gaps.
   is empty, atomically clear the stale cursor and
   remain `CHECKPOINT_RESET_PENDING`/cursorless; repeat the same bounded probe until a tail is proved, then resume
   normal after-cursor collection on the following cycle.
+  A caught-up normal batch is `OK` only with zero discards. It may be `PARTIAL/INVALID_RESPONSE` with known discarded
+  selected-field rows after still proving source exhaustion; this per-row rejection is distinct from a malformed
+  helper response, which produces no trustworthy batch. Deadline, byte, backlog and protocol truncation never claim
+  caught-up coverage. More than 512 discard groups is rejected before iteration.
 - L4: Normalize only UTC time, exact lowercase source alias (`system` or Windows-only `application`), seven code-owned
   severities and a validated bounded event code. Map journald priority 0..2 to CRITICAL, 3 to ERROR, 4 to WARN, 5..6
   to INFO and 7 to DEBUG. Map Windows Level 1 to CRITICAL, 2 to ERROR, 3 to WARN, 4 to INFO, 5 to TRACE, and 0,
@@ -116,6 +120,9 @@ All counters are non-negative JSON-safe integers. Any increment, persisted value
 9,007,199,254,740,991 aborts the atomic batch without advancing its checkpoint; values never wrap or silently round.
 The executable contract checkpoint must encode these exact patterns rather than accept provider strings. This
 specification requires its executable contract checkpoint to pass before independent feature slices are integrated.
+All internal timestamps are non-zero UTC within RFC 3339 years 1 through 9999; summary grid boundaries are whole-second
+UTC-epoch aligned. Every durable checkpoint revision greater than zero has a previous-attempt timestamp, including an
+initialized empty source.
 
 ## Initial platform gaps
 

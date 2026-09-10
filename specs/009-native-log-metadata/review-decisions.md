@@ -25,6 +25,7 @@ spec/ports are authoritative. Native field caps replace journal-line caps; byte,
    Store derives coverage and commits it with event-time rollups, checkpoint and incremented revision in one
    compare-and-swap transaction. An ambiguous outcome
    requires rereading the revision; no blind repeat increment.
+   Every revision greater than zero carries its prior committed attempt timestamp even when its private cursor is nil.
 4. **Recoverable reset without counts:** an initial empty checkpoint may capture the last five minutes and may remain
    cursorless when it returns no rows. After an invalid/stale checkpoint, use a fixed metadata-only tail probe outside
    that time window. Windows queries the fixed channel with `EvtQueryReverseDirection`, calls `EvtNext` for at most one
@@ -48,6 +49,9 @@ spec/ports are authoritative. Native field caps replace journal-line caps; byte,
    A stream byte cap may end sooner; only fully examined complete rows can contribute to a trustworthy completed batch.
    Preserve the last complete cursor, disclose partial/deferred status and reap the reader. Accepted plus discarded
    records total at most 512; a 513th examined record is only a deferred sentinel and must be read again, not discarded.
+   Reject more than 512 discard groups before iterating them. `OK` has zero discards and requires caught-up proof.
+   Caught-up `PARTIAL` is limited to `INVALID_RESPONSE` for known rejected selected-field rows after EOF; deadline,
+   byte, backlog and protocol truncation never claim caught-up coverage.
 7. **Counter meanings:** captured means normalized events committed; discarded means known examined rows intentionally
    skipped, such as invalid or outside retention. Deferred lookahead is not loss; ring eviction and retention expiry
    are not source discards. Unknown loss is a gap, never an invented numeric estimate.
@@ -77,8 +81,10 @@ spec/ports are authoritative. Native field caps replace journal-line caps; byte,
     exactly `WIN_<uint32>`, `WIN_<32-lowercase-hex-provider-guid>_<uint32>`,
     `SYSTEMD_<32-lowercase-hex-message-id>`, or `SYSTEMD_PRIORITY_<0..7>`, at most 64 bytes. Provider names and all
     unrecognized fields are rejected rather than projected.
+    Reader batches also use a closed state/reason matrix; store-, projection- and aggregate-only reasons are rejected at
+    this ingress boundary. Internal times are non-zero UTC within RFC 3339 years 1 through 9999.
 
 These decisions intentionally prefer disclosed gaps over duplicate/invented counts. Tests must cover actual child
-timeout/reaping and protocol limits, journal cursor-file cleanup/argv privacy, source/native field allowlists, stale to
+timeout/reaping and protocol limits, private checkpoint pipes and helper identity, source/native field allowlists, stale to
 tail-proof to normal-read recovery, repeated empty reset-pending probes, zero-count reset commits, storage CAS/retries,
 and both zero and unknown coverage. No real host log bodies are needed for verification.

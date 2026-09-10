@@ -181,7 +181,9 @@ type Reader interface {
 ```
 
 `Checkpoint.Validate` accepts `Revision > 0` with nil `Opaque`; that is a valid initialized empty source, not reset
-evidence. `Opaque` and both optional timestamps are deep-cloned at every port boundary. Standalone validation requires
+evidence, but every `Revision > 0` checkpoint requires non-nil `PreviousAttemptAt` because every committed attempt
+advances both together. Revision zero has no opaque value, reset state or attempt/coverage timestamps. `Opaque` and
+both optional timestamps are deep-cloned at every port boundary. Standalone validation requires
 each non-nil timestamp to be non-zero UTC, requires `CoverageThrough <= PreviousAttemptAt`, and rejects
 `CoverageThrough` when `PreviousAttemptAt` is nil. `ReadRequest` validation additionally requires both prior timestamps
 to be no later than its UTC `QueryStartedAt` and requires `QueryStartedAt > PreviousAttemptAt` when the latter exists;
@@ -225,6 +227,25 @@ every event/discard and safe counter sum, and requires `CaughtUp == false` for f
 reason pointers, and `NextOpaque` are deep-cloned before caching or persistence. Store additionally checks under the
 CAS transaction that source/revision equal the loaded checkpoint, a normal batch is not accepted while reset is
 pending, and each reset transition is legal. No caller-owned slice or timestamp pointer is retained.
+
+The native-reader batch state/reason vocabulary is closed. `SUPPORTED/OK` has no reason. A normal
+`SUPPORTED/PARTIAL` uses only `INVALID_RESPONSE`, `DEADLINE_EXCEEDED`, `RESPONSE_TOO_LARGE` or
+`BACKLOG_DEFERRED`; a supported failed batch uses only the first three failure codes or `READER_FAILED`.
+`UNAVAILABLE/FAILED` uses `READER_FAILED`; `UNAVAILABLE/NOT_RUN` uses `NO_VISIBLE_JOURNAL`,
+`LOG_HELPER_UNAVAILABLE`, `LOG_HELPER_MISMATCH` or `READER_FAILED`. Permission-denied and unsupported batches are
+respectively `PERMISSION_DENIED/NOT_RUN/PERMISSION_DENIED` and
+`UNSUPPORTED/NOT_RUN/PLATFORM_UNSUPPORTED`. A disabled source never produces a reader batch.
+`CHECKPOINT_RESET` is accepted only on a supported partial reset transition. `MISSED_COLLECTION`,
+`NOT_YET_OBSERVED`, `LOG_STORAGE_UNAVAILABLE`, `LOG_SOURCES_DISABLED` and `SOURCE_PARTIAL` are derived
+store/projection/cache reasons and cannot enter through a native batch.
+
+`OK` requires explicit caught-up proof and zero discarded rows. A caught-up partial normal batch is allowed only as
+`SUPPORTED/PARTIAL/INVALID_RESPONSE` with at least one known discarded selected-field row. Here
+`INVALID_RESPONSE` means an individual selected metadata record fell outside the accepted normalized domain while the
+reader continued to a proved end of source; malformed helper framing/protocol produces no trustworthy batch.
+`DEADLINE_EXCEEDED`, `RESPONSE_TOO_LARGE`, `BACKLOG_DEFERRED` and every other truncation always clear `CaughtUp`.
+The validator rejects more than 512 discard groups before iterating them, as well as more than 512 total accepted plus
+discarded rows.
 
 Reset recovery happens within the attempt that proves the ordinary checkpoint stale/invalid, not in an unconditional
 extra cycle. The adapter immediately switches to one bounded metadata-only newest-record tail probe outside the
@@ -349,6 +370,10 @@ ascending grid for every configured source, and retains historical buckets despi
 or unsupported status. Captured values use event time. Invalid/missing-time discards use `QueryStartedAt`; their totals
 therefore are not described as exclusively event-time. Counts and coverage remain independent exactly as specified in
 `contract-checkpoint.md`.
+
+Every internal timestamp is UTC, non-zero and within RFC 3339's representable year range 1 through 9999. Fixed summary
+grid boundaries additionally have zero sub-second component and exact UTC-epoch alignment. The log store must choose a
+representation that round-trips that accepted range; this contract does not require Unix-nanosecond storage.
 
 ## Collector and cache ownership
 
