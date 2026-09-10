@@ -254,15 +254,20 @@ func serveRuntime(ctx context.Context, address, stateDir string, output io.Write
 		return err
 	}
 	runtimeResourcesJoined = false
-	stopCollection := func() error {
+	stopCollection := func(httpJoined bool) error {
 		return stopCollectors(logs, runtime, func() error {
+			if !httpJoined {
+				// Closing network connections does not join their handlers. Keep
+				// borrowed storage/container state alive until process exit.
+				return nil
+			}
 			runtimeResourcesJoined = true
 			return store.Close()
 		})
 	}
 	if len(options.logSources) > 0 {
 		if err := logs.Start(context.WithoutCancel(ctx)); err != nil {
-			return errors.Join(err, stopCollection())
+			return errors.Join(err, stopCollection(true))
 		}
 	}
 	server := &http.Server{Handler: handler, ErrorLog: log.New(safeHTTPLog{logger: logger, diagnostics: diagnosticWriter}, "", 0), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8192}
@@ -271,49 +276,51 @@ func serveRuntime(ctx context.Context, address, stateDir string, output io.Write
 	diagnosticWriter.Record(diagnostics.Event{Kind: diagnostics.EventRuntimeReady, Code: diagnostics.CodeOK, Version: version})
 	fmt.Fprintf(output, "Home Lab Observer: http://%s\nLocal access token file: %s\nOpen the file locally and paste its token into the dashboard. Press Ctrl+C to stop.\n", address, tokenPath)
 	logger.Info("observer_started", "version", version)
+	if err := finishHTTP(ctx, server, stopped, 10*time.Second, stopCollection); err != nil {
+		var shutdownCode string
+		stopCode, shutdownCode = classifyShutdownFailure(err)
+		logger.Error("runtime_shutdown_failed", "code", shutdownCode)
+		return err
+	}
+	if endpoint != nil {
+		if err := endpoint.Close(); err != nil {
+			return err
+		}
+		lifecycleFinalized = true
+	}
+	logger.Info("observer_stopped", "code", "SHUTDOWN_COMPLETE")
+	stopCode = diagnostics.CodeOK
+	return nil
+}
+
+// Serve returning does not mean active handlers have stopped borrowing state.
+// Both exit paths drain first. The duration argument lets regressions exercise
+// timeout policy quickly; production always supplies its fixed ten-second bound.
+func finishHTTP(ctx context.Context, server *http.Server, stopped <-chan error, drainTimeout time.Duration, stopCollection func(httpJoined bool) error) error {
+	var serveErr error
+	unexpected := false
 	select {
-	case err := <-stopped:
-		stopErr := stopCollection()
-		if stopErr != nil {
-			var shutdownCode string
-			stopCode, shutdownCode = classifyShutdownFailure(stopErr)
-			logger.Error("collection_shutdown_failed", "code", shutdownCode)
-		}
-		if err == nil || errors.Is(err, http.ErrServerClosed) {
-			err = errors.New("HTTP server stopped without a shutdown request")
-		}
-		return errors.Join(err, stopErr)
+	case serveErr = <-stopped:
+		unexpected = true
 	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		shutdownErr := server.Shutdown(shutdownCtx)
-		cancel()
-		if shutdownErr != nil {
-			stopCode = diagnostics.CodeTimeout
-			_ = server.Close()
-		}
-		serveErr := <-stopped
+	}
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), drainTimeout)
+	shutdownErr := server.Shutdown(shutdownCtx)
+	cancel()
+	if shutdownErr != nil {
+		// Close cancels network activity, but cannot prove handler completion.
+		_ = server.Close()
+	}
+	if !unexpected {
+		serveErr = <-stopped
 		if errors.Is(serveErr, http.ErrServerClosed) {
 			serveErr = nil
 		}
-		stopErr := stopCollection()
-		if stopErr != nil {
-			var shutdownCode string
-			stopCode, shutdownCode = classifyShutdownFailure(stopErr)
-			logger.Error("collection_shutdown_failed", "code", shutdownCode)
-		}
-		if err := errors.Join(shutdownErr, serveErr, stopErr); err != nil {
-			return err
-		}
-		if endpoint != nil {
-			if err := endpoint.Close(); err != nil {
-				return err
-			}
-			lifecycleFinalized = true
-		}
-		logger.Info("observer_stopped", "code", "SHUTDOWN_COMPLETE")
-		stopCode = diagnostics.CodeOK
-		return nil
+	} else if serveErr == nil || errors.Is(serveErr, http.ErrServerClosed) {
+		serveErr = errors.New("HTTP server stopped without a shutdown request")
 	}
+	stopErr := stopCollection(shutdownErr == nil)
+	return errors.Join(shutdownErr, serveErr, stopErr)
 }
 
 func classifyShutdownFailure(err error) (diagnostics.ResultCode, string) {
