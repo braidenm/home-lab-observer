@@ -51,12 +51,24 @@ test("closed schema rejects unsafe states and unbounded values", () => {
     value.sources[0].status.reason_code = "NO_VISIBLE_JOURNAL";
   });
   assertSchemaInvalid("unknown status reason", unavailable, (value) => { value.sources[0].status.reason_code = "NATIVE_ERROR_TEXT"; });
+  assertSchemaInvalid("top-only reason cannot describe source partial", rich, (value) => { value.sources[0].status.reason_code = "SOURCE_PARTIAL"; });
+  assertSchemaInvalid("unavailable not-run reason is source-specific", unavailable, (value) => {
+    value.sources[0].status.collection_state = "NOT_RUN";
+    value.sources[0].status.reason_code = "PERMISSION_DENIED";
+  });
+  assertSchemaInvalid("supported failure reason is source-specific", rich, (value) => {
+    value.sources[0].status.collection_state = "FAILED";
+    value.sources[0].status.freshness = "STALE";
+    value.sources[0].status.reason_code = "PERMISSION_DENIED";
+  });
   assertSchemaInvalid("permission state cannot hide its reason", unavailable, (value) => {
     value.sources[0].status.support_state = "PERMISSION_DENIED";
     value.sources[0].status.collection_state = "NOT_RUN";
   });
   assertSchemaInvalid("safe integer overflow", rich, (value) => { value.counts.captured = maxSafeInteger + 1; });
   assertSchemaInvalid("year zero", rich, (value) => { value.generated_at = "0000-01-01T00:00:00Z"; });
+  assertSchemaInvalid("Go zero instant", rich, (value) => { value.generated_at = "0001-01-01T00:00:00Z"; });
+  assertSchemaInvalid("fractional Go zero instant", rich, (value) => { value.generated_at = "0001-01-01T00:00:00.000000000Z"; });
   assertSchemaInvalid("year above 9999", rich, (value) => { value.generated_at = "+010000-01-01T00:00:00Z"; });
   assertSchemaInvalid("excess timestamp precision", rich, (value) => { value.generated_at = "2026-09-09T13:00:17.1234567890Z"; });
 });

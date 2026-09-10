@@ -120,7 +120,7 @@
     "timestamp": {
       "type": "string",
       "format": "date-time",
-      "pattern": "^(?!0000)[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?Z$"
+      "pattern": "^(?!0001-01-01T00:00:00(?:\\.0{1,9})?Z$)(?!0000)[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?Z$"
     },
     "nullableTimestamp": {
       "oneOf": [
@@ -292,7 +292,7 @@
                   "freshness": { "const": "UNKNOWN" },
                   "observed_at": { "type": "null" },
                   "coverage_through": { "type": "null" },
-                  "reason_code": { "$ref": "#/$defs/statusReason" }
+                  "reason_code": { "enum": ["NO_VISIBLE_JOURNAL", "LOG_HELPER_UNAVAILABLE", "LOG_HELPER_MISMATCH", "READER_FAILED"] }
                 }
               },
               {
@@ -322,7 +322,7 @@
             "properties": {
               "support_state": { "const": "SUPPORTED" },
               "freshness": { "enum": ["CURRENT", "STALE", "UNKNOWN"] },
-              "reason_code": { "$ref": "#/$defs/statusReason" }
+              "reason_code": { "enum": ["CHECKPOINT_RESET", "INVALID_RESPONSE", "DEADLINE_EXCEEDED", "RESPONSE_TOO_LARGE", "BACKLOG_DEFERRED"] }
             }
           }
         },
@@ -333,6 +333,20 @@
               "support_state": { "enum": ["SUPPORTED", "UNAVAILABLE"] },
               "freshness": { "enum": ["STALE", "UNKNOWN"] },
               "reason_code": { "$ref": "#/$defs/statusReason" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "support_state": { "const": "SUPPORTED" },
+              "collection_state": { "const": "FAILED" }
+            },
+            "required": ["support_state", "collection_state"]
+          },
+          "then": {
+            "properties": {
+              "reason_code": { "enum": ["DEADLINE_EXCEEDED", "INVALID_RESPONSE", "RESPONSE_TOO_LARGE", "READER_FAILED", "LOG_STORAGE_UNAVAILABLE"] }
             }
           }
         },
