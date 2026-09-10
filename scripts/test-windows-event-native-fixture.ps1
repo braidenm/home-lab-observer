@@ -1,0 +1,182 @@
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+
+$provider = 'BraidenM-HomeLabObserver-NativeFixture'
+$systemChannel = 'BraidenM-HomeLabObserver/Fixture-System'
+$applicationChannel = 'BraidenM-HomeLabObserver/Fixture-Application'
+$markerName = '.hlo-owned-windows-event-fixture-v1'
+$marker = "HLO_OWNED_WINDOWS_EVENT_FIXTURE_V1`n"
+$installed = $false
+$ownedRoot = $null
+$manifest = $null
+$testProcess = $null
+$testProcessReaped = $true
+$fixturePassed = $false
+
+function Fail([string] $Message) { throw "owned Windows event fixture failed: $Message" }
+
+function Invoke-Quiet([string] $File, [string[]] $Arguments) {
+    & $File @Arguments 1>$null 2>$null
+    if ($LASTEXITCODE -ne 0) { Fail "required fixture command failed" }
+}
+
+function Test-WevtMissing([string] $Kind, [string] $Name) {
+    if ($Kind -eq 'provider') { & wevtutil.exe gp $Name 1>$null 2>$null }
+    else { & wevtutil.exe gl $Name 1>$null 2>$null }
+    return $LASTEXITCODE -ne 0
+}
+
+function Assert-PrivateRegular([string] $Path, [Int64] $Maximum) {
+    if (-not [IO.Path]::IsPathFullyQualified($Path) -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        Fail 'owned output is missing'
+    }
+    $item = Get-Item -LiteralPath $Path -Force
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $item.Length -lt 1 -or $item.Length -gt $Maximum) {
+        Fail 'owned output is linked, empty, or oversized'
+    }
+}
+
+if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_ENVIRONMENT -cne 'github-hosted' -or
+    [string]::IsNullOrWhiteSpace($env:RUNNER_TEMP) -or [Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+    Fail 'this test is restricted to an ephemeral GitHub-hosted Windows runner'
+}
+$principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Fail 'provider registration requires the hosted runner administrator token'
+}
+$runnerRoot = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd([IO.Path]::DirectorySeparatorChar)
+$runnerItem = Get-Item -LiteralPath $runnerRoot -Force
+if (-not $runnerItem.PSIsContainer -or ($runnerItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+    Fail 'RUNNER_TEMP is not a direct owned directory'
+}
+if (-not (Test-WevtMissing 'provider' $provider) -or -not (Test-WevtMissing 'channel' $systemChannel) -or
+    -not (Test-WevtMissing 'channel' $applicationChannel)) {
+    Fail 'fixture provider or channel already exists'
+}
+
+try {
+    $ownedRoot = Join-Path $runnerRoot ('.hlo-event-fixture-' + [Guid]::NewGuid().ToString('N'))
+    [IO.Directory]::CreateDirectory($ownedRoot) | Out-Null
+    $ownedItem = Get-Item -LiteralPath $ownedRoot -Force
+    if (($ownedItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+        [IO.Directory]::GetParent($ownedItem.FullName).FullName.TrimEnd([IO.Path]::DirectorySeparatorChar) -cne $runnerRoot) {
+        Fail 'owned fixture root was not created directly beneath RUNNER_TEMP'
+    }
+    [IO.File]::WriteAllText((Join-Path $ownedRoot $markerName), $marker, [Text.UTF8Encoding]::new($false))
+
+    foreach ($tool in @('mc.exe', 'rc.exe', 'link.exe', 'go.exe', 'wevtutil.exe')) {
+        if ($null -eq (Get-Command $tool -ErrorAction SilentlyContinue)) { Fail 'required hosted build tool is unavailable' }
+    }
+    $sourceManifest = Join-Path $PSScriptRoot '..\internal\eventnative\testdata\fixture.man'
+    Assert-PrivateRegular $sourceManifest 65536
+    $manifest = Join-Path $ownedRoot 'fixture.man'
+    [IO.File]::Copy([IO.Path]::GetFullPath($sourceManifest), $manifest, $false)
+    Push-Location -LiteralPath $ownedRoot
+    try {
+        Invoke-Quiet 'mc.exe' @('-um', '-h', '.', '-r', '.', 'fixture.man')
+        $resourceScript = @(Get-ChildItem -LiteralPath $ownedRoot -Filter '*.rc' -File)
+        if ($resourceScript.Count -ne 1) { Fail 'message compiler did not produce one resource script' }
+        $resource = Join-Path $ownedRoot 'fixture.res'
+        Invoke-Quiet 'rc.exe' @('/nologo', ('/fo' + $resource), $resourceScript[0].FullName)
+        $resourceDLL = Join-Path $ownedRoot 'fixture.dll'
+        $machine = if ($env:PROCESSOR_ARCHITECTURE -ceq 'ARM64') { 'ARM64' } else { 'X64' }
+        Invoke-Quiet 'link.exe' @('/nologo', '/dll', '/noentry', ('/machine:' + $machine), ('/out:' + $resourceDLL), $resource)
+    } finally {
+        Pop-Location
+    }
+    Assert-PrivateRegular $resourceDLL (2 * 1024 * 1024)
+
+    $publisher = Join-Path $ownedRoot 'fixture-publisher.exe'
+    Invoke-Quiet 'go.exe' @('build', '-trimpath', '-o', $publisher, './internal/eventnative/testdata/fixturepublisher')
+    Assert-PrivateRegular $publisher (20 * 1024 * 1024)
+
+    Invoke-Quiet 'wevtutil.exe' @('im', $manifest, ('/rf:' + $resourceDLL), ('/mf:' + $resourceDLL))
+    $installed = $true
+    if (Test-WevtMissing 'provider' $provider -or Test-WevtMissing 'channel' $systemChannel -or Test-WevtMissing 'channel' $applicationChannel) {
+        Fail 'fixture registration was not observable'
+    }
+    Invoke-Quiet $publisher @('before')
+
+    $systemBefore = Join-Path $ownedRoot 'system-before.evtx'
+    $applicationBefore = Join-Path $ownedRoot 'application-before.evtx'
+    Invoke-Quiet 'wevtutil.exe' @('epl', $systemChannel, $systemBefore, "/q:*[System[Provider[@Name='$provider'] and (EventID=101 or EventID=102)]]")
+    Invoke-Quiet 'wevtutil.exe' @('epl', $applicationChannel, $applicationBefore, "/q:*[System[Provider[@Name='$provider'] and (EventID=201 or EventID=202)]]")
+
+    Invoke-Quiet 'wevtutil.exe' @('cl', $systemChannel)
+    Invoke-Quiet 'wevtutil.exe' @('cl', $applicationChannel)
+    Invoke-Quiet $publisher @('after')
+    $systemAfter = Join-Path $ownedRoot 'system-after.evtx'
+    $applicationAfter = Join-Path $ownedRoot 'application-after.evtx'
+    Invoke-Quiet 'wevtutil.exe' @('epl', $systemChannel, $systemAfter, "/q:*[System[Provider[@Name='$provider'] and EventID=103]]")
+    Invoke-Quiet 'wevtutil.exe' @('epl', $applicationChannel, $applicationAfter, "/q:*[System[Provider[@Name='$provider'] and EventID=203]]")
+    foreach ($file in @($systemBefore, $applicationBefore, $systemAfter, $applicationAfter)) {
+        Assert-PrivateRegular $file (2 * 1024 * 1024)
+    }
+
+    $testBinary = Join-Path $ownedRoot 'eventnative.test.exe'
+    Invoke-Quiet 'go.exe' @('test', '-c', '-o', $testBinary, './internal/eventnative')
+    Assert-PrivateRegular $testBinary (200 * 1024 * 1024)
+    $start = [Diagnostics.ProcessStartInfo]::new()
+    $start.FileName = $testBinary
+    $start.Arguments = '-test.run=^TestOwnedWindowsNativeFixture$ -test.count=1'
+    $start.UseShellExecute = $false
+    $start.CreateNoWindow = $true
+    $start.Environment['OBSERVER_TEST_OWNED_WINDOWS_EVENT_FIXTURE'] = '1'
+    $start.Environment['OBSERVER_TEST_EVTX_ROOT'] = $ownedRoot
+    $start.RedirectStandardOutput = $true
+    $start.RedirectStandardError = $true
+    $testProcess = [Diagnostics.Process]::new()
+    $testProcess.StartInfo = $start
+    if (-not $testProcess.Start()) { Fail 'native fixture test did not start' }
+    $testProcessReaped = $false
+    $stdoutTask = $testProcess.StandardOutput.ReadToEndAsync()
+    $stderrTask = $testProcess.StandardError.ReadToEndAsync()
+    if (-not $testProcess.WaitForExit(30000)) {
+        $testProcess.Kill($true)
+        if (-not $testProcess.WaitForExit(5000)) { Fail 'native fixture test could not be reaped' }
+        $testProcessReaped = $true
+        Fail 'native fixture test exceeded its external deadline'
+    }
+    $testProcessReaped = $true
+    $stdoutText = $stdoutTask.GetAwaiter().GetResult()
+    $stderrText = $stderrTask.GetAwaiter().GetResult()
+    $exitCode = $testProcess.ExitCode
+    if ([Text.Encoding]::UTF8.GetByteCount($stdoutText) -gt 65536 -or [Text.Encoding]::UTF8.GetByteCount($stderrText) -gt 65536) {
+        Fail 'native fixture test output exceeded its bound'
+    }
+    if ($exitCode -ne 0) { Fail 'native fixture assertions failed' }
+    $fixturePassed = $true
+} finally {
+    $cleanupFailed = $false
+    if ($null -ne $testProcess) {
+        if (-not $testProcessReaped) {
+            try {
+                if (-not $testProcess.HasExited) { $testProcess.Kill($true) }
+                if (-not $testProcess.WaitForExit(5000)) { $cleanupFailed = $true }
+                else { $testProcessReaped = $true }
+            } catch {
+                $cleanupFailed = $true
+            }
+        }
+        $testProcess.Dispose()
+    }
+    if ($installed) {
+        & wevtutil.exe um $manifest 1>$null 2>$null
+        if ($LASTEXITCODE -ne 0) { $cleanupFailed = $true }
+        if (-not (Test-WevtMissing 'provider' $provider) -or -not (Test-WevtMissing 'channel' $systemChannel) -or
+            -not (Test-WevtMissing 'channel' $applicationChannel)) { $cleanupFailed = $true }
+    }
+    if ($null -ne $ownedRoot -and (Test-Path -LiteralPath $ownedRoot -PathType Container)) {
+        $candidate = [IO.Path]::GetFullPath($ownedRoot)
+        $parent = [IO.Directory]::GetParent($candidate).FullName.TrimEnd([IO.Path]::DirectorySeparatorChar)
+        $markerPath = Join-Path $candidate $markerName
+        if ($parent -cne $runnerRoot -or -not (Test-Path -LiteralPath $markerPath -PathType Leaf) -or
+            [IO.File]::ReadAllText($markerPath, [Text.Encoding]::UTF8) -cne $marker) {
+            $cleanupFailed = $true
+        } elseif (-not $cleanupFailed) {
+            Remove-Item -LiteralPath $candidate -Recurse -Force
+        }
+    }
+    if ($cleanupFailed) { Fail 'owned fixture cleanup was not confirmed' }
+}
+if ($fixturePassed) { Write-Output 'Owned Windows WEVTAPI fixture passed without production-channel access.' }

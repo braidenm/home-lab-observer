@@ -1,0 +1,39 @@
+name: Windows native event fixture
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-event-native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  owned-synthetic-fixture:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            architecture: x64
+          - runner: windows-11-arm
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Generate and read only owned synthetic Windows event logs
+        shell: cmd
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          call "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -no_logo -arch=${{ matrix.architecture }}
+          pwsh -NoProfile -NonInteractive -File scripts\test-windows-event-native-fixture.ps1

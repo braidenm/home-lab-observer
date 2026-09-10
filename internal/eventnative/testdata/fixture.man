@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<instrumentationManifest
+  xmlns="http://schemas.microsoft.com/win/2004/08/events"
+  xmlns:win="http://manifests.microsoft.com/win/2004/08/windows/events"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <instrumentation>
+    <events>
+      <provider
+        name="BraidenM-HomeLabObserver-NativeFixture"
+        guid="{4F0A8EAD-523C-4F1D-9D5E-30D03A30F81B}"
+        symbol="HLO_FIXTURE_PROVIDER"
+        resourceFileName="fixture.dll"
+        messageFileName="fixture.dll"
+        message="$(string.Provider.Name)">
+        <channels>
+          <channel name="BraidenM-HomeLabObserver/Fixture-System" chid="FixtureSystem" symbol="HLO_FIXTURE_SYSTEM" type="Operational" enabled="true" value="16" message="$(string.Channel.System)"/>
+          <channel name="BraidenM-HomeLabObserver/Fixture-Application" chid="FixtureApplication" symbol="HLO_FIXTURE_APPLICATION" type="Operational" enabled="true" value="17" message="$(string.Channel.Application)"/>
+        </channels>
+        <events>
+          <event symbol="HLO_SYSTEM_INFO" value="101" version="0" channel="FixtureSystem" level="win:Informational" message="$(string.Event.SystemInfo)"/>
+          <event symbol="HLO_SYSTEM_WARN" value="102" version="0" channel="FixtureSystem" level="win:Warning" message="$(string.Event.SystemWarn)"/>
+          <event symbol="HLO_SYSTEM_AFTER" value="103" version="0" channel="FixtureSystem" level="win:Error" message="$(string.Event.SystemAfter)"/>
+          <event symbol="HLO_APPLICATION_ERROR" value="201" version="0" channel="FixtureApplication" level="win:Error" message="$(string.Event.ApplicationError)"/>
+          <event symbol="HLO_APPLICATION_CRITICAL" value="202" version="0" channel="FixtureApplication" level="win:Critical" message="$(string.Event.ApplicationCritical)"/>
+          <event symbol="HLO_APPLICATION_AFTER" value="203" version="0" channel="FixtureApplication" level="win:Informational" message="$(string.Event.ApplicationAfter)"/>
+        </events>
+      </provider>
+    </events>
+  </instrumentation>
+  <localization>
+    <resources culture="en-US">
+      <stringTable>
+        <string id="Provider.Name" value="Home Lab Observer owned native fixture"/>
+        <string id="Channel.System" value="Home Lab Observer fixture system channel"/>
+        <string id="Channel.Application" value="Home Lab Observer fixture application channel"/>
+        <string id="Event.SystemInfo" value="Synthetic system information"/>
+        <string id="Event.SystemWarn" value="Synthetic system warning"/>
+        <string id="Event.SystemAfter" value="Synthetic system post-reset"/>
+        <string id="Event.ApplicationError" value="Synthetic application error"/>
+        <string id="Event.ApplicationCritical" value="Synthetic application critical"/>
+        <string id="Event.ApplicationAfter" value="Synthetic application post-reset"/>
+      </stringTable>
+    </resources>
+  </localization>
+</instrumentationManifest>

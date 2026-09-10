@@ -1,7 +1,8 @@
 # Owned Windows native event fixture proposal
 
-Status: PROPOSED acceptance design. No fixture, publisher, workflow, native test, or support claim exists yet.
-Implementation and activation require a separate reviewed prototype.
+Status: PROPOSED, unexecuted prototype. The test-only manifest, publisher, EVTX seam and guarded workflow exist on
+the prototype branch, but no registration workflow has been pushed or run and no native support claim exists yet.
+Activation requires a separate review and successful hosted evidence.
 
 ## Purpose and boundary
 
