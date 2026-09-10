@@ -197,7 +197,7 @@ func (s Status) Validate() error {
 		}
 	}
 	if s.CollectionState == CollectionOK {
-		if s.SupportState != SupportSupported || s.ReasonCode != nil {
+		if s.SupportState != SupportSupported || s.ReasonCode != nil || s.ObservedAt == nil || s.AttemptedAt == nil || s.Freshness == FreshnessUnknown {
 			return errors.New("successful status is inconsistent")
 		}
 	} else if s.ReasonCode == nil {
@@ -209,8 +209,16 @@ func (s Status) Validate() error {
 	if s.CollectionState == CollectionNotRun && s.SupportState == SupportSupported {
 		return errors.New("supported status cannot be not-run")
 	}
-	if s.SupportState != SupportSupported && s.SupportState != SupportUnavailable && s.CollectionState != CollectionNotRun {
-		return errors.New("non-supported status implies collection")
+	if s.SupportState != SupportSupported {
+		if s.SupportState != SupportUnavailable && s.CollectionState != CollectionNotRun {
+			return errors.New("non-supported status implies collection")
+		}
+		if s.CollectionState == CollectionNotRun && (s.Freshness != FreshnessUnknown || s.ObservedAt != nil) {
+			return errors.New("not-run status must have unknown freshness")
+		}
+	}
+	if s.CollectionState == CollectionFailed && s.Freshness == FreshnessCurrent {
+		return errors.New("failed status cannot be current")
 	}
 	return nil
 }
@@ -224,6 +232,9 @@ func (c Checkpoint) Validate() error {
 	}
 	if c.ResetPending && c.Revision == 0 {
 		return errors.New("initial checkpoint cannot be reset-pending")
+	}
+	if c.Revision > 0 && c.PreviousAttemptAt == nil {
+		return errors.New("durable checkpoint requires previous attempt")
 	}
 	if c.Revision == 0 && (len(c.Opaque) != 0 || c.PreviousAttemptAt != nil || c.CoverageThrough != nil) {
 		return errors.New("initial checkpoint cannot have durable state")
@@ -298,6 +309,12 @@ func (b Batch) Validate() error {
 	if b.CollectionState == CollectionPartial && b.SupportState != SupportSupported {
 		return errors.New("partial batch requires supported source")
 	}
+	if b.CollectionState == CollectionNotRun && b.SupportState == SupportSupported {
+		return errors.New("supported batch cannot be not-run")
+	}
+	if b.SupportState != SupportSupported && b.SupportState != SupportUnavailable && b.CollectionState != CollectionNotRun {
+		return errors.New("non-supported batch implies collection")
+	}
 
 	var discarded uint64
 	for _, discard := range b.Discards {
@@ -342,6 +359,9 @@ func (b Batch) Validate() error {
 	if b.Deferred && b.CaughtUp {
 		return errors.New("deferred batch cannot be caught up")
 	}
+	if b.CollectionState == CollectionOK && !b.CaughtUp {
+		return errors.New("successful batch requires caught-up proof")
+	}
 	if acceptedAndDiscarded > 0 && len(b.NextOpaque) == 0 {
 		return errors.New("observed batch requires next checkpoint")
 	}
@@ -367,7 +387,7 @@ func (b Batch) validateResetBatch() error {
 		}
 		return nil
 	}
-	if b.ExaminedCount > 1 || len(b.NextOpaque) != 0 {
+	if b.ExaminedCount > 1 || len(b.NextOpaque) != 0 || b.CollectionState == CollectionOK || b.ReasonCode == nil {
 		return errors.New("pending reset batch is inconsistent")
 	}
 	return nil

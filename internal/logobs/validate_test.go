@@ -71,7 +71,7 @@ func TestEnumAndReasonValidation(t *testing.T) {
 			t.Fatalf("valid enum rejected: %v", err)
 		}
 	}
-	for _, reason := range []ReasonCode{"", "lowercase", "HAS-DASH", ReasonCode(strings.Repeat("A", 65))} {
+	for _, reason := range []ReasonCode{"", "lowercase", "HAS-DASH", "NEW_CODE", ReasonCode(strings.Repeat("A", 65))} {
 		if err := reason.Validate(); err == nil {
 			t.Fatalf("invalid reason %q accepted", reason)
 		}
@@ -100,7 +100,7 @@ func TestCheckpointAndReadRequestValidation(t *testing.T) {
 	coverage := previous.Add(-time.Minute)
 	valid := []Checkpoint{
 		{},
-		{Revision: 1},
+		{Revision: 1, PreviousAttemptAt: &previous},
 		{Revision: 2, ResetPending: true, PreviousAttemptAt: &previous, CoverageThrough: &coverage},
 		{Revision: 3, Opaque: []byte("private"), PreviousAttemptAt: &previous, CoverageThrough: &coverage},
 	}
@@ -117,6 +117,7 @@ func TestCheckpointAndReadRequestValidation(t *testing.T) {
 	for name, checkpoint := range map[string]Checkpoint{
 		"pending opaque":        {Revision: 1, ResetPending: true, Opaque: []byte("private")},
 		"pending initial":       {ResetPending: true},
+		"revision without time": {Revision: 1},
 		"initial durable":       {PreviousAttemptAt: &previous},
 		"coverage without prev": {Revision: 1, CoverageThrough: &coverage},
 		"coverage after prev":   {Revision: 1, PreviousAttemptAt: &coverage, CoverageThrough: &previous},
@@ -133,6 +134,50 @@ func TestCheckpointAndReadRequestValidation(t *testing.T) {
 	request.QueryStartedAt = previous
 	if err := request.Validate(); err == nil {
 		t.Fatal("non-advancing read request accepted")
+	}
+}
+
+func TestStatusValidationRejectsFalseSuccessAndInvalidStatePairs(t *testing.T) {
+	if err := successfulStatus().Validate(); err != nil {
+		t.Fatalf("valid successful status rejected: %v", err)
+	}
+	storageReason := ReasonLogStorageUnavailable
+	attempted := testTime
+	storageFailure := Status{
+		SupportState: SupportUnavailable, CollectionState: CollectionFailed, Freshness: FreshnessUnknown,
+		AttemptedAt: &attempted, ReasonCode: &storageReason,
+	}
+	if err := storageFailure.Validate(); err != nil {
+		t.Fatalf("summary storage overlay rejected: %v", err)
+	}
+	permissionReason := ReasonPermissionDenied
+	permission := Status{
+		SupportState: SupportPermissionDenied, CollectionState: CollectionNotRun, Freshness: FreshnessUnknown,
+		AttemptedAt: &attempted, ReasonCode: &permissionReason,
+	}
+	if err := permission.Validate(); err != nil {
+		t.Fatalf("permission status rejected: %v", err)
+	}
+
+	for name, status := range map[string]Status{
+		"unknown successful": {
+			SupportState: SupportSupported, CollectionState: CollectionOK, Freshness: FreshnessUnknown,
+		},
+		"disabled failed": {
+			SupportState: SupportDisabled, CollectionState: CollectionFailed, Freshness: FreshnessUnknown, ReasonCode: &storageReason,
+		},
+		"permission current": {
+			SupportState: SupportPermissionDenied, CollectionState: CollectionNotRun, Freshness: FreshnessCurrent,
+			ObservedAt: &attempted, AttemptedAt: &attempted, ReasonCode: &permissionReason,
+		},
+		"failed current": {
+			SupportState: SupportUnavailable, CollectionState: CollectionFailed, Freshness: FreshnessCurrent,
+			ObservedAt: &attempted, AttemptedAt: &attempted, ReasonCode: &storageReason,
+		},
+	} {
+		if err := status.Validate(); err == nil {
+			t.Fatalf("%s status accepted", name)
+		}
 	}
 }
 
@@ -208,6 +253,65 @@ func TestBatchValidationBoundsAndResetState(t *testing.T) {
 	if err := badReset.Validate(); err == nil {
 		t.Fatal("pending reset with event accepted")
 	}
+	badReset = valid[3].Clone()
+	badReset.SupportState = SupportSupported
+	badReset.CollectionState = CollectionOK
+	badReset.ReasonCode = nil
+	if err := badReset.Validate(); err == nil {
+		t.Fatal("healthy pending reset accepted")
+	}
+	badReset = valid[4].Clone()
+	badReset.SupportState = SupportUnavailable
+	badReset.CollectionState = CollectionFailed
+	if err := badReset.Validate(); err == nil {
+		t.Fatal("failed established reset accepted")
+	}
+	badNormal := valid[0].Clone()
+	badNormal.NextOpaque = nil
+	if err := badNormal.Validate(); err == nil {
+		t.Fatal("observed normal batch without checkpoint accepted")
+	}
+	badNormal = valid[0].Clone()
+	badNormal.CaughtUp = false
+	if err := badNormal.Validate(); err == nil {
+		t.Fatal("OK batch without caught-up proof accepted")
+	}
+	boundedDiscards := Batch{
+		Kind: BatchNormal, Source: SourceSystem, QueryStartedAt: testTime, StartedAt: testTime, FinishedAt: testTime,
+		SupportState: SupportSupported, CollectionState: CollectionPartial, ReasonCode: &reasonReader,
+		Discards: []DiscardCount{{At: testTime, Count: MaxAcceptedEvents}}, ExaminedCount: MaxAcceptedEvents,
+		DiscardedCount: MaxAcceptedEvents, CaughtUp: true, NextOpaque: []byte("cursor"),
+	}
+	if err := boundedDiscards.Validate(); err != nil {
+		t.Fatalf("512 discarded rows rejected: %v", err)
+	}
+	boundedDiscards.Discards[0].Count++
+	boundedDiscards.DiscardedCount++
+	boundedDiscards.ExaminedCount++
+	if err := boundedDiscards.Validate(); err == nil {
+		t.Fatal("513 discarded rows accepted")
+	}
+	for name, mutate := range map[string]func(*Batch){
+		"disabled failed": func(b *Batch) {
+			b.SupportState = SupportDisabled
+		},
+		"permission failed": func(b *Batch) {
+			b.SupportState = SupportPermissionDenied
+		},
+		"unsupported failed": func(b *Batch) {
+			b.SupportState = SupportUnsupported
+		},
+		"supported not run": func(b *Batch) {
+			b.SupportState = SupportSupported
+			b.CollectionState = CollectionNotRun
+		},
+	} {
+		stateBatch := valid[2].Clone()
+		mutate(&stateBatch)
+		if err := stateBatch.Validate(); err == nil {
+			t.Fatalf("%s batch accepted", name)
+		}
+	}
 
 	payload, err := json.Marshal(valid[0])
 	if err != nil {
@@ -258,6 +362,34 @@ func TestSummaryValidationFixedGridCountsAndCoverage(t *testing.T) {
 	if err := bad.Validate(); err == nil {
 		t.Fatal("gap bucket with not-yet-observed reason accepted")
 	}
+	gapReason := ReasonReaderFailed
+	bad = unknown.Clone()
+	bad.Sources[0].Buckets[0].CoverageState = CoverageGapState
+	bad.Sources[0].Buckets[0].ReasonCode = &gapReason
+	bad.Sources[0].Buckets[0].Counts = &BucketCounts{}
+	bad.Sources[0].CoverageState = CoverageGapState
+	bad.Sources[0].Counts = &Counts{}
+	if err := bad.Validate(); err == nil {
+		t.Fatal("gap bucket with invented zero counts accepted")
+	}
+	positiveGap := unknown.Clone()
+	positiveGap.Sources[0].Buckets[0].CoverageState = CoverageGapState
+	positiveGap.Sources[0].Buckets[0].ReasonCode = &gapReason
+	positiveGap.Sources[0].Buckets[0].Counts = &BucketCounts{Counts: Counts{Captured: 1}, Severity: SeverityCounts{Error: 1}}
+	positiveGap.Sources[0].CoverageState = CoverageGapState
+	positiveGap.Sources[0].Counts = &Counts{Captured: 1}
+	if err := positiveGap.Validate(); err != nil {
+		t.Fatalf("positive known counts in gap rejected: %v", err)
+	}
+	partial := full.Clone()
+	partial.Sources[0].Buckets[0].CoverageState = CoveragePartial
+	partial.Sources[0].Buckets[0].CoveredSeconds = 30
+	partial.Sources[0].Buckets[0].ReasonCode = ptrReason(ReasonNotYetObserved)
+	partial.Sources[0].CoverageState = CoveragePartial
+	partial.Sources[0].CoveredSeconds -= 30
+	if err := partial.Validate(); err != nil {
+		t.Fatalf("partial covered/unknown bucket rejected: %v", err)
+	}
 	bad = full.Clone()
 	bad.Sources[0].CoveredSeconds--
 	if err := bad.Validate(); err == nil {
@@ -288,6 +420,10 @@ func TestSummaryQueryRejectsNonContractGrid(t *testing.T) {
 		"not aligned": func(q *SummaryQuery) {
 			q.WindowStart = q.WindowStart.Add(time.Second)
 			q.WindowEnd = q.WindowEnd.Add(time.Second)
+		},
+		"nanoseconds": func(q *SummaryQuery) {
+			q.WindowStart = q.WindowStart.Add(time.Nanosecond)
+			q.WindowEnd = q.WindowEnd.Add(time.Nanosecond)
 		},
 		"non utc": func(q *SummaryQuery) { q.WindowEnd = q.WindowEnd.In(time.FixedZone("zero", 0)) },
 	} {
@@ -368,3 +504,5 @@ func successfulStatus() Status {
 		ObservedAt: &observed, AttemptedAt: &attempted, CoverageThrough: &coverage,
 	}
 }
+
+func ptrReason(reason ReasonCode) *ReasonCode { return &reason }
