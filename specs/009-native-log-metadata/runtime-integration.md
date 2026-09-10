@@ -1,6 +1,6 @@
 # Native log runtime integration
 
-Status: implementation contract; native activation and packaged proof pending.
+Status: implemented and runtime-tested; successful Windows owned-native-fixture acceptance and v2 publication pending.
 
 - `serve` and `background enable` accept repeated `--log-source system` / `--log-source application`.
   No values means disabled. Reject duplicate, unknown, comma-separated or whitespace-padded values, and more than
@@ -33,5 +33,8 @@ after shutdown. Current and summary ports receive the same collector.
 The fixed Linux helper entrypoint has independent review and passed its synthetic entrypoint tests under Ubuntu WSL.
 Those tests use injected native-open/hardening seams and read no host logs. Linux test compilation/vet and the Linux
 main dependency inspection pass; the main imports neither native journal bindings, journal hardening nor purego.
-Full combined Windows Go tests/vet pass. Packaged end-to-end native activation remains a separate gate, so no new
-preview is published from this integration branch yet.
+Full combined Windows Go tests/vet pass. Hosted head `7f5a1e3` passed the actual v2 packaged missing-runtime proof,
+including retained synthetic history across graceful restart and forced termination, an empty new-session ring,
+and usable authenticated APIs. See [exact CI evidence](runtime-ci-gates.md). This proves degraded runtime and durable
+recovery, not successful Windows native acquisition. The Windows owned fixture and six-target release verification
+remain separate gates; no new preview has been published from this integration branch.
