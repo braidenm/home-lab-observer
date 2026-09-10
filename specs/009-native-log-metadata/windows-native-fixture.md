@@ -181,6 +181,14 @@ empty-channel symptom in this configuration, but native acceptance remains incom
 that Windows generally rejects zero-payload events. The next step is field-specific assertion diagnosis, not
 loosening the required selected values or bookmark checks.
 
+Run `34524631778` confirmed the remaining incompatibility on both hosted architectures: successful bookmark
+rendering returns `PropertyCount == 1`. The documented EvtRender bookmark contract says zero, and the wrapper
+previously rejected the observed one. All five selected event fields, bookmark creation, update, and native rendering
+had passed before this validation failure. The scoped compatibility candidate accepts only zero or one for bookmark
+string rendering, never uses that count to size the buffer, and retains byte bounds, termination, UTF-16, and anchor
+validation. Selected event-value rendering still requires exactly five properties. Full native acceptance remains
+open until the candidate passes both architectures.
+
 The harness also classifies each owned channel's actual publishing-latency property as only `ZERO`, `WITHIN_10S`,
 `OVER_10S` or `UNAVAILABLE` before starting the publisher. This read-only diagnostic does not change isolation,
 channel configuration, the fixed readiness deadline or acceptance; it prevents a documented default from being
