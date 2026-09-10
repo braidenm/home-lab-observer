@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"time"
+
+	"github.com/braidenm/home-lab-observer/internal/logobs"
 )
 
 const logTimeLayout = "2006-01-02T15:04:05.000000000Z"
@@ -104,6 +106,37 @@ func scanNullableLogTime(text sql.NullString) (*time.Time, error) {
 		return nil, nil
 	}
 	at, err := decodeLogTime(text.String)
+	if err != nil {
+		return nil, err
+	}
+	return &at, nil
+}
+
+func logEvictionKey(source logobs.Source) (string, error) {
+	switch source {
+	case logobs.SourceSystem:
+		return "log_metadata_evicted_before_system", nil
+	case logobs.SourceApplication:
+		return "log_metadata_evicted_before_application", nil
+	default:
+		return "", ErrLogStorageUnavailable
+	}
+}
+
+func loadLogEvictionFrontier(ctx context.Context, reader logSQLReader, source logobs.Source) (*time.Time, error) {
+	key, err := logEvictionKey(source)
+	if err != nil {
+		return nil, err
+	}
+	var text string
+	err = reader.QueryRowContext(ctx, `SELECT value FROM store_metadata WHERE key=?`, key).Scan(&text)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	at, err := decodeLogTime(text)
 	if err != nil {
 		return nil, err
 	}
