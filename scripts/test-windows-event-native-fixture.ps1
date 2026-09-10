@@ -326,6 +326,8 @@ public static class OwnedEventFixtureMetadataProbe
         return metadata != IntPtr.Zero && EvtClose(metadata);
     }
     public static bool InstalledEventsMatch() { return CheckInstalledEvents(); }
+    private static string installedMetadataStage = "START";
+    public static string InstalledMetadataStage() { return installedMetadataStage; }
     public static bool SystemEnabled() { return ChannelEnabled(SystemChannelName); }
     public static bool ApplicationEnabled() { return ChannelEnabled(ApplicationChannelName); }
     public static bool SystemOwnerMatches() { return ChannelOwnedByProvider(SystemChannelName); }
@@ -417,11 +419,13 @@ public static class OwnedEventFixtureMetadataProbe
 
     private static bool CheckInstalledEvents()
     {
+        installedMetadataStage = "OPEN_PUBLISHER";
         IntPtr metadata = EvtOpenPublisherMetadata(IntPtr.Zero, ProviderName, null, 0, 0);
         if (metadata == IntPtr.Zero) return false;
         bool valid = false;
         IntPtr enumeration = IntPtr.Zero;
         try {
+            installedMetadataStage = "OPEN_EVENT_ENUM";
             enumeration = EvtOpenEventMetadataEnum(metadata, 0);
             if (enumeration == IntPtr.Zero) return false;
             bool[] matched = new bool[ExpectedEvents.Length];
@@ -429,6 +433,7 @@ public static class OwnedEventFixtureMetadataProbe
             bool reachedEnd = false;
             bool eventFailed = false;
             while (count < MaximumInstalledEvents) {
+                installedMetadataStage = "NEXT_EVENT";
                 IntPtr eventMetadata = EvtNextEventMetadata(enumeration, 0);
                 if (eventMetadata == IntPtr.Zero) {
                     reachedEnd = Marshal.GetLastWin32Error() == ErrorNoMoreItems;
@@ -446,6 +451,7 @@ public static class OwnedEventFixtureMetadataProbe
                     break;
                 }
             }
+            if (!eventFailed) installedMetadataStage = "CARDINALITY";
             valid = !eventFailed && reachedEnd && count == ExpectedEvents.Length;
             if (valid) {
                 for (int index = 0; index < matched.Length; index++) {
@@ -480,11 +486,12 @@ public static class OwnedEventFixtureMetadataProbe
             (keyword & 0x0000ffffffffffffUL) != 1UL) {
             return false;
         }
+        installedMetadataStage = "TUPLE";
         for (int index = 0; index < ExpectedEvents.Length; index++) {
             ExpectedEvent expected = ExpectedEvents[index];
             if (expected.Id == (uint)id && expected.Version == (uint)version &&
                 expected.Channel == (uint)channel && expected.Level == (uint)level) {
-                if (matched[index]) return false;
+                if (matched[index]) { installedMetadataStage = "DUPLICATE"; return false; }
                 matched[index] = true;
                 return true;
             }
@@ -494,6 +501,14 @@ public static class OwnedEventFixtureMetadataProbe
 
     private static bool ReadEventScalar(IntPtr eventMetadata, int propertyId, uint expectedType, out ulong value)
     {
+        switch (propertyId) {
+            case 0: installedMetadataStage = "FIELD_ID"; break;
+            case 1: installedMetadataStage = "FIELD_VERSION"; break;
+            case 2: installedMetadataStage = "FIELD_CHANNEL"; break;
+            case 3: installedMetadataStage = "FIELD_LEVEL"; break;
+            case 6: installedMetadataStage = "FIELD_KEYWORD"; break;
+            default: installedMetadataStage = "FIELD_UNKNOWN"; break;
+        }
         value = 0;
         EvtVariant property;
         int used;
@@ -682,7 +697,8 @@ try {
         Fail 'owned fixture publisher resources could not be opened'
     }
     if (-not [OwnedEventFixtureMetadataProbe]::InstalledEventsMatch()) {
-        Fail 'owned fixture installed event metadata did not match the fixed manifest'
+        Fail ('owned fixture installed event metadata failed at ' +
+            [OwnedEventFixtureMetadataProbe]::InstalledMetadataStage())
     }
     if (-not [OwnedEventFixtureMetadataProbe]::SystemEnabled() -or
         -not [OwnedEventFixtureMetadataProbe]::ApplicationEnabled()) {
