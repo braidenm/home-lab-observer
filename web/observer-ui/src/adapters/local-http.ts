@@ -1,4 +1,5 @@
 import type { LocalHttpObserverDataSourceOptions } from "./local-http.types";
+import { mapLogSummary } from "./log-summary";
 import type {
   CollectionState,
   ContainerInventory,
@@ -9,6 +10,7 @@ import type {
   ListSection,
   LogBody,
   LogRecord,
+  LogSummary,
   MetricId,
   ObserverCapabilities,
   ObserverDataSource,
@@ -29,6 +31,7 @@ const SNAPSHOT_MAX_BYTES = 1_048_576;
 const SERIES_MAX_BYTES = 1_048_576;
 const CONTAINER_INVENTORY_MAX_BYTES = 1_048_576;
 const DIAGNOSTICS_HEALTH_MAX_BYTES = 32_768;
+const LOG_SUMMARY_MAX_BYTES = 262_144;
 const SECTION_NAMES: SectionName[] = ["overview", "filesystems", "processes", "services", "containers", "logs", "observer"];
 const METRIC_IDS: MetricId[] = [
   "cpu.utilization.percent",
@@ -70,7 +73,7 @@ export class ObserverTransportError extends Error {
 
 /**
  * Reads only the accepted local v1 endpoints. Payloads are projected into the
- * closed UI model; no log summary, query expression, or arbitrary labels are derived.
+ * closed UI model; no query expression or arbitrary labels are derived.
  */
 export class LocalHttpObserverDataSource implements ObserverDataSource {
   private readonly baseUrl: string;
@@ -106,6 +109,11 @@ export class LocalHttpObserverDataSource implements ObserverDataSource {
     return this.request("/api/v1/diagnostics/health", DIAGNOSTICS_HEALTH_MAX_BYTES, mapDiagnosticsHealth, signal);
   }
 
+  getLogSummary(range: TrendRange, signal?: AbortSignal): Promise<LogSummary> {
+    if (!isTrendRange(range)) throw new TypeError("Log summary range is not allowlisted");
+    return this.request(`/api/v1/logs/summary?${new URLSearchParams({ range }).toString()}`, LOG_SUMMARY_MAX_BYTES, mapLogSummary, signal);
+  }
+
   private async request<T>(path: string, maximumBytes: number, map: (value: unknown) => T, signal?: AbortSignal): Promise<T> {
     const headers = new Headers({ Accept: "application/json" });
     if (this.bearerToken) headers.set("Authorization", `Bearer ${this.bearerToken}`);
@@ -135,6 +143,8 @@ export class LocalHttpObserverDataSource implements ObserverDataSource {
     }
   }
 }
+
+export { mapLogSummary } from "./log-summary";
 
 export function mapDiagnosticsHealth(value: unknown): DiagnosticsHealth {
   const root = object(value);

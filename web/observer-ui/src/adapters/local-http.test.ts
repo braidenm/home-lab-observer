@@ -10,7 +10,8 @@ import unsupportedMetricSeries from "../../../../schemas/v1/fixtures/valid/metri
 import arbitraryMetricSeries from "../../../../schemas/v1/fixtures/invalid/metric-series-arbitrary-query.json";
 import invalidQueryProblem from "../../../../schemas/v1/fixtures/valid/problem-invalid-query.json";
 import diagnosticsHealth from "../../../../schemas/v1/fixtures/valid/diagnostics-health-available.json";
-import { LocalHttpObserverDataSource, ObserverTransportError, mapCapabilities, mapContainerInventory, mapCurrentSnapshot, mapDiagnosticsHealth, mapMetricSeries } from "./local-http";
+import logSummaryFixture from "../../../../schemas/v1/fixtures/valid/log-summary-1h.json";
+import { LocalHttpObserverDataSource, ObserverTransportError, mapCapabilities, mapContainerInventory, mapCurrentSnapshot, mapDiagnosticsHealth, mapLogSummary, mapMetricSeries } from "./local-http";
 
 const jsonResponse = (body: unknown, status = 200, contentType = "application/json; charset=utf-8") =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": contentType } });
@@ -110,6 +111,62 @@ describe("LocalHttpObserverDataSource", () => {
     const inconsistent = cloneFixture(diagnosticsHealth);
     inconsistent.available = false;
     expect(() => mapDiagnosticsHealth(inconsistent)).toThrow(/inconsistent/);
+  });
+
+  it("loads the exact bounded log-summary endpoint and projects only known fields", async () => {
+    const payload = cloneFixture(logSummaryFixture);
+    payload.future_metadata = { body: "synthetic-secret" };
+    payload.sources[0].status.future_path = "C:\\private\\journal";
+    payload.sources[0].buckets[0].counts.severity.future_identity = "synthetic-user";
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(payload));
+    const source = new LocalHttpObserverDataSource({ bearerToken: "local-test-token", fetcher });
+
+    const summary = await source.getLogSummary("1h");
+
+    expect(String(fetcher.mock.calls[0][0])).toBe("http://127.0.0.1:9847/api/v1/logs/summary?range=1h");
+    expect(new Headers(fetcher.mock.calls[0][1]?.headers).get("Authorization")).toBe("Bearer local-test-token");
+    expect(fetcher.mock.calls[0][1]).toMatchObject({ method: "GET", credentials: "omit", cache: "no-store", redirect: "error" });
+    expect(summary).toMatchObject({ range: "1h", coverageState: "PARTIAL", counts: { captured: 2, discarded: 1 }, privacy: { containsLogBodies: false, containsEventCodes: false, containsIdentityFields: false, remoteUploadEligible: false } });
+    expect(summary.sources[0].buckets.slice(0, 3).map((bucket) => [bucket.coverageState, bucket.counts?.captured ?? null])).toEqual([["GAP", 1], ["UNKNOWN", 1], ["PARTIAL", 0]]);
+    expect(JSON.stringify(summary)).not.toMatch(/synthetic-secret|private|synthetic-user/);
+  });
+
+  it("rejects malformed known log-summary semantics without filling unavailable counts", () => {
+    const unsafeCount = cloneFixture(logSummaryFixture);
+    unsafeCount.sources[0].buckets[0].counts.captured = Number.MAX_SAFE_INTEGER + 1;
+    expect(() => mapLogSummary(unsafeCount)).toThrow(/safe bounds/);
+
+    const fabricatedUnknownZero = cloneFixture(logSummaryFixture);
+    fabricatedUnknownZero.sources[0].buckets[1].counts.captured = 0;
+    fabricatedUnknownZero.sources[0].buckets[1].counts.severity.error = 0;
+    expect(() => mapLogSummary(fabricatedUnknownZero)).toThrow(/unknown log bucket/);
+
+    const badGrid = cloneFixture(logSummaryFixture);
+    badGrid.sources[0].buckets[1].at = badGrid.sources[0].buckets[0].at;
+    expect(() => mapLogSummary(badGrid)).toThrow(/fixed ascending grid/);
+
+    const badSourceReason = cloneFixture(logSummaryFixture);
+    badSourceReason.sources[0].status.reason_code = "LOG_SOURCES_DISABLED";
+    expect(() => mapLogSummary(badSourceReason)).toThrow(/source status/);
+
+    const futureAttempt = cloneFixture(logSummaryFixture);
+    futureAttempt.sources[0].status.attempted_at = "2026-09-09T13:00:17.000000001Z";
+    expect(() => mapLogSummary(futureAttempt)).toThrow(/newer than its response/);
+
+    const applicationOnly = cloneFixture(logSummaryFixture);
+    applicationOnly.sources[0].source = "application";
+    expect(mapLogSummary(applicationOnly).sources[0].source).toBe("application");
+
+    const twoSources = cloneFixture(logSummaryFixture);
+    const application = cloneFixture(twoSources.sources[0]);
+    application.source = "application";
+    twoSources.sources.push(application);
+    twoSources.counts = { captured: 4, discarded: 2 };
+    expect(mapLogSummary(twoSources).sources.map((item) => item.source)).toEqual(["system", "application"]);
+
+    const reversed = cloneFixture(twoSources);
+    reversed.sources.reverse();
+    expect(() => mapLogSummary(reversed)).toThrow(/fixed order/);
   });
 
   it("strictly rejects invalid or secret-bearing container inventory fields", () => {
@@ -250,5 +307,7 @@ describe("LocalHttpObserverDataSource", () => {
     await expect(oversizedContainers.getContainerInventory()).rejects.toThrow(/size limit/);
     const oversizedDiagnostics = new LocalHttpObserverDataSource({ fetcher: vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ padding: "x".repeat(32_800) })) });
     await expect(oversizedDiagnostics.getDiagnosticsHealth()).rejects.toThrow(/size limit/);
+    const oversizedLogs = new LocalHttpObserverDataSource({ fetcher: vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({ padding: "x".repeat(262_200) })) });
+    await expect(oversizedLogs.getLogSummary("7d")).rejects.toThrow(/size limit/);
   });
 });

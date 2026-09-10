@@ -1,9 +1,11 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
+import logSummaryFixture from "../../../schemas/v1/fixtures/valid/log-summary-1h.json";
 import { ObserverDashboard } from "./ObserverDashboard";
+import { mapLogSummary } from "./adapters/log-summary";
 import { SyntheticObserverDataSource, syntheticCapabilities, syntheticSnapshot } from "./data/synthetic";
-import type { ContainerInventory, ObserverDataSource } from "./types";
+import type { ContainerInventory, LogSummary, ObserverDataSource, TrendRange } from "./types";
 
 afterEach(cleanup);
 
@@ -49,11 +51,73 @@ describe("ObserverDashboard", () => {
     render(<ObserverDashboard dataSource={new SyntheticObserverDataSource()} />);
     await screen.findByRole("heading", { name: "studio-node" });
     await user.click(screen.getByRole("button", { name: "Logs" }));
-    expect(screen.getByText("Default body state: OMITTED")).toBeTruthy();
+    expect(screen.getByText("No log summary endpoint")).toBeTruthy();
+    expect(await screen.findByText(/Default body state: OMITTED/)).toBeTruthy();
     await user.click(screen.getByRole("button", { name: /Collection Complete/i }));
     expect(screen.getByRole("heading", { name: "Event context" })).toBeTruthy();
     expect(screen.getByText(/exact metadata and body-state information only/i)).toBeTruthy();
     expect(screen.queryByText(/retry for user/i)).toBeNull();
+  });
+
+  it("isolates log-summary failure from recent memory/session events", async () => {
+    const user = userEvent.setup();
+    const source: ObserverDataSource = {
+      getCapabilities: async () => structuredClone(syntheticCapabilities),
+      getCurrentSnapshot: async () => structuredClone(syntheticSnapshot),
+      getLogSummary: async () => { throw new Error("Persisted summary request failed"); }
+    };
+    render(<ObserverDashboard dataSource={source} initialView="logs" />);
+
+    expect((await screen.findByRole("alert")).textContent).toMatch(/Log summary unavailable.*Persisted summary request failed/i);
+    expect(screen.getByRole("button", { name: /Collection Complete/i })).toBeTruthy();
+    expect(screen.getByText(/Recent memory\/session events continue independently/i)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /Collection Complete/i }));
+    expect(screen.getByRole("heading", { name: "Event context" })).toBeTruthy();
+  });
+
+  it("retains historical counts and coverage when the latest source attempt failed", async () => {
+    const summary = structuredClone(mapLogSummary(logSummaryFixture));
+    summary.sources[0].status.collectionState = "FAILED";
+    summary.sources[0].status.freshness = "STALE";
+    summary.sources[0].status.reasonCode = "READER_FAILED";
+    summary.collectionState = "FAILED";
+    summary.freshness = "STALE";
+    summary.reasonCode = "READER_FAILED";
+    const source = sourceWithLogSummary(async () => summary);
+    render(<ObserverDashboard dataSource={source} initialView="logs" />);
+
+    expect((await screen.findAllByText("Failed")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("2").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Coverage gaps remain visible even when delayed records were captured/i)).toBeTruthy();
+    expect(screen.getByRole("img", { name: /System captured severity histogram/i })).toBeTruthy();
+  });
+
+  it("aborts stale log ranges and does not let an older response replace the newest range", async () => {
+    const user = userEvent.setup();
+    const calls: Array<{ range: TrendRange; signal?: AbortSignal; deferred: Deferred<LogSummary> }> = [];
+    let snapshotCalls = 0;
+    const source: ObserverDataSource = { ...sourceWithLogSummary((range, signal) => {
+      const deferred = createDeferred<LogSummary>();
+      calls.push({ range, signal, deferred });
+      return deferred.promise;
+    }), getCurrentSnapshot: async () => { snapshotCalls += 1; return structuredClone(syntheticSnapshot); } };
+    render(<ObserverDashboard dataSource={source} initialView="logs" />);
+    await screen.findByRole("button", { name: /Collection Complete/i });
+    const rangeGroup = screen.getByRole("group", { name: "Log summary range" });
+    await user.click(within(rangeGroup).getByRole("button", { name: "1h" }));
+    await user.click(within(rangeGroup).getByRole("button", { name: "7d" }));
+
+    expect(calls.map((call) => call.range)).toEqual(["6h", "1h", "7d"]);
+    expect(calls[0].signal?.aborted).toBe(true);
+    expect(calls[1].signal?.aborted).toBe(true);
+    expect(snapshotCalls).toBe(1);
+    const newest = summaryWithCaptured(77);
+    await act(async () => { calls[2].deferred.resolve(newest); });
+    expect((await screen.findAllByText("77")).length).toBeGreaterThan(0);
+    await act(async () => { calls[1].deferred.resolve(summaryWithCaptured(11)); });
+    expect(screen.getAllByText("77").length).toBeGreaterThan(0);
+    expect(screen.queryAllByText("11")).toHaveLength(0);
+    expect(within(rangeGroup).getByRole("button", { name: "7d" }).getAttribute("aria-pressed")).toBe("true");
   });
 
   it("isolates endpoint failure and does not make local claims in embedded mode", async () => {
@@ -256,4 +320,31 @@ function sourceWithContainerInventory(inventory: ContainerInventory, getCurrentS
     getCurrentSnapshot,
     getContainerInventory: async () => structuredClone(inventory)
   };
+}
+
+function sourceWithLogSummary(getLogSummary: NonNullable<ObserverDataSource["getLogSummary"]>): ObserverDataSource {
+  return {
+    getCapabilities: async () => structuredClone(syntheticCapabilities),
+    getCurrentSnapshot: async () => structuredClone(syntheticSnapshot),
+    getLogSummary
+  };
+}
+
+function summaryWithCaptured(captured: number): LogSummary {
+  const summary = structuredClone(mapLogSummary(logSummaryFixture));
+  const bucket = summary.sources[0].buckets[0];
+  if (!bucket.counts) throw new Error("fixture bucket counts missing");
+  const prior = bucket.counts.captured;
+  bucket.counts.captured = captured;
+  bucket.counts.severity.warn = captured;
+  summary.sources[0].counts = { captured: summary.sources[0].counts!.captured - prior + captured, discarded: summary.sources[0].counts!.discarded };
+  summary.counts = { ...summary.sources[0].counts };
+  return summary;
+}
+
+interface Deferred<T> { promise: Promise<T>; resolve(value: T): void }
+function createDeferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((accept) => { resolve = accept; });
+  return { promise, resolve };
 }

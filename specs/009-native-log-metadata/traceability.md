@@ -14,7 +14,7 @@ required before enabling or publishing the feature.
 | L6 Read-only fixed-grid summary | Fixed-grid domain/wire validation, authenticated GET/HEAD OpenAPI contract and maximum-grid byte-budget tests | Authenticated GET/HEAD handler and enforced request/response limits |
 | L7 Honest counts, gaps and freshness | Independent count/coverage validation, positive-known versus null, exact source/top status matrices and safe-aggregate regression tests | Store-derived sticky gaps, runtime status reduction, failed-write overlays, backlog and missed-poll integration tests |
 | L8 Current-memory versus durable history | Snapshot count/order bounds and cloned boundary values | Current projection limits 0..200, stale cache retention, restart-with-history/empty-ring tests |
-| L9 Responsive independent summary UI | Accepted presentation/compatibility contract | Optional data-source adapter, loading/error/disabled states, accessible charts/table and 390/768/1440 visual review |
+| L9 Responsive independent summary UI | Optional data-source adapter with additive-field projection; independent loading/range cancellation; explicit legacy/error/disabled/history-retained states; coverage-overlaid histogram and keyboard-scrollable complete table; focused 390px DOM regression | 390/768/1440 real-browser visual review against the assembled API |
 | L10 Verified privacy and native delivery | Contract canaries and independent review; closed release-v2 profile tests preserve v1 rejection/rollback boundaries | Helper protocol/adversarial tests, installer v2 lifecycle, six-target packaged smoke, independent final review and verified release |
 
 ## Reviewed contract boundaries
