@@ -41,8 +41,9 @@ useful without Platform Demo, with honest cross-platform gaps.
   regardless of checkpoint revision. On a stale/invalid checkpoint, run one metadata-only tail probe:
   Windows queries the fixed channel in reverse order and reads at most one event to produce a bookmark; Linux uses
   seek-tail/previous/get-cursor outside the five-minute filter. Normal Linux continuation must first prove exact cursor
-  presence with seek/next/test-cursor. Initial empty windows need a visible metadata-only tail proof; no visible tail
-  reports `NO_VISIBLE_JOURNAL`, without inventing coverage. All Linux coverage refers to the caller-accessible local
+  presence with seek/next/test-cursor. Initial empty windows need a visible metadata-only tail whose timestamp is
+  strictly before the exact five-minute lower bound; a tail at or after that bound rejects the attempt without
+  advancing a cursor, and no visible tail reports `NO_VISIBLE_JOURNAL`, without inventing coverage. All Linux coverage refers to the caller-accessible local
   system-journal view, not every host event or inaccessible file.
   The probe uses the same source deadline, byte/checkpoint limits and field allowlist, never requests a message/body,
   and contributes neither captured nor discarded counts or covered-through advancement. Atomically persist the proved

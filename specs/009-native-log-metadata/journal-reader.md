@@ -19,7 +19,9 @@ synthetic discard is invented for that precision adjustment. Continuation seeks/
 unseen rows; only an explicit invalid-cursor result or a false exactness test enters reset. Other native failures do
 not invent stale-cursor evidence. Reset-pending requests perform only one tail probe. Stale continuation may consume
 one verification probe plus one tail probe; establishment returns no counts or coverage. An initial empty window
-requires an older visible tail/cursor before returning caught-up zero, otherwise `NO_VISIBLE_JOURNAL`.
+requires a visible tail whose timestamp is strictly before the exact five-minute lower bound before returning
+caught-up zero, otherwise `NO_VISIBLE_JOURNAL`. A record that appears at or after that bound between the initial EOF
+and tail probe rejects the whole attempt without advancing a cursor; the next cycle reads it normally.
 
 Every visited row, including a probe and deferred sentinel, requires a nonempty cursor of at most 16 KiB. Cursor
 acquisition failure rejects the complete attempt with no usable batch. Normal ingestion reserves the sentinel: at
@@ -30,7 +32,8 @@ sets caught-up. Returned event/cursor bytes are owned copies, and expected failu
 An independent cumulative native-metadata budget is 2 MiB per attempt, separate from the 2 MiB encoded helper-response
 limit. Charge every acquired bounded cursor (including probes/sentinels), eight bytes for each successful realtime
 value, and bounded priority/message-ID values. Before visiting the next ingestion row reserve headroom for its worst
-case: 16 KiB cursor, eight-byte realtime, and two 4 KiB fields. Cursor/tail probes reserve one maximum cursor. Charge
+case: 16 KiB cursor, eight-byte realtime, and two 4 KiB fields. Cursor/reset-tail probes reserve one maximum cursor;
+the initial empty-window tail proof also reserves and charges its eight-byte realtime timestamp. Charge
 actual bounded bytes afterward. When another visit cannot fit and a valid processed prefix exists, return that prefix
 as PARTIAL/RESPONSE_TOO_LARGE with no deferred visit and no caught-up claim. Its cursor lets the next attempt advance
 through a heavy backlog; do not repeatedly discard the entire prefix at a deterministic byte boundary. No-prefix
@@ -54,7 +57,8 @@ enforces the future horizon before persistence. An initial seek lower bound befo
 never an unsigned wrap. The fixed native realtime seek must be verified against synthetic journal fixtures before binding;
 the kernel does not invent discard counts for native seek positioning outside the requested initial window.
 
-Verification uses synthetic handles only: exact/nearest/empty cursors, reset persistence, initial tail evidence,
+Verification uses synthetic handles only: exact/nearest/empty cursors, reset persistence, initial tail evidence and
+an arrival between initial EOF and tail proof,
 source refusal, selected-field canaries, all bounds and mapping cases, native-error versus stale behavior, cancellation,
 close-once ownership, thread identity, and whole-attempt rejection after cursor failure. Real libsystemd compatibility,
 native fixture journals, executable identity, private pipes and static-core packaging remain separate required slices.
