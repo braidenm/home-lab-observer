@@ -152,6 +152,9 @@ native-reader assertions must still pass.
 Hosted run `34519720070` tested two additional seconds of registered publisher lifetime after successful writes;
 both owned channels still contained zero records. The ineffective delay was removed. Channel visibility keeps its
 existing ten-second deadline; neither longer waits nor a successful write call establish native acquisition.
+After fresh registration, only the two newly owned channels undergo an explicit disabled-to-enabled transition before
+publishing any fixture events. This forces activation rather than relying on writing an already-true setting. No
+existing channel or service is restarted, and actual acquisition remains the acceptance criterion.
 
 The harness also classifies each owned channel's actual publishing-latency property as only `ZERO`, `WITHIN_10S`,
 `OVER_10S` or `UNAVAILABLE` before starting the publisher. This read-only diagnostic does not change isolation,

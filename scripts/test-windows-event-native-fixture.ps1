@@ -691,6 +691,10 @@ try {
     if (Test-AnyMissing $providerMissing $systemMissing $applicationMissing) {
         Fail 'fixture registration was not observable'
     }
+    # Force an activation transition for only the freshly created channels;
+    # setting enabled=true on an already enabled manifest is otherwise a no-op.
+    Invoke-Quiet 'wevtutil.exe' @('sl', $systemChannel, '/e:false')
+    Invoke-Quiet 'wevtutil.exe' @('sl', $applicationChannel, '/e:false')
     Invoke-Quiet 'wevtutil.exe' @('sl', $systemChannel, '/e:true')
     Invoke-Quiet 'wevtutil.exe' @('sl', $applicationChannel, '/e:true')
     if (-not [OwnedEventFixtureMetadataProbe]::PublisherResources()) {
