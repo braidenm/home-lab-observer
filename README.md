@@ -46,6 +46,15 @@ Future: an explicitly enrolled outbound uploader -> Platform Demo or another com
 
 Platform Demo is a separate consumer of the observer contract. It does not iframe the local dashboard or require this repository to know about Platform Demo's UI.
 
+### Will this support restarting containers or services later?
+
+Yes, the platform-adapter and owner-bound capability boundaries are intended to support that extension. The current
+observer cannot accept remote restart requests. A future management worker will need separate, explicitly approved
+permissions for named resources and fixed actions, plus authorization and an audit record for each request. Reading
+telemetry must not automatically grant control. Docker, operating-system services and Kubernetes workloads require
+their own adapters and permission models; none will be exposed through a generic shell-command endpoint.
+See the [threat model](docs/security/threat-model.md) for the separation between observation and future control.
+
 ## Native snapshot preview
 
 With Go 1.27 installed, `go run ./cmd/observer --help` prints the command help and
