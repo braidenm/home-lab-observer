@@ -82,6 +82,22 @@ silently calling unverified continuation complete is an accepted workaround. A n
 single-download/CGO-disabled packaging goal, selected-field privacy, optional system-library capability, hard deadlines,
 bounded output and missing-library fallback, with new primary evidence and native tests before acceptance.
 
+The native option can call `seek_cursor`, `next`, then `test_cursor` before advancing to unseen records. The
+[systemd cursor API](https://github.com/systemd/systemd/blob/v255/man/sd_journal_get_cursor.xml) explicitly distinguishes
+exact presence from nearest-position seeking; cursor string equality is not a substitute. Its
+[open API](https://github.com/systemd/systemd/blob/v255/man/sd_journal_open.xml) silently excludes inaccessible files:
+the product must describe the caller-accessible system-journal view, not all host logs. An initially empty view without
+any visible tail evidence cannot be claimed healthy/full coverage. These are acceptance constraints, not implemented
+support claims.
+
+`purego v0.10.0` is already an indirect dependency. Its
+[documented CGO-disabled Linux amd64/arm64 support](https://github.com/ebitengine/purego/tree/v0.10.0) is promising, but
+does not mean a statically self-contained Linux executable: root inspected its `dlfcn_nocgo_linux.go`, which imports
+`libdl.so.2` dynamically. Linking it into the primary executable may impose a loader/libc requirement before the
+optional log reader runs. Verify minimum-host startup with logs disabled; if necessary isolate native loading in a
+separately packaged optional helper. That changes the current exact archive allowlist and needs an explicit packaging
+decision and tests. No new dependency, loader, helper, source permission or library installation has been added.
+
 **macOS:** keep native logs explicitly unsupported in this slice. Apple's
 [OSLogStore local access](https://developer.apple.com/documentation/oslog/oslogstore/local()) has entitlement and
 privilege requirements that need a separately packaged native design. The pure-Go preview must not quietly request
