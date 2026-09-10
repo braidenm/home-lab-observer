@@ -144,9 +144,11 @@ confirmed unregistration removes these temporary grants with it. Record-count di
 UInt64 variant but do not interpret its inactive array-count member.
 
 Before publication, the harness opens metadata for only the fixed owned publisher (no formatting or metadata output),
-reads only the Boolean enabled property of its two owned channel configurations into fixed 16-byte variants, and
-checks that the fixed EventLog service is running. Every native handle is closed. These are prerequisite checks,
-not evidence that an event was recorded; actual bounded channel queries and native-reader assertions must still pass.
+enumerates exactly its six expected event definitions with a seventh-record rejection, and validates only their fixed
+ID, version, channel, level and low-48-bit keyword tuples. It reads the bounded owning-publisher string and Boolean
+enabled property of each owned channel, and checks that the fixed EventLog service is running. Every native handle is
+closed. These are prerequisite checks, not evidence that an event was recorded; actual bounded channel queries and
+native-reader assertions must still pass.
 Hosted run `34519720070` tested two additional seconds of registered publisher lifetime after successful writes;
 both owned channels still contained zero records. The ineffective delay was removed. Channel visibility keeps its
 existing ten-second deadline; neither longer waits nor a successful write call establish native acquisition.

@@ -168,7 +168,12 @@ public static class OwnedEventFixtureMetadataProbe
     private const int MaxPublisherCount = 4096;
     private const int MaxPublisherCharacters = 2048;
     private const int ErrorNoMoreItems = 259;
+    private const int ErrorInsufficientBuffer = 122;
     private const int MissingProvider = 15002;
+    private const int MaximumInstalledEvents = 7;
+    private const int MaximumChannelPropertyBytes = 4096;
+    private const uint EvtVarTypeString = 1;
+    private const uint EvtVarTypeUInt32 = 8;
     private const int EvtOpenChannelPath = 0x1;
     private const int EvtLogNumberOfLogRecords = 5;
     private const uint EvtVarTypeUInt64 = 10;
@@ -203,9 +208,29 @@ public static class OwnedEventFixtureMetadataProbe
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [DllImport("wevtapi.dll", ExactSpelling = true, SetLastError = true)]
+    private static extern IntPtr EvtOpenEventMetadataEnum(IntPtr publisherMetadata, int flags);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("wevtapi.dll", ExactSpelling = true, SetLastError = true)]
+    private static extern IntPtr EvtNextEventMetadata(IntPtr eventMetadataEnum, int flags);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("wevtapi.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EvtGetEventMetadataProperty(IntPtr eventMetadata, int propertyId, int flags,
+        int bufferSize, out EvtVariant buffer, out int used);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("wevtapi.dll", ExactSpelling = true, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool EvtGetChannelConfigProperty(IntPtr channel, int propertyId, int flags,
         int bufferSize, out EvtVariant buffer, out int used);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("wevtapi.dll", EntryPoint = "EvtGetChannelConfigProperty", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EvtGetChannelConfigStringProperty(IntPtr channel, int propertyId, int flags,
+        int bufferSize, IntPtr buffer, out int used);
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [DllImport("wevtapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
@@ -234,10 +259,36 @@ public static class OwnedEventFixtureMetadataProbe
     [StructLayout(LayoutKind.Explicit, Size = 16)]
     private struct EvtVariant
     {
+        [FieldOffset(0)] public IntPtr StringValue;
         [FieldOffset(0)] public ulong UInt64Value;
         [FieldOffset(8)] public uint Count;
         [FieldOffset(12)] public uint Type;
     }
+
+    private struct ExpectedEvent
+    {
+        public uint Id;
+        public uint Version;
+        public uint Channel;
+        public uint Level;
+
+        public ExpectedEvent(uint id, uint version, uint channel, uint level)
+        {
+            Id = id;
+            Version = version;
+            Channel = channel;
+            Level = level;
+        }
+    }
+
+    private static readonly ExpectedEvent[] ExpectedEvents = new ExpectedEvent[] {
+        new ExpectedEvent(101, 0, 16, 4),
+        new ExpectedEvent(102, 0, 16, 3),
+        new ExpectedEvent(103, 0, 16, 2),
+        new ExpectedEvent(201, 0, 17, 2),
+        new ExpectedEvent(202, 0, 17, 1),
+        new ExpectedEvent(203, 0, 17, 4),
+    };
 
     public static int Publisher()
     {
@@ -274,8 +325,11 @@ public static class OwnedEventFixtureMetadataProbe
         IntPtr metadata = EvtOpenPublisherMetadata(IntPtr.Zero, ProviderName, null, 0, 0);
         return metadata != IntPtr.Zero && EvtClose(metadata);
     }
+    public static bool InstalledEventsMatch() { return CheckInstalledEvents(); }
     public static bool SystemEnabled() { return ChannelEnabled(SystemChannelName); }
     public static bool ApplicationEnabled() { return ChannelEnabled(ApplicationChannelName); }
+    public static bool SystemOwnerMatches() { return ChannelOwnedByProvider(SystemChannelName); }
+    public static bool ApplicationOwnerMatches() { return ChannelOwnedByProvider(ApplicationChannelName); }
     public static int SystemBeforeCount() { return Count(SystemChannelName, SystemBeforeQuery, 2); }
     public static int ApplicationBeforeCount() { return Count(ApplicationChannelName, ApplicationBeforeQuery, 2); }
     public static int SystemAfterCount() { return Count(SystemChannelName, SystemAfterQuery, 1); }
@@ -352,6 +406,135 @@ public static class OwnedEventFixtureMetadataProbe
             if (!EvtClose(config)) enabled = false;
         }
         return enabled;
+    }
+
+    private static bool CheckInstalledEvents()
+    {
+        IntPtr metadata = EvtOpenPublisherMetadata(IntPtr.Zero, ProviderName, null, 0, 0);
+        if (metadata == IntPtr.Zero) return false;
+        bool valid = false;
+        IntPtr enumeration = IntPtr.Zero;
+        try {
+            enumeration = EvtOpenEventMetadataEnum(metadata, 0);
+            if (enumeration == IntPtr.Zero) return false;
+            bool[] matched = new bool[ExpectedEvents.Length];
+            int count = 0;
+            bool reachedEnd = false;
+            bool eventFailed = false;
+            while (count < MaximumInstalledEvents) {
+                IntPtr eventMetadata = EvtNextEventMetadata(enumeration, 0);
+                if (eventMetadata == IntPtr.Zero) {
+                    reachedEnd = Marshal.GetLastWin32Error() == ErrorNoMoreItems;
+                    break;
+                }
+                bool eventValid = false;
+                try {
+                    eventValid = MatchInstalledEvent(eventMetadata, matched);
+                } finally {
+                    if (!EvtClose(eventMetadata)) eventValid = false;
+                }
+                count++;
+                if (!eventValid) {
+                    eventFailed = true;
+                    break;
+                }
+            }
+            valid = !eventFailed && reachedEnd && count == ExpectedEvents.Length;
+            if (valid) {
+                for (int index = 0; index < matched.Length; index++) {
+                    if (!matched[index]) {
+                        valid = false;
+                        break;
+                    }
+                }
+            }
+        } finally {
+            if (enumeration != IntPtr.Zero && !EvtClose(enumeration)) valid = false;
+            if (!EvtClose(metadata)) valid = false;
+        }
+        return valid;
+    }
+
+    private static bool MatchInstalledEvent(IntPtr eventMetadata, bool[] matched)
+    {
+        ulong id;
+        ulong version;
+        ulong channel;
+        ulong level;
+        ulong keyword;
+        // EventMetadataEventID through EventMetadataEventKeyword are property IDs 0..6.
+        if (!ReadEventScalar(eventMetadata, 0, EvtVarTypeUInt32, out id) ||
+            !ReadEventScalar(eventMetadata, 1, EvtVarTypeUInt32, out version) ||
+            !ReadEventScalar(eventMetadata, 2, EvtVarTypeUInt32, out channel) ||
+            !ReadEventScalar(eventMetadata, 3, EvtVarTypeUInt32, out level) ||
+            !ReadEventScalar(eventMetadata, 6, EvtVarTypeUInt64, out keyword) ||
+            id > UInt32.MaxValue || version > UInt32.MaxValue ||
+            channel > UInt32.MaxValue || level > UInt32.MaxValue ||
+            (keyword & 0x0000ffffffffffffUL) != 1UL) {
+            return false;
+        }
+        for (int index = 0; index < ExpectedEvents.Length; index++) {
+            ExpectedEvent expected = ExpectedEvents[index];
+            if (expected.Id == (uint)id && expected.Version == (uint)version &&
+                expected.Channel == (uint)channel && expected.Level == (uint)level) {
+                if (matched[index]) return false;
+                matched[index] = true;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool ReadEventScalar(IntPtr eventMetadata, int propertyId, uint expectedType, out ulong value)
+    {
+        value = 0;
+        EvtVariant property;
+        int used;
+        if (!EvtGetEventMetadataProperty(eventMetadata, propertyId, 0, 16, out property, out used) ||
+            used != 16 || property.Type != expectedType) {
+            return false;
+        }
+        value = property.UInt64Value;
+        return true;
+    }
+
+    private static bool ChannelOwnedByProvider(string channel)
+    {
+        IntPtr config = EvtOpenChannelConfig(IntPtr.Zero, channel, 0);
+        if (config == IntPtr.Zero) return false;
+        bool matches = false;
+        IntPtr buffer = IntPtr.Zero;
+        try {
+            int needed;
+            // EvtChannelConfigOwningPublisher = 3.
+            bool initial = EvtGetChannelConfigStringProperty(config, 3, 0, 0, IntPtr.Zero, out needed);
+            if (initial || Marshal.GetLastWin32Error() != ErrorInsufficientBuffer ||
+                needed < 18 || needed > MaximumChannelPropertyBytes) {
+                return false;
+            }
+            buffer = Marshal.AllocHGlobal(needed);
+            int used;
+            if (!EvtGetChannelConfigStringProperty(config, 3, 0, needed, buffer, out used) || used != needed) {
+                return false;
+            }
+            EvtVariant property = (EvtVariant)Marshal.PtrToStructure(buffer, typeof(EvtVariant));
+            if (property.Type != EvtVarTypeString || property.StringValue == IntPtr.Zero) return false;
+
+            long bufferStart = buffer.ToInt64();
+            long stringStart = property.StringValue.ToInt64();
+            long offset = stringStart - bufferStart;
+            if (offset < 16 || offset >= needed || (offset & 1) != 0) return false;
+            int maximumCharacters = (int)((needed - offset) / 2);
+            int length = 0;
+            while (length < maximumCharacters && Marshal.ReadInt16(property.StringValue, length * 2) != 0) length++;
+            if (length == maximumCharacters) return false;
+            string owner = Marshal.PtrToStringUni(property.StringValue, length);
+            matches = String.Equals(owner, ProviderName, StringComparison.Ordinal);
+        } finally {
+            if (buffer != IntPtr.Zero) Marshal.FreeHGlobal(buffer);
+            if (!EvtClose(config)) matches = false;
+        }
+        return matches;
     }
 
     private static int LogCount(string channel, int expected)
@@ -463,9 +646,16 @@ try {
     if (-not [OwnedEventFixtureMetadataProbe]::PublisherResources()) {
         Fail 'owned fixture publisher resources could not be opened'
     }
+    if (-not [OwnedEventFixtureMetadataProbe]::InstalledEventsMatch()) {
+        Fail 'owned fixture installed event metadata did not match the fixed manifest'
+    }
     if (-not [OwnedEventFixtureMetadataProbe]::SystemEnabled() -or
         -not [OwnedEventFixtureMetadataProbe]::ApplicationEnabled()) {
         Fail 'owned fixture channels were not confirmed enabled'
+    }
+    if (-not [OwnedEventFixtureMetadataProbe]::SystemOwnerMatches() -or
+        -not [OwnedEventFixtureMetadataProbe]::ApplicationOwnerMatches()) {
+        Fail 'owned fixture channel ownership did not match the fixed publisher'
     }
     $eventLogService = Get-Service -Name 'EventLog' -ErrorAction SilentlyContinue
     if ($null -eq $eventLogService -or $eventLogService.Status -ne 'Running') {
