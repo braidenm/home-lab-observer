@@ -33,14 +33,15 @@ type Source interface {
 type ContainerSource interface{ Current() containerobs.Inventory }
 
 type Config struct {
-	Port            int
-	Token           string
-	Version         string
-	Source          Source
-	History         series.Reader
-	ContainerSource ContainerSource
-	Diagnostics     DiagnosticsSource
-	Now             func() time.Time
+	Port             int
+	Token            string
+	Version          string
+	Source           Source
+	History          series.Reader
+	ContainerSource  ContainerSource
+	Diagnostics      DiagnosticsSource
+	LogSummarySource LogSummarySource
+	Now              func() time.Time
 }
 
 type handler struct {
@@ -108,6 +109,8 @@ func (h *handler) api(w http.ResponseWriter, r *http.Request) {
 		h.series(w, r)
 	case "/api/v1/diagnostics/health":
 		h.diagnosticsHealth(w, r)
+	case "/api/v1/logs/summary":
+		h.logSummary(w, r)
 	default:
 		writeProblem(w, http.StatusNotFound, "ENDPOINT_NOT_FOUND", "Endpoint not found")
 	}

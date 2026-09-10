@@ -1,6 +1,7 @@
 package localapi
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -66,7 +67,7 @@ func RequireBearer(expectedToken string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !localauth.MatchesAuthorization(r.Header.Get("Authorization"), expectedToken) {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="home-lab-observer"`)
-			writeProblem(w, http.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "Authentication required")
+			writeRequestProblem(w, r, http.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "Authentication required")
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -107,6 +108,18 @@ func writeProblem(w http.ResponseWriter, status int, code, title string) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(Problem{Type: "about:blank", Title: title, Status: status, Code: code, RequestID: requestID()})
+}
+
+func writeRequestProblem(w http.ResponseWriter, r *http.Request, status int, code, title string) {
+	var encoded bytes.Buffer
+	_ = json.NewEncoder(&encoded).Encode(Problem{Type: "about:blank", Title: title, Status: status, Code: code, RequestID: requestID()})
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.Header().Set("Content-Length", strconv.Itoa(encoded.Len()))
+	w.WriteHeader(status)
+	if r.Method != http.MethodHead {
+		_, _ = w.Write(encoded.Bytes())
+	}
 }
 
 func requestID() string {
