@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import SwaggerParser from "@apidevtools/swagger-parser";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
+import { validateLogSummaryFixture } from "./log-summary-contract.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const readJson = (relative) => JSON.parse(fs.readFileSync(path.join(root, relative), "utf8"));
@@ -15,6 +16,7 @@ const schemaPaths = [
   "schemas/v1/metric-series-v1.schema.json",
   "schemas/v1/container-inventory-v1.schema.json",
   "schemas/v1/diagnostics-health-v1.schema.json",
+  "schemas/v1/log-summary-v1.schema.json",
   "schemas/v1/problem-details-v1.schema.json"
 ];
 const schemas = schemaPaths.map(readJson);
@@ -50,11 +52,14 @@ const snapshot = api.paths["/api/v1/snapshots/current"].get;
 const series = api.paths["/api/v1/metrics/series"].get;
 const containers = api.paths["/api/v1/containers"].get;
 const diagnostics = api.paths["/api/v1/diagnostics/health"].get;
+const logSummaryPath = api.paths["/api/v1/logs/summary"];
+const logSummary = logSummaryPath.get;
 if (caps["x-max-response-bytes"] !== 131072) fail("Capabilities response cap must be 128 KiB");
 if (snapshot["x-max-response-bytes"] !== 1048576) fail("Snapshot response cap must be 1 MiB");
 if (series["x-max-response-bytes"] !== 1048576) fail("Metric series response cap must be 1 MiB");
 if (containers["x-max-response-bytes"] !== 1048576) fail("Container inventory response cap must be 1 MiB");
 if (diagnostics["x-max-response-bytes"] !== 32768) fail("Diagnostics health response cap must be 32 KiB");
+if (logSummary["x-max-response-bytes"] !== 262144) fail("Log summary response cap must be 256 KiB");
 if (containers.parameters.length !== 1 || containers.parameters[0].name !== "limit" || containers.parameters[0].in !== "query") fail("Container inventory accepts only the limit query parameter");
 for (const [key, value] of Object.entries({ minimum: 1, maximum: 500, default: 100 })) {
   if (containers.parameters[0].schema[key] !== value) fail(`Container inventory limit.${key} must equal ${value}`);
@@ -88,6 +93,22 @@ if (series.parameters.length !== 2 || series.parameters.some((item) => item.in !
 if (!metricParameter?.required || metricParameter.style !== "form" || metricParameter.explode !== true) fail("Metric must be a required repeatable query parameter");
 if (metricParameter.schema.minItems !== 1 || metricParameter.schema.maxItems !== 6 || metricParameter.schema.uniqueItems !== true) fail("Metric query must contain one to six unique identifiers");
 if (JSON.stringify(metricParameter.schema.items.enum) !== JSON.stringify(metricIds)) fail("Metric query allowlist is not the code-owned v1 set");
+
+for (const operation of [logSummary, logSummaryPath.head]) {
+  if (!operation) fail("Log summary must expose GET and HEAD");
+  const parameters = operation.parameters ?? [];
+  if (parameters.length !== 1 || parameters[0].name !== "range" || parameters[0].in !== "query" || !parameters[0].required) {
+    fail("Log summary accepts exactly one required range query parameter");
+  }
+  if (JSON.stringify(parameters[0].schema.enum) !== JSON.stringify(["1h", "6h", "24h", "7d"])) {
+    fail("Log summary range must be limited to 1h, 6h, 24h, or 7d");
+  }
+  const security = operation.security ?? api.security;
+  if (!security?.some((item) => Object.hasOwn(item, "localBearer"))) fail("Log summary GET and HEAD must require localBearer");
+}
+for (const [status, response] of Object.entries(logSummaryPath.head.responses)) {
+  if (response.content) fail(`Log summary HEAD ${status} must not declare a response body`);
+}
 
 const forbiddenKeys = new Set(["authorization", "token", "secret", "environment", "env", "argv", "command_line", "raw_body", "stack_trace", "exception", "private_key", "password"]);
 const riskyString = /(ghp_|github_pat_|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|https?:\/\/[^\s/@:]+:[^\s/@]+@|\b(?:10\.\d{1,3}|192\.168|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b)/i;
@@ -164,8 +185,9 @@ for (const testCase of manifest.cases) {
     scan(fixture);
     if (testCase.schema.includes("metric-series")) validateMetricSeriesFixture(fixture, testCase.fixture);
     if (testCase.schema.includes("container-inventory")) validateContainerInventoryFixture(fixture, testCase.fixture);
+    if (testCase.schema.includes("log-summary")) validateLogSummaryFixture(fixture, testCase.fixture);
     const bytes = fs.statSync(path.join(root, testCase.fixture)).size;
-    const ceiling = testCase.schema.includes("current-snapshot") || testCase.schema.includes("metric-series") || testCase.schema.includes("container-inventory") ? 1048576 : 131072;
+    const ceiling = testCase.schema.includes("log-summary") ? 262144 : testCase.schema.includes("current-snapshot") || testCase.schema.includes("metric-series") || testCase.schema.includes("container-inventory") ? 1048576 : 131072;
     if (bytes > ceiling) fail(`${testCase.fixture} exceeds ${ceiling} bytes`);
   } else invalidCount += 1;
 }
