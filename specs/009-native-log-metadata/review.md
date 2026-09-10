@@ -1,5 +1,20 @@
 # Spec 009 review record
 
+## Summary dashboard review
+
+Root independently reviewed the known-field decoder, status/grid reduction,
+independent resource loading, nullable counts, chart overlays and accessible table.
+Review added a visible coverage legend and more readable chart labels. Full seven-day
+grids now fit narrow cards without clipping; a single configured source uses the
+available width. Browser review also found the existing recent-event search field
+inheriting a 240-pixel flex basis after mobile layout switched to a column; its
+mobile sizing is corrected and guarded by a real layout assertion.
+
+The reusable UI retains compatibility with clients missing the optional summary
+method. Embedded assets are regenerated from the reviewed source. Native source
+activation is still pending: browser summary cases use schema- and semantic-checked
+synthetic responses and never read the developer's native logs.
+
 ## Contract checkpoint — reviewed; required CI pending
 
 This review does not approve native readers, persistence, API handlers, UI integration or a new release. Those are

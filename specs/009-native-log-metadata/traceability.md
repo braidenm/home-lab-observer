@@ -7,15 +7,15 @@ required before enabling or publishing the feature.
 | Requirement | Current evidence | Remaining acceptance work |
 | --- | --- | --- |
 | L1 Explicit source opt-in | `internal/logobs` accepts only the two fixed source aliases | CLI/background settings, platform-specific preset rejection, disabled-no-native-call tests |
-| L2 Selected-field native acquisition | Accepted ADRs 009/010; no native payload/body type in `logobs` | Linux/Windows adapters, selected-field fakes and native smoke, macOS unsupported adapter |
-| L3 Independent bounded acquisition | Batch/checkpoint count and byte bounds; `journalruntime` crash-policy tests, including isolated Linux child | Collector cadence, real helper timeout/kill/wait, source deadlines, exact cursor reset, digest identity and controlled environment |
-| L4 Sanitized vocabulary and bounded cache | Closed source/severity/event-code validation; encoded checkpoint JSON canaries; deep-clone tests | Native normalization, 200-event ring, safe current projection and body-omission tests |
-| L5 Atomic bounded persistence | Reader/store ports and revision/batch invariants | Additive SQLite schema, CAS/restart/ambiguous-write tests, safe counters and timestamp round-trips, future-dated record handling, shared retention/WAL budget, shutdown ordering |
-| L6 Read-only fixed-grid summary | Fixed-grid domain/wire validation, authenticated GET/HEAD OpenAPI contract and maximum-grid byte-budget tests | Authenticated GET/HEAD handler and enforced request/response limits |
-| L7 Honest counts, gaps and freshness | Independent count/coverage validation, positive-known versus null, exact source/top status matrices and safe-aggregate regression tests | Store-derived sticky gaps, runtime status reduction, failed-write overlays, backlog and missed-poll integration tests |
+| L2 Selected-field native acquisition | Linux and Windows fixed-seam reader kernels with selected-field, normalization, row/byte and thread/close tests; no body type | Actual native bindings and owned fixtures, helper entrypoints, macOS unsupported adapter |
+| L3 Independent bounded acquisition | Single-flight 60-second collector with separately bounded Store phases and four-second native lane; crash-policy tests | Real helper timeout/kill/wait, digest identity and controlled environment, production lifecycle wiring |
+| L4 Sanitized vocabulary and bounded cache | Closed vocabulary, encoded checkpoint canaries, owned 200-event session ring and deep-clone tests | Safe current projection and body-omission integration tests |
+| L5 Atomic bounded persistence | PR 18: isolated additive log schema, CAS/rollback/restart/cancellation tests, safe counters, shared chronological age/size retention and durable eviction frontiers | Production lifecycle/shutdown ordering and packaged restart verification |
+| L6 Read-only fixed-grid summary | PR 16: authenticated GET/HEAD handler, exact query/body/response limits, direct Go handler/schema/semantic checks including maximum grid | Wire optional source into production lifecycle |
+| L7 Honest counts, gaps and freshness | Sticky interval reducer, whole-second conservative proof, positive-known versus null, safe aggregation, latest-status reduction and failed-write overlays | Cross-component native backlog/missed-poll lifecycle acceptance |
 | L8 Current-memory versus durable history | Snapshot count/order bounds and cloned boundary values | Current projection limits 0..200, stale cache retention, restart-with-history/empty-ring tests |
 | L9 Responsive independent summary UI | Optional data-source adapter with additive-field projection; independent loading/range cancellation; explicit legacy/error/disabled/history-retained states; coverage-overlaid histogram and keyboard-scrollable complete table; focused 390px DOM regression | 390/768/1440 real-browser visual review against the assembled API |
-| L10 Verified privacy and native delivery | Contract canaries and independent review; closed release-v2 profile tests preserve v1 rejection/rollback boundaries | Helper protocol/adversarial tests, installer v2 lifecycle, six-target packaged smoke, independent final review and verified release |
+| L10 Verified privacy and native delivery | Strict bounded private helper codec and adversarial tests; contract canaries and independent reviews; closed release-v2 profile tests preserve v1 boundaries | Actual helper/installer v2 lifecycle, six-target packaged smoke, independent final review and verified release |
 
 ## Reviewed contract boundaries
 

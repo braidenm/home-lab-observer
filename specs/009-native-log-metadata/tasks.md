@@ -6,7 +6,7 @@
   severity/event-code vocabulary, fixed grids, count/coverage semantics and JSON-safe integer rejection.
 - [ ] Implement bounded fixed-source native readers and honest unsupported states.
 - [ ] Add digest-bound Linux helper packaging, closed manifest-v2 profiles, v1 rollback and missing-runtime core smoke.
-- [ ] Implement additive SQLite-v2 checkpoint/compact-rollup persistence, session-only current cache and summary projection.
+- [x] Implement additive SQLite-v2 checkpoint/compact-rollup persistence, session-only current cache and summary projection.
 - [ ] Integrate opt-in configuration, API/capabilities/current limits and responsive summary UI.
 - [ ] Test acquisition/secret boundaries, retries, gaps, retention, native smoke and mobile UX.
 - [ ] Verify Linux helper disables core dumps/dumpability before private input; document host-admin crash-capture limits.
