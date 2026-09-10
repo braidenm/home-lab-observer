@@ -1,5 +1,15 @@
 # Independent proposal review
 
+## Open-source alignment follow-up
+
+On 2026-09-10 an independent security reviewer compared Beszel, Portainer, Cockpit, Netdata and Docker primary guidance.
+The observation-first sequence fits the request. The [research record](../../docs/architecture-research/007-open-source-alignment.md)
+incorporates the review's important qualifications: GET-only code/socket mounts are not OS containment, both hub and
+agent validate targets, outbound replies cannot carry observation-authorized commands, and ambiguous actions cannot
+use observation retry semantics. This review does not certify an unimplemented broker or approve draft isolation defaults.
+
+## Original proposal review
+
 Reviewed 2026-09-10. Scope and delivery order are coherent: the owner approved separately permissioned start, stop
 and restart, after connected read-only observation. This does not approve implementation or activate daemon access.
 

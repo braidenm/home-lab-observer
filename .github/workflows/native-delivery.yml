@@ -13,7 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PREVIEW_VERSION: 0.1.0-preview.1
+  # Synthetic CI identity; never reuse an immutable public release version.
+  PREVIEW_VERSION: 0.1.0-preview.999999
   GOFLAGS: -buildvcs=false
 
 jobs:
@@ -35,24 +36,18 @@ jobs:
         run: |
           npm run test:contracts
           node --test scripts/release-workflow.test.mjs
-      - name: Cross-build the six preview binaries
+          node --test scripts/test-missing-linux-runtime.test.mjs
+      - name: Cross-build paired native preview binaries
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p dist/binaries
-          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
-            platform="${target%/*}"
-            architecture="${target#*/}"
-            suffix=""
-            if [[ "$platform" == "windows" ]]; then suffix=".exe"; fi
-            CGO_ENABLED=0 GOOS="$platform" GOARCH="$architecture" go build \
-              -trimpath \
-              -ldflags "-s -w -buildid= -X main.version=${PREVIEW_VERSION} -X main.commit=${GITHUB_SHA}" \
-              -o "dist/binaries/observer_${platform}_${architecture}${suffix}" \
-              ./cmd/observer
-          done
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          mkdir -p dist
+          bash scripts/build-native-v2.sh "$PREVIEW_VERSION" "$GITHUB_SHA" dist/binaries
       - name: Create deterministic native archives and manifest
-        run: go run ./cmd/releasepack --version "$PREVIEW_VERSION" --commit "$GITHUB_SHA" --binaries dist/binaries --output dist/release --resources packaging/resources
+        run: go run ./cmd/releasepack --schema-version observer-release/v2 --version "$PREVIEW_VERSION" --commit "$GITHUB_SHA" --binaries dist/binaries --output dist/release --resources packaging/resources
+      - name: Prove packaged core survives missing optional Linux runtime
+        run: node scripts/test-missing-linux-runtime.mjs dist/release
       - name: Generate SPDX dependency SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
@@ -69,7 +64,7 @@ jobs:
           set -euo pipefail
           cp packaging/install.sh dist/release/install.sh
           cp packaging/install.ps1 dist/release/install.ps1
-          node scripts/release-finalize.mjs --version "$PREVIEW_VERSION" --commit "$GITHUB_SHA" --directory dist/release --schema schemas/release-v1.schema.json
+          node scripts/release-finalize.mjs --version "$PREVIEW_VERSION" --commit "$GITHUB_SHA" --directory dist/release --schema schemas/release-v2.schema.json
           node scripts/smoke-native-delivery.mjs --mode bundle --version "$PREVIEW_VERSION" --directory dist/release
       - name: Upload bounded preview fixture
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0

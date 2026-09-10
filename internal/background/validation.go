@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/braidenm/home-lab-observer/internal/containerobs"
+	"github.com/braidenm/home-lab-observer/internal/logobs"
 	"github.com/braidenm/home-lab-observer/internal/ownerfs"
 )
 
@@ -23,10 +24,11 @@ const (
 )
 
 type storedSettings struct {
-	SchemaVersion  string `json:"schema_version"`
-	StateDir       string `json:"state_dir"`
-	ListenAddress  string `json:"listen_address"`
-	DockerEndpoint string `json:"docker_endpoint"`
+	SchemaVersion  string   `json:"schema_version"`
+	StateDir       string   `json:"state_dir"`
+	ListenAddress  string   `json:"listen_address"`
+	DockerEndpoint string   `json:"docker_endpoint"`
+	LogSources     []string `json:"log_sources,omitempty"`
 }
 
 func validateSettings(settings Settings) (Settings, error) {
@@ -43,6 +45,14 @@ func validateSettings(settings Settings) (Settings, error) {
 		return Settings{}, coded(CodeInvalidSettings, err)
 	}
 	settings.StateDir = stateDir
+	sources, err := logobs.ParseSources(runtime.GOOS, settings.LogSources)
+	if err != nil {
+		return Settings{}, coded(CodeInvalidSettings, err)
+	}
+	settings.LogSources = nil
+	for _, source := range sources {
+		settings.LogSources = append(settings.LogSources, string(source))
+	}
 	return settings, nil
 }
 
@@ -97,7 +107,7 @@ func samePath(left, right string) bool {
 }
 
 func writeSettings(path string, settings Settings) error {
-	value := storedSettings{SchemaVersion: SchemaVersion, StateDir: settings.StateDir, ListenAddress: settings.ListenAddress, DockerEndpoint: settings.DockerEndpoint}
+	value := storedSettings{SchemaVersion: SchemaVersion, StateDir: settings.StateDir, ListenAddress: settings.ListenAddress, DockerEndpoint: settings.DockerEndpoint, LogSources: settings.LogSources}
 	encoded, err := json.Marshal(value)
 	if err != nil {
 		return err
@@ -123,7 +133,7 @@ func readSettings(path string) (Settings, error) {
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return Settings{}, errors.New("background settings contain trailing data")
 	}
-	return validateSettings(Settings{StateDir: value.StateDir, ListenAddress: value.ListenAddress, DockerEndpoint: value.DockerEndpoint})
+	return validateSettings(Settings{StateDir: value.StateDir, ListenAddress: value.ListenAddress, DockerEndpoint: value.DockerEndpoint, LogSources: value.LogSources})
 }
 
 func openRegular(path string, max int64) (*os.File, error) {

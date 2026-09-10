@@ -2,6 +2,9 @@
 
 **Status:** Proposed; documentation only. Deliver after connected observation, one reviewed slice per PR.
 
+Use the [open-source alignment evidence](../../docs/architecture-research/007-open-source-alignment.md) when freezing
+the architecture. The owner delegates production-oriented decisions; retain independent review and executable proof.
+
 ## Boundaries
 
 Keep `internal/containerobs` and read-only APIs unchanged. Future modules separate grant policy, durable action ledger,

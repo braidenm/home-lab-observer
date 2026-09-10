@@ -1,0 +1,46 @@
+name: Windows native event fixture
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-event-native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  owned-synthetic-fixture:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            architecture: x64
+          - runner: windows-11-arm
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Generate and read only owned synthetic Windows event logs
+        shell: cmd
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+          if not exist "%VSWHERE%" exit /b 1
+          for /f "usebackq delims=" %%I in (`"%VSWHERE%" -latest -products * -property installationPath`) do set "VSROOT=%%I"
+          if not defined VSROOT exit /b 1
+          call "%VSROOT%\Common7\Tools\VsDevCmd.bat" -no_logo -arch=${{ matrix.architecture }}
+          if errorlevel 1 exit /b %errorlevel%
+          pwsh -NoProfile -NonInteractive -File scripts\test-windows-event-native-fixture.ps1 -ValidateConditionsOnly
+          if errorlevel 1 exit /b %errorlevel%
+          pwsh -NoProfile -NonInteractive -File scripts\test-windows-event-native-fixture.ps1

@@ -1,7 +1,8 @@
 # Spec 010: Read-only Kubernetes workload inventory
 
-**Status:** Proposed; pending owner acceptance of bounded full-object ingress with immediate projection/discard and the
-initial native-versus-in-cluster deployment profile. This document does not enable a cluster connection.
+**Status:** Deferred by owner on 2026-09-10. Revisit bounded full-object ingress and the initial deployment profile
+only when this work resumes. Neither decision blocks hosted connectivity or Docker actions. This document does not
+enable a cluster connection.
 
 ## Outcome
 
