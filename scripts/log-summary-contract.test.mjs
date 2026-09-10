@@ -168,12 +168,20 @@ test("maximum two-source seven-day grid stays below the response cap", () => {
   const range = logRanges["7d"];
   const end = Date.parse("2026-09-09T13:00:00Z");
   const start = end - range.durationSeconds * 1000;
+  const severityCount = Math.floor(maxSafeInteger / (2 * range.bucketCount * 7));
+  const capturedPerBucket = severityCount * 7;
+  const discardedPerBucket = Math.floor(maxSafeInteger / (2 * range.bucketCount));
+  const capturedPerSource = capturedPerBucket * range.bucketCount;
+  const discardedPerSource = discardedPerBucket * range.bucketCount;
   const buckets = Array.from({ length: range.bucketCount }, (_, index) => ({
-    at: new Date(start + index * range.intervalSeconds * 1000).toISOString(),
+    at: new Date(start + index * range.intervalSeconds * 1000).toISOString().replace(".000Z", ".000000000Z"),
     coverage_state: "FULL",
     covered_seconds: range.intervalSeconds,
     reason_code: null,
-    counts: { captured: 7, discarded: 1, severity: { trace: 1, debug: 1, info: 1, warn: 1, error: 1, critical: 1, unknown: 1 } }
+    counts: {
+      captured: capturedPerBucket, discarded: discardedPerBucket,
+      severity: Object.fromEntries(["trace", "debug", "info", "warn", "error", "critical", "unknown"].map((key) => [key, severityCount]))
+    }
   }));
   const status = {
     support_state: "SUPPORTED", collection_state: "OK", freshness: "CURRENT",
@@ -182,16 +190,31 @@ test("maximum two-source seven-day grid stays below the response cap", () => {
   };
   const source = (name) => ({
     source: name, status: structuredClone(status), coverage_state: "FULL", covered_seconds: range.durationSeconds,
-    counts: { captured: 1176, discarded: 168 }, buckets: structuredClone(buckets)
+    counts: { captured: capturedPerSource, discarded: discardedPerSource }, buckets: structuredClone(buckets)
   });
   const value = {
     ...structuredClone(rich), range: "7d", window_start: new Date(start).toISOString(),
     bucket_interval_seconds: range.intervalSeconds, expected_bucket_count: range.bucketCount,
     support_state: "SUPPORTED", collection_state: "OK", freshness: "CURRENT",
     observed_at: "2026-09-09T13:00:00Z", reason_code: null, coverage_state: "FULL",
-    counts: { captured: 2352, discarded: 336 }, sources: [source("system"), source("application")]
+    counts: { captured: capturedPerSource * 2, discarded: discardedPerSource * 2 }, sources: [source("system"), source("application")]
   };
   assert.equal(validateSchema(value), true, JSON.stringify(validateSchema.errors));
   assert.doesNotThrow(() => validateLogSummaryFixture(value, "maximum grid"));
+  assert.ok(Buffer.byteLength(JSON.stringify(value), "utf8") <= 262144);
+
+  // Reasons take more bytes than null; partial history remains independent of the latest successful status.
+  value.coverage_state = "PARTIAL";
+  for (const item of value.sources) {
+    item.coverage_state = "PARTIAL";
+    item.covered_seconds = (range.intervalSeconds - 1) * range.bucketCount;
+    for (const bucket of item.buckets) {
+      bucket.coverage_state = "PARTIAL";
+      bucket.covered_seconds = range.intervalSeconds - 1;
+      bucket.reason_code = "RESPONSE_TOO_LARGE";
+    }
+  }
+  assert.equal(validateSchema(value), true, JSON.stringify(validateSchema.errors));
+  assert.doesNotThrow(() => validateLogSummaryFixture(value, "maximum partial grid"));
   assert.ok(Buffer.byteLength(JSON.stringify(value), "utf8") <= 262144);
 });
