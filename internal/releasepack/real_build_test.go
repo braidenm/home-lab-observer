@@ -76,7 +76,7 @@ func TestV2BuildRealGoMetadataWithoutExecutingArtifacts(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	installed := Installed{ManifestPath: filepath.Join(config.OutputDir, ManifestName), ExecutablePath: filepath.Join(extracted, "observer"), Identity: buildidentity.Identity{Role: "observer", Version: config.Version, Commit: config.Commit, OS: "linux", Arch: "amd64", HelperSHA256: asset.JournalHelper.SHA256}, ArchiveSHA256: asset.SHA256, ArchiveSize: asset.SizeBytes}
+	installed := Installed{ExpectedSchemaVersion: SchemaVersionV2, ManifestPath: filepath.Join(config.OutputDir, ManifestName), ExecutablePath: filepath.Join(extracted, "observer"), Identity: buildidentity.Identity{Role: "observer", Version: config.Version, Commit: config.Commit, OS: "linux", Arch: "amd64", HelperSHA256: asset.JournalHelper.SHA256}, ArchiveSHA256: asset.SHA256, ArchiveSize: asset.SizeBytes}
 	if err := VerifyInstalled(installed); err != nil {
 		t.Fatal(err)
 	}

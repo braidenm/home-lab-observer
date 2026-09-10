@@ -72,7 +72,11 @@ func runVersion(args []string, stdout, stderr io.Writer) int {
 			return 2
 		}
 		executable, err := os.Executable()
-		if err != nil || releasepack.VerifyInstalled(releasepack.Installed{ManifestPath: *manifest, ExecutablePath: executable, Identity: identity, ArchiveSHA256: *archiveHash, ArchiveSize: *archiveSize}) != nil {
+		expectedSchema := releasepack.SchemaVersion
+		if releaseIdentity != "" {
+			expectedSchema = releasepack.SchemaVersionV2
+		}
+		if err != nil || releasepack.VerifyInstalled(releasepack.Installed{ExpectedSchemaVersion: expectedSchema, ManifestPath: *manifest, ExecutablePath: executable, Identity: identity, ArchiveSHA256: *archiveHash, ArchiveSize: *archiveSize}) != nil {
 			fmt.Fprintln(stderr, "INSTALLED_RELEASE_INVALID")
 			return 1
 		}

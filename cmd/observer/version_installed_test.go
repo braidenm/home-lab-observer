@@ -107,6 +107,25 @@ func TestRealInstalledVersionVerifier(t *testing.T) {
 	if err != nil || string(output) != "observer-release/v2\n" {
 		t.Fatal("real schema probe failed")
 	}
+	// A non-Linux v2 identity has no helper digest, but still cannot downgrade
+	// to a v1 manifest with the same otherwise-valid archive/build identity.
+	manifest.SchemaVersion = releasepack.SchemaVersion
+	for index := range manifest.Assets {
+		manifest.Assets[index].ContentProfile = ""
+		manifest.Assets[index].JournalHelper = nil
+	}
+	payload, err = json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manifestPath, payload, 0600); err != nil {
+		t.Fatal(err)
+	}
+	command = exec.Command(filepath.Join(directory, binary), "version", "--release-manifest", manifestPath, "--archive-sha256", strings.Repeat("c", 64), "--archive-size", "100")
+	output, err = command.CombinedOutput()
+	if err == nil || string(output) != "INSTALLED_RELEASE_INVALID\n" {
+		t.Fatal("real v2 binary accepted manifest downgrade")
+	}
 	if err := os.WriteFile(manifestPath, []byte("private-canary"), 0600); err != nil {
 		t.Fatal(err)
 	}

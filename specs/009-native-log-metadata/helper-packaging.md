@@ -65,6 +65,9 @@ change occurs. It checks the closed manifest, exact selected archive metadata,
 exact adjacent file set and actual helper hash/build record. Successful output is
 the fixed `RELEASE_MANIFEST_VERIFIED` line, otherwise only fixed errors. Ordinary
 version and version --json retain the original six-field observer-build/v1 wire.
+The required schema is code-owned and derived from identity-envelope presence,
+not a caller flag or the helper digest. Thus a v2 Windows/macOS binary cannot
+accept a v1 manifest simply because those platforms have no separate helper.
 
 New online installers refuse older binaries lacking this hook with guidance to
 use that release's installer; there is no insecure online fallback. Offline

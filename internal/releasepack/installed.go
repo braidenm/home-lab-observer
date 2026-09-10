@@ -12,15 +12,20 @@ import (
 // The entrypoint supplies its own executable and authoritative runtime identity,
 // never a caller-selected program to run. Verification executes nothing.
 type Installed struct {
-	ManifestPath   string
-	ExecutablePath string
-	Identity       buildidentity.Identity
-	ArchiveSHA256  string
-	ArchiveSize    int64
+	// Code-owned: derived from the running binary's identity envelope presence.
+	ExpectedSchemaVersion string
+	ManifestPath          string
+	ExecutablePath        string
+	Identity              buildidentity.Identity
+	ArchiveSHA256         string
+	ArchiveSize           int64
 }
 
 func VerifyInstalled(input Installed) error {
 	invalid := errors.New("INSTALLED_RELEASE_INVALID")
+	if input.ExpectedSchemaVersion != SchemaVersion && input.ExpectedSchemaVersion != SchemaVersionV2 {
+		return invalid
+	}
 	if !shaPattern(input.ArchiveSHA256) || input.ArchiveSize <= 0 || input.ArchiveSize > maxArchiveSize || !filepath.IsAbs(input.ExecutablePath) {
 		return invalid
 	}
@@ -30,6 +35,9 @@ func VerifyInstalled(input Installed) error {
 	}
 	manifest, err := DecodeManifest(payload)
 	if err != nil {
+		return invalid
+	}
+	if manifest.SchemaVersion != input.ExpectedSchemaVersion {
 		return invalid
 	}
 	if manifest.Version != input.Identity.Version || manifest.CommitSHA != input.Identity.Commit || input.Identity.Role != "observer" {
