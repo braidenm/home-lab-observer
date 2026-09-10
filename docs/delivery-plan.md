@@ -36,7 +36,8 @@ dashboard, retries and revocation with synthetic resources before an explicitly 
 
 ## 4. Separately permissioned container control
 
-Start with restart of individually approved Docker container IDs; start/stop inclusion awaits owner preference.
+The owner approved start, stop and restart for individually approved Docker container IDs, with a separate grant
+for each action. Approval of these actions does not approve the remaining proposed broker/security defaults.
 Control uses a separate local opt-in, credential, action boundary and resource grants. Persist audit intent before
 dispatch; recheck authorization and immutable target identity at execution. Require revocation, expiry, replay
 protection, per-target serialization and explicit ambiguous outcomes. Never blindly retry a timed-out restart.
