@@ -75,10 +75,14 @@ func testHeavyBacklog(t *testing.T, validID bool) {
 func TestNativeBudgetCountsProbesAndStopsWithoutPrefix(t *testing.T) {
 	old := row(queryTime.Add(-time.Hour), 0)
 	old.cursor = bytes.Repeat([]byte("x"), logobs.MaxCheckpointBytes)
-	for _, request := range []logobs.ReadRequest{initialRequest(), resumeRequest(old.cursor, false), resumeRequest(nil, true)} {
+	for index, request := range []logobs.ReadRequest{initialRequest(), resumeRequest(old.cursor, false), resumeRequest(nil, true)} {
 		j := newJournal(old)
 		batch := run(t, j, request)
-		if batch.ProbeCount != 1 || j.nativeBytes != logobs.MaxCheckpointBytes {
+		wantBytes := logobs.MaxCheckpointBytes
+		if index == 0 {
+			wantBytes += 8
+		}
+		if batch.ProbeCount != 1 || j.nativeBytes != wantBytes {
 			t.Fatal("probe cursor escaped byte accounting")
 		}
 	}

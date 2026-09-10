@@ -148,6 +148,18 @@ allocation reclamation, fixed-width dates through year 9999, malformed/incompati
 checkpoint preservation, concurrent CAS contenders and cancellation. Root full Go tests, vet, repository policy and
 diff checks pass. This is storage-library evidence; production/native wiring and release proof remain separate gates.
 
+## Linux native binding and owned fixture review
+
+Root independently reviewed the fixed system-journal scope, dynamic-symbol allowlist, thread ownership,
+selected-field limits, cursor allocation/free paths, library/handle lifetime and fixed error mapping. The initial
+tail race now rejects an attempt when a newly arrived in-window event could otherwise be skipped. The fixture
+writer creates only a marked temporary synthetic journal; the test-only directory seam never queries host logs.
+
+Full Windows Go tests, vet and repository policy passed for the combined branch. The author additionally ran the
+owned fixture with Ubuntu systemd 255.4 and compiled both Linux architectures. The new hosted fixture job must pass
+before merge; one systemd version is not evidence for every supported distribution. This slice does not activate
+native collection, package a helper, or claim process/release integration is complete.
+
 ## Fixed helper process and identity review
 
 Independent transport review found resolver errors escaping verbatim and missing
