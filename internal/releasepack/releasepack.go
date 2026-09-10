@@ -17,13 +17,14 @@ import (
 )
 
 const (
-	SchemaVersion  = "observer-release/v1"
-	Repository     = "braidenm/home-lab-observer"
-	SigningPolicy  = "UNSIGNED_PREVIEW_WITH_CHECKSUMS_AND_PROVENANCE"
-	ManifestName   = "release-manifest.json"
-	ChecksumsName  = "SHA256SUMS"
-	maxBinarySize  = 200 << 20
-	maxArchiveSize = 220 << 20
+	SchemaVersion   = "observer-release/v1"
+	SchemaVersionV2 = "observer-release/v2"
+	Repository      = "braidenm/home-lab-observer"
+	SigningPolicy   = "UNSIGNED_PREVIEW_WITH_CHECKSUMS_AND_PROVENANCE"
+	ManifestName    = "release-manifest.json"
+	ChecksumsName   = "SHA256SUMS"
+	maxBinarySize   = 200 << 20
+	maxArchiveSize  = 220 << 20
 )
 
 var (
@@ -32,11 +33,12 @@ var (
 )
 
 type Config struct {
-	Version      string
-	Commit       string
-	BinariesDir  string
-	OutputDir    string
-	ResourcesDir string
+	SchemaVersion string
+	Version       string
+	Commit        string
+	BinariesDir   string
+	OutputDir     string
+	ResourcesDir  string
 }
 
 type Manifest struct {
@@ -50,13 +52,33 @@ type Manifest struct {
 }
 
 type Asset struct {
-	OS          string `json:"os"`
-	Arch        string `json:"arch"`
-	Filename    string `json:"filename"`
-	SHA256      string `json:"sha256"`
-	SizeBytes   int64  `json:"size_bytes"`
-	Format      string `json:"format"`
-	DownloadURL string `json:"download_url"`
+	OS             string         `json:"os"`
+	Arch           string         `json:"arch"`
+	Filename       string         `json:"filename"`
+	SHA256         string         `json:"sha256"`
+	SizeBytes      int64          `json:"size_bytes"`
+	Format         string         `json:"format"`
+	DownloadURL    string         `json:"download_url"`
+	ContentProfile string         `json:"content_profile,omitempty"`
+	JournalHelper  *JournalHelper `json:"journal_helper,omitempty"`
+}
+
+type JournalHelper struct {
+	Filename  string `json:"filename"`
+	SHA256    string `json:"sha256"`
+	SizeBytes int64  `json:"size_bytes"`
+}
+
+// V2 requires an explicit null helper on non-Linux platforms; v1 omits both keys.
+func (a Asset) MarshalJSON() ([]byte, error) {
+	type plain Asset
+	if a.ContentProfile == "" {
+		return json.Marshal(plain(a))
+	}
+	return json.Marshal(struct {
+		plain
+		Helper *JournalHelper `json:"journal_helper"`
+	}{plain(a), a.JournalHelper})
 }
 
 type target struct {
@@ -108,7 +130,7 @@ func Build(config Config) (Manifest, error) {
 	}()
 
 	manifest := Manifest{
-		SchemaVersion: SchemaVersion,
+		SchemaVersion: in.config.SchemaVersion,
 		Version:       in.config.Version,
 		Tag:           "v" + in.config.Version,
 		Repository:    Repository,
@@ -162,6 +184,12 @@ func Build(config Config) (Manifest, error) {
 }
 
 func validateAndLoad(config Config) (inputs, error) {
+	if config.SchemaVersion == "" {
+		config.SchemaVersion = SchemaVersion
+	}
+	if config.SchemaVersion != SchemaVersion && config.SchemaVersion != SchemaVersionV2 {
+		return inputs{}, errors.New("INVALID_SCHEMA_VERSION")
+	}
 	if !validVersion(config.Version) {
 		return inputs{}, errors.New("INVALID_VERSION")
 	}
@@ -180,9 +208,14 @@ func validateAndLoad(config Config) (inputs, error) {
 	if pathsOverlap(resolved.OutputDir, resolved.BinariesDir) || pathsOverlap(resolved.OutputDir, resolved.ResourcesDir) {
 		return inputs{}, errors.New("OUTPUT_OVERLAPS_INPUT")
 	}
-	binaries, err := loadBinaries(resolved.BinariesDir)
+	binaries, err := loadBinaries(resolved.BinariesDir, resolved.SchemaVersion)
 	if err != nil {
 		return inputs{}, err
+	}
+	if resolved.SchemaVersion == SchemaVersionV2 {
+		if err := validateReleaseBinaries(resolved, binaries); err != nil {
+			return inputs{}, err
+		}
 	}
 	license, err := readRegularBounded(filepath.Join(resolved.ResourcesDir, "LICENSE"), 1<<20)
 	if err != nil {
@@ -278,7 +311,7 @@ func containsPath(parent, child string) bool {
 	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
-func loadBinaries(directory string) (map[string]sourceFile, error) {
+func loadBinaries(directory, schema string) (map[string]sourceFile, error) {
 	entries, err := os.ReadDir(directory)
 	if err != nil {
 		return nil, errors.New("BINARIES_DIRECTORY_UNAVAILABLE")
@@ -286,6 +319,9 @@ func loadBinaries(directory string) (map[string]sourceFile, error) {
 	expected := make(map[string]bool, len(targets))
 	for _, target := range targets {
 		expected[target.binaryName] = true
+		if schema == SchemaVersionV2 && target.os == "linux" {
+			expected[journalInputName(target.arch)] = true
+		}
 	}
 	if len(entries) != len(expected) {
 		return nil, errors.New("BINARY_SET_INVALID")
@@ -297,7 +333,7 @@ func loadBinaries(directory string) (map[string]sourceFile, error) {
 		}
 		path := filepath.Join(directory, entry.Name())
 		info, err := os.Lstat(path)
-		if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > maxBinarySize {
+		if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > maxBinarySize || !singleLink(path, info) {
 			return nil, errors.New("BINARY_INPUT_INVALID")
 		}
 		result[entry.Name()] = sourceFile{path: path, info: info}
@@ -307,7 +343,7 @@ func loadBinaries(directory string) (map[string]sourceFile, error) {
 
 func readRegularBounded(path string, limit int64) ([]byte, error) {
 	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > limit {
+	if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > limit || !singleLink(path, info) {
 		return nil, errors.New("invalid resource")
 	}
 	file, err := os.Open(path)
@@ -375,7 +411,7 @@ func hashFile(path string) (string, int64, error) {
 
 func hashFileBounded(path string, limit int64) (string, int64, error) {
 	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Size() < 0 || info.Size() > limit {
+	if err != nil || !info.Mode().IsRegular() || info.Size() < 0 || info.Size() > limit || !singleLink(path, info) {
 		return "", 0, errors.New("invalid hash input")
 	}
 	file, err := os.Open(path)
