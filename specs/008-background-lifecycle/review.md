@@ -81,8 +81,10 @@ diagnostic matching; root reran full Go tests/vet, seven workflow/diagnostic tes
 Preview 2 was published from that merge after all six native OS/architecture jobs passed. The initial provenance
 publication attempt encountered a GitHub server error; retrying only failed jobs succeeded without changing release
 bytes or bypassing provenance. Public Windows bytes match SHA-256 and the exact version/commit and pass real local
-authentication/schema/history and nonce-stop tests. Independent public attestation lookup remains pending because
-GitHub's trust-metadata endpoint returned transient 502/503 responses.
+authentication/schema/history and nonce-stop tests. GitHub's trust-metadata endpoint initially returned transient
+502/503 responses. A later independent `gh attestation verify --repo braidenm/home-lab-observer --format json`
+completed successfully: the Windows archive digest matches, signer is `native-release.yml@refs/heads/main`, source
+commit is the exact merge above, runner is GitHub-hosted, and invocation is release run 34425918972 attempt 2.
 
 ## Scope safeguards
 

@@ -7,4 +7,4 @@
 - [x] Update managed uninstall safety and easy operating instructions for each OS.
 - [x] Validate native syntax/lifecycle, API contracts, responsive UI, retention and failure recovery.
 - [x] Independently review code, plan and UX; fix required CI and auto-merge.
-- [ ] Publish and verify the next native preview, keeping the previous release available for rollback.
+- [x] Publish and verify the next native preview, keeping the previous release available for rollback.
