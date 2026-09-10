@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -99,5 +100,6 @@ func TestServeRejectsBadSourcesBeforeOpeningState(t *testing.T) {
 		if code := runServe(args, io.Discard, io.Discard); code != 2 {
 			t.Fatal("bad source accepted")
 		}
+		if _, err := os.Lstat(state); !errors.Is(err, os.ErrNotExist) { t.Fatal("invalid options touched state") }
 	}
 }

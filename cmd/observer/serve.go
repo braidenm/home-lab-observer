@@ -56,7 +56,7 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 	}
 	sources, sourceErr := logobs.ParseSources(goruntime.GOOS, sourceFlags)
 	if sourceErr != nil {
-		fmt.Fprintln(stderr, "invalid native log sources: Linux supports system only")
+		fmt.Fprintln(stderr, "invalid native log source configuration")
 		return 2
 	}
 	if *stateDir == "" {

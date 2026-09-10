@@ -158,7 +158,7 @@ func parseBackgroundOptions(args []string, stdout, stderr io.Writer) (background
 		return backgroundOptions{}, 2
 	}
 	if _, err := logobs.ParseSources(runtime.GOOS, options.logSources); err != nil {
-		fmt.Fprintln(stderr, "invalid native log sources: Linux supports system only")
+		fmt.Fprintln(stderr, "invalid native log source configuration")
 		return backgroundOptions{}, 2
 	}
 	if options.action == "enable" && options.stateDir == "" {
