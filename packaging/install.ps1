@@ -185,15 +185,41 @@ function Assert-VersionDirectory([string] $Directory, [string] $ExpectedVersion)
     }
 }
 
+function Assert-BackgroundArea([string] $Root) {
+    $background = Join-Path $Root 'background'
+    $item = Get-Item -LiteralPath $background -Force
+    if (-not $item.PSIsContainer -or (Test-ReparsePoint $item)) { Fail 'managed background area is unsafe' }
+    $marker = Join-Path $background '.managed'
+    $active = Test-Path -LiteralPath $marker
+    if ($active) {
+        Assert-RegularFile $marker 'background marker'
+        if (([IO.File]::ReadAllText($marker)).TrimEnd("`r", "`n") -cne 'home-lab-observer-background-v1') { Fail 'background marker is invalid' }
+    }
+    $registrations = 0
+    $allowed = @('.managed', 'settings.json', '.operation-lock', 'home-lab-observer.service', 'com.braidenm.home-lab-observer.plist', 'task.xml')
+    foreach ($member in @(Get-ChildItem -LiteralPath $background -Force)) {
+        if ($allowed -notcontains $member.Name) { Fail "background area contains an unknown entry: $($member.Name)" }
+        Assert-RegularFile $member.FullName "background/$($member.Name)"
+        if (@('home-lab-observer.service', 'com.braidenm.home-lab-observer.plist', 'task.xml') -contains $member.Name) { $registrations += 1 }
+    }
+    if ($active) {
+        Assert-RegularFile (Join-Path $background 'settings.json') 'managed background settings'
+        if ($registrations -ne 1) { Fail 'managed background registration is missing or ambiguous' }
+    } elseif ($registrations -ne 0 -or (Test-Path -LiteralPath (Join-Path $background 'settings.json'))) {
+        Fail 'partial background registration requires background disable/recovery'
+    }
+}
+
 function Assert-ManagedRoot([string] $Root) {
     $marker = Join-Path $Root '.home-lab-observer-managed'
     Assert-RegularFile $marker 'managed-root marker'
     if (([IO.File]::ReadAllText($marker)).TrimEnd("`r", "`n") -cne $ManagedMarker) { Fail 'managed-root marker is invalid' }
-    $allowed = @('.home-lab-observer-managed', '.install-lock', 'bin', 'versions', 'current', 'previous')
+    $allowed = @('.home-lab-observer-managed', '.install-lock', 'bin', 'versions', 'background', 'current', 'previous')
     foreach ($member in @(Get-ChildItem -LiteralPath $Root -Force)) {
         if ($allowed -notcontains $member.Name) { Fail "managed root contains an unknown entry: $($member.Name)" }
         if (Test-ReparsePoint $member) { Fail "managed root contains a reparse point: $($member.Name)" }
     }
+    if (Test-Path -LiteralPath (Join-Path $Root 'background')) { Assert-BackgroundArea $Root }
     $bin = Join-Path $Root 'bin'
     if (Test-Path -LiteralPath $bin) {
         $binMembers = @(Get-ChildItem -LiteralPath $bin -Force)
@@ -412,6 +438,9 @@ try {
             Assert-ManagedRoot $resolvedRoot
         }
         Enter-InstallLock $resolvedRoot
+        # Background lifecycle operations acquire the same guard. Revalidate
+        # after ownership so enable/disable cannot race program-file mutation.
+        Assert-ManagedRoot $resolvedRoot
         $versions = Join-Path $resolvedRoot 'versions'
         [IO.Directory]::CreateDirectory($versions) | Out-Null
         $target = Join-Path $versions $Version
@@ -445,6 +474,8 @@ try {
         Assert-ManagedRoot $resolvedRoot
         Assert-VersionDirectory (Join-Path (Join-Path $resolvedRoot 'versions') $Rollback) $Rollback
         Enter-InstallLock $resolvedRoot
+        Assert-ManagedRoot $resolvedRoot
+        Assert-VersionDirectory (Join-Path (Join-Path $resolvedRoot 'versions') $Rollback) $Rollback
         $current = Join-Path $resolvedRoot 'current'
         $oldVersion = ([IO.File]::ReadAllText($current)).TrimEnd("`r", "`n")
         if ($oldVersion -ceq $Rollback) { Fail "version is already selected: $Rollback" }
@@ -454,7 +485,14 @@ try {
     } else {
         $resolvedRoot = Resolve-SafeInstallRoot $InstallRoot $false
         Assert-ManagedRoot $resolvedRoot
+        if (Test-Path -LiteralPath (Join-Path $resolvedRoot 'background\.managed')) {
+            Fail "background operation is enabled; run 'observer background disable' before uninstalling"
+        }
         Enter-InstallLock $resolvedRoot
+        Assert-ManagedRoot $resolvedRoot
+        if (Test-Path -LiteralPath (Join-Path $resolvedRoot 'background\.managed')) {
+            Fail "background operation is enabled; run 'observer background disable' before uninstalling"
+        }
         $bin = Join-Path $resolvedRoot 'bin'
         if (Test-Path -LiteralPath $bin) {
             [IO.File]::Delete((Join-Path $bin 'observer.cmd'))
@@ -466,6 +504,11 @@ try {
             [IO.Directory]::Delete($versions, $false)
         }
         foreach ($name in @('current', 'previous', '.home-lab-observer-managed')) { [IO.File]::Delete((Join-Path $resolvedRoot $name)) }
+        $background = Join-Path $resolvedRoot 'background'
+        if (Test-Path -LiteralPath $background) {
+            [IO.File]::Delete((Join-Path $background '.operation-lock'))
+            [IO.Directory]::Delete($background, $false)
+        }
         [IO.Directory]::Delete($script:LockDirectory, $false)
         $script:LockDirectory = $null
         [IO.Directory]::Delete($resolvedRoot, $false)

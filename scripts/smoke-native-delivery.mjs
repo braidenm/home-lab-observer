@@ -2,11 +2,13 @@
 
 import { createHash } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
-import { chmod, lstat, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { createServer } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { waitForProcessExit as waitForExit } from "./wait-for-process-exit.mjs";
 
 const PLATFORMS = [
   ["linux", "amd64", "tar.gz"], ["linux", "arm64", "tar.gz"],
@@ -181,20 +183,13 @@ async function smokeAuthenticatedService(executable, temporary) {
   }
 }
 
-async function waitForExit(processHandle, timeoutMilliseconds) {
-  if (processHandle.exitCode !== null) return true;
-  return Promise.race([
-    new Promise((resolve) => processHandle.once("exit", () => resolve(true))),
-    delay(timeoutMilliseconds).then(() => false),
-  ]);
-}
-
 async function nativeSmoke(directory, version, commit, checksums) {
   const { platform, arch } = platformTuple();
   const format = platform === "windows" ? "zip" : "tar.gz";
   const archiveName = `home-lab-observer_${version}_${platform}_${arch}.${format}`;
   const archive = path.join(directory, archiveName);
-  const temporary = await mkdtemp(path.join(os.tmpdir(), "observer native delivery "));
+  const temporary = await realpath(await mkdtemp(path.join(os.tmpdir(), "observer native delivery ")));
+  let preserveForManagerFailure = false;
   try {
     execFileSync("tar", ["-xf", archive, "-C", temporary], { stdio: "inherit", timeout: 30_000 });
     const root = path.join(temporary, `home-lab-observer_${version}_${platform}_${arch}`);
@@ -202,6 +197,12 @@ async function nativeSmoke(directory, version, commit, checksums) {
     if (platform !== "windows") await chmod(executable, 0o755);
     verifyVersion(runObserver(executable, ["version", "--json"]), version, commit, platform, arch);
     await smokeAuthenticatedService(executable, temporary);
+    // Exercise the exact packaged binary on every native release architecture.
+    // This starts only temporary foreground children, never a login registration.
+    execFileSync(process.execPath, [fileURLToPath(new URL("./smoke-background-runtime.mjs", import.meta.url))], {
+      env: { ...process.env, OBSERVER_SMOKE_BINARY: executable },
+      stdio: "inherit", timeout: 180_000, windowsHide: true,
+    });
 
     const installRoot = path.join(temporary, "managed install root");
     const stateSentinel = path.join(temporary, "observer-state-must-survive.txt");
@@ -213,6 +214,14 @@ async function nativeSmoke(directory, version, commit, checksums) {
       execFileSync(powershell, [...common, "-Version", version, "-Archive", archive, "-Checksum", checksums.get(archiveName), "-InstallRoot", installRoot], { stdio: "inherit", timeout: 60_000 });
       const launcher = path.join(installRoot, "bin", "observer.cmd");
       verifyVersion(runObserver(launcher, ["version", "--json"]), version, commit, platform, arch);
+      if (process.env.OBSERVER_TEST_USER_MANAGER === "1") {
+        preserveForManagerFailure = true;
+        execFileSync(process.execPath, [fileURLToPath(new URL("./smoke-windows-manager.mjs", import.meta.url))], {
+          env: { ...process.env, OBSERVER_SMOKE_BINARY: executable, OBSERVER_SMOKE_INSTALL_ROOT: installRoot },
+          stdio: "inherit", timeout: 150_000, windowsHide: true,
+        });
+        preserveForManagerFailure = false;
+      }
       execFileSync(powershell, [...common, "-Uninstall", "-InstallRoot", installRoot], { stdio: "inherit", timeout: 30_000 });
     } else {
       const installer = path.join(directory, "install.sh");
@@ -223,7 +232,11 @@ async function nativeSmoke(directory, version, commit, checksums) {
     }
     if (await readFile(stateSentinel, "utf8") !== "preserve me") fail("uninstall modified observer state outside its managed root");
   } finally {
-    await rm(temporary, { recursive: true, force: true });
+    if (preserveForManagerFailure) {
+      console.error("Preserving disposable runner files because manager cleanup was not confirmed.");
+    } else {
+      await rm(temporary, { recursive: true, force: true });
+    }
   }
 }
 

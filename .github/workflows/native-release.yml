@@ -181,6 +181,8 @@ jobs:
         with:
           name: native-release-${{ needs.authorize.outputs.version }}
           path: dist/release
+      - name: Install schema validators for packaged runtime smoke
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Test installer lifecycle on Unix
         if: runner.os != 'Windows'
         shell: bash
@@ -188,10 +190,14 @@ jobs:
       - name: Test installer lifecycle on Windows
         if: runner.os == 'Windows'
         shell: pwsh
-        run: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File packaging/tests/install-ps1.test.ps1
+        run: |
+          node --test scripts/windows-task-owner-diagnostic.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File packaging/tests/install-ps1.test.ps1
       - name: Execute the native artifact and offline installer on Windows
         if: runner.os == 'Windows'
         env:
+          OBSERVER_TEST_USER_MANAGER: '1'
           VERSION: ${{ needs.authorize.outputs.version }}
           COMMIT: ${{ needs.authorize.outputs.commit }}
         run: node scripts/smoke-native-delivery.mjs --mode native --version "$env:VERSION" --commit "$env:COMMIT" --directory dist/release
@@ -263,7 +269,7 @@ jobs:
             }
           }
           gh release create "$tag" --verify-tag --title "Home Lab Observer ${VERSION}" \
-            --notes "Unsigned native preview. Verify SHA256SUMS and GitHub provenance before running. No production signing certificate is used in this preview." \
+            --notes-file docs/releases/native-preview.md \
             --draft --prerelease
           verify_tag
           gh release upload "$tag" dist/release/*

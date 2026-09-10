@@ -148,6 +148,28 @@ try {
     Assert-True -Condition ($selected -ceq $V1) -Message 'rollback did not select v1'
     Assert-True -Condition ($previous -ceq $V3) -Message 'rollback did not retain v3'
 
+    $Background = Join-Path $InstallRoot 'background'
+    [IO.Directory]::CreateDirectory($Background) | Out-Null
+    [IO.File]::WriteAllText((Join-Path $Background '.managed'), "home-lab-observer-background-v1`r`n")
+    [IO.File]::WriteAllText((Join-Path $Background 'settings.json'), '{}')
+    [IO.File]::WriteAllText((Join-Path $Background 'task.xml'), '<Task/>')
+    [IO.File]::WriteAllText((Join-Path $Background '.operation-lock'), '')
+    Invoke-Installer @('-Rollback', $V3, '-InstallRoot', $InstallRoot) | Out-Null
+    Invoke-Installer @('-Rollback', $V1, '-InstallRoot', $InstallRoot) | Out-Null
+    Assert-True -Condition (Test-Path -LiteralPath (Join-Path $Background '.managed')) -Message 'rollback removed background registration evidence'
+    Invoke-Installer @('-Uninstall', '-InstallRoot', $InstallRoot) $false | Out-Null
+    Assert-True -Condition (Test-Path -LiteralPath (Join-Path $InstallRoot 'current')) -Message 'refused uninstall removed program files'
+    foreach ($name in @('.managed', 'settings.json', 'task.xml')) { [IO.File]::Delete((Join-Path $Background $name)) }
+    [IO.Directory]::CreateDirectory((Join-Path $InstallRoot '.install-lock')) | Out-Null
+    Invoke-Installer @('-Uninstall', '-InstallRoot', $InstallRoot) $false | Out-Null
+    Assert-True -Condition (Test-Path -LiteralPath (Join-Path $InstallRoot 'current')) -Message 'contended uninstall removed program files'
+    Assert-True -Condition (Test-Path -LiteralPath (Join-Path $Background '.operation-lock')) -Message 'contended uninstall removed background lock evidence'
+    [IO.Directory]::Delete((Join-Path $InstallRoot '.install-lock'), $false)
+    [IO.File]::WriteAllText((Join-Path $Background 'unknown'), 'owner-data')
+    Invoke-Installer @('-Uninstall', '-InstallRoot', $InstallRoot) $false | Out-Null
+    Assert-True -Condition (Test-Path -LiteralPath (Join-Path $Background 'unknown')) -Message 'uninstall removed unknown background data'
+    [IO.File]::Delete((Join-Path $Background 'unknown'))
+
     [IO.File]::WriteAllText((Join-Path $InstallRoot 'versions\.unknown'), 'unknown')
     Invoke-Installer @('-Uninstall', '-InstallRoot', $InstallRoot) $false | Out-Null
     Assert-True -Condition (Test-Path -LiteralPath (Join-Path $InstallRoot 'versions\.unknown')) -Message 'uninstall removed unknown version content'

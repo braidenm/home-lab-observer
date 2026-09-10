@@ -1,8 +1,9 @@
 # Run the local observer
 
 The foreground local service is the native preview. [Verified archives and per-user installation helpers](install.md)
-provide a path without development tools; publisher-signed installers and background-service profiles remain later
-milestones. No GitHub token, Platform Demo account, or Docker installation is needed to build and run this preview.
+provide a path without development tools. [Optional user-session background operation](background-operation.md) is
+specified separately; check release notes for availability. Publisher-signed installers remain a later milestone.
+No GitHub token, Platform Demo account, or Docker installation is needed to build and run this preview.
 
 ## Build and run
 
@@ -57,8 +58,9 @@ Platform Demo will use a separately authenticated outbound connection.
 
 History defaults to seven days with a 250 MiB active-store budget. It stores a fixed set of numeric metrics and downsamples
 older data. Source log bodies, process arguments, environment variables and process identities are not stored in metric
-history. Observer diagnostics go to standard error as structured JSON; this process does not create an unbounded log file.
-When installing it under a service manager, configure that manager's log retention as part of the installer instructions.
+history. Foreground diagnostics go to standard error as structured JSON; this process does not create an unbounded
+log file. The optional managed background profile discards ordinary output and uses a private, bounded product
+diagnostic writer instead; see [its retention and operating instructions](background-operation.md).
 
 An unreadable or incompatible database is preserved for diagnosis when corruption recovery is appropriate. Quarantined
 files require an owner decision before removal; consult the reported state directory. Never delete or move an active

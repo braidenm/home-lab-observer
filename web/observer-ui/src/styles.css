@@ -204,6 +204,8 @@
 .observer-text-button { padding: 7px 9px; }
 
 .observer-health-grid { grid-template-columns: repeat(3, 1fr); }
+.observer-diagnostics-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px; padding: 0 20px 20px; }
+.observer-diagnostics-grid .observer-panel { min-width: 0; }
 .observer-large-value { display: block; margin: 15px 0 7px; font-size: 24px; letter-spacing: -.03em; }
 .observer-panel--padded p { margin: 0 0 15px; font-size: 11px; line-height: 1.5; }
 .observer-privacy-grid { grid-template-columns: 1.5fr 1fr; }
@@ -231,6 +233,7 @@
 @media (max-width: 940px) {
   .observer-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .observer-health-grid { grid-template-columns: 1fr 1fr; }
+  .observer-diagnostics-grid { grid-template-columns: 1fr 1fr; }
   .observer-health-grid article:last-child { grid-column: 1 / -1; }
   .observer-event-strip { grid-template-columns: 1fr; }
   .observer-event-strip li, .observer-event-strip li:first-child { border-top: 1px solid var(--observer-line); border-left: 0; }
@@ -247,6 +250,7 @@
   .observer-intro-panel { padding: 23px 20px; }
   .observer-intro-panel__facts { justify-content: flex-start; }
   .observer-chart-grid, .observer-health-grid, .observer-privacy-grid { grid-template-columns: 1fr; }
+  .observer-diagnostics-grid { grid-template-columns: 1fr; padding: 0 16px 16px; }
   .observer-health-grid article:last-child { grid-column: auto; }
   .observer-toolbar { align-items: stretch; flex-direction: column; }
   .observer-filter-row { display: grid; grid-template-columns: 1fr 110px; }

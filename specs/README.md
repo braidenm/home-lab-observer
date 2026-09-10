@@ -9,5 +9,6 @@
 | [005 Local data plane and history](005-local-data-plane/spec.md) | Accepted | Secure loopback service, bounded history, real trends, and embedded UI |
 | [006 Container observations](006-container-observations/spec.md) | Accepted | Opt-in local Docker reader, dedicated nullable inventory API, and Workloads dashboard |
 | [007 Native preview delivery](007-native-delivery/spec.md) | Accepted | Verified archives, per-user install/rollback helpers and independent release publication |
+| [008 Background lifecycle](008-background-lifecycle/spec.md) | In implementation | Explicit user-session startup, safe lifecycle management and bounded self-diagnostics |
 
 Each specification owns its requirements, implementation plan, tasks, acceptance evidence, and follow-up decisions. Work that changes behavior must update the relevant specification before implementation.

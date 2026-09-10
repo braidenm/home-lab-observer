@@ -6,6 +6,31 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { EventEmitter } from "node:events";
+import { waitForProcessExit } from "./wait-for-process-exit.mjs";
+import { managerSmokeFailure } from "./windows-manager-smoke-failure.mjs";
+
+test("process exit waits release listeners and recognize signal termination", async () => {
+  const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
+  const stopped = waitForProcessExit(child, 1000);
+  child.emit("exit", 0);
+  assert.equal(await stopped, true);
+  assert.equal(child.listenerCount("exit"), 0);
+  assert.equal(await waitForProcessExit(child, 1), false);
+  assert.equal(child.listenerCount("exit"), 0);
+  child.signalCode = "SIGTERM";
+  assert.equal(await waitForProcessExit(child, 1000), true);
+  assert.equal(child.listenerCount("exit"), 0);
+});
+
+test("manager smoke preserves sanitized task shape when cleanup is unconfirmed", () => {
+  const primary = new Error('observer background enable failed (BACKGROUND_REGISTRATION_MISMATCH); task_xml_shape={"code":"TASK_XML_DIAGNOSTIC_AVAILABLE","expected_vs_com":{"kind":"TEXT_VALUE","path":"/Task[1]/Principals[1]/Principal[1]/UserId[1]","field":""}}');
+  const failure = managerSmokeFailure(primary, false);
+  assert(failure instanceof Error);
+  assert.match(failure.message, /BACKGROUND_REGISTRATION_MISMATCH/);
+  assert.match(failure.message, /TASK_XML_DIAGNOSTIC_AVAILABLE/);
+  assert.match(failure.message, /cleanup=BACKGROUND_CLEANUP_UNCONFIRMED$/);
+});
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const version = "0.1.0-preview.7";
@@ -151,4 +176,14 @@ test("workflows keep publication manual, permission-scoped and fully pinned", as
   }
   assert.match(release, /needs: \[authorize, build, vulnerability-scan, native-verify\]/u);
   assert.match(release, /needs: \[authorize, build, attest\]/u);
+  assert.match(release, /--notes-file docs\/releases\/native-preview\.md/u);
+  for (const workflow of [delivery, release]) {
+    assert.match(workflow, /Install schema validators for packaged runtime smoke\n\s+run: npm ci --ignore-scripts --no-audit --no-fund/u);
+    assert.match(workflow, /OBSERVER_TEST_USER_MANAGER: '1'/u);
+  }
+  const smoke = await readFile(path.join(repositoryRoot, "scripts/smoke-native-delivery.mjs"), "utf8");
+  assert.match(smoke, /smoke-background-runtime\.mjs/u);
+  assert.match(smoke, /smoke-windows-manager\.mjs/u);
+  assert.match(smoke, /OBSERVER_SMOKE_INSTALL_ROOT: installRoot/u);
+  assert.match(smoke, /if \(preserveForManagerFailure\)/u);
 });

@@ -177,6 +177,60 @@ describe("ObserverDashboard", () => {
     expect(screen.getByText(/legacy snapshot container capability.*does not describe the dedicated container inventory/i)).toBeTruthy();
     expect(screen.getByText(/Workloads › Containers/)).toBeTruthy();
   });
+
+  it("shows bounded diagnostics health and keeps missing support explicit", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<ObserverDashboard dataSource={new SyntheticObserverDataSource()} mode="demo" />);
+    await screen.findByRole("heading", { name: "studio-node" });
+    await user.click(screen.getByRole("button", { name: "Observer & privacy" }));
+    expect(screen.getByRole("heading", { name: "Self-diagnostics" })).toBeTruthy();
+    expect(screen.getByText("32 KB")).toBeTruthy();
+    expect(screen.getByText(/Diagnostic records, paths, request data.*never returned/i)).toBeTruthy();
+    expect(screen.getByText(/remote upload not eligible/i)).toBeTruthy();
+
+    rerender(<ObserverDashboard dataSource={{
+      getCapabilities: async () => structuredClone(syntheticCapabilities),
+      getCurrentSnapshot: async () => structuredClone(syntheticSnapshot)
+    }} initialView="health" />);
+    expect(await screen.findByRole("heading", { name: "Self-diagnostics unavailable" })).toBeTruthy();
+    expect(screen.getByText(/No zero values are inferred/i)).toBeTruthy();
+  });
+
+  it("isolates diagnostics failure and renders disabled status truthfully", async () => {
+    const base = new SyntheticObserverDataSource();
+    const failure: ObserverDataSource = { ...base, getCapabilities: base.getCapabilities.bind(base), getCurrentSnapshot: base.getCurrentSnapshot.bind(base), getDiagnosticsHealth: async () => { throw new Error("Diagnostics health request failed"); } };
+    const { rerender } = render(<ObserverDashboard dataSource={failure} initialView="health" />);
+    expect((await screen.findByRole("alert")).textContent).toMatch(/Self-diagnostics health unavailable.*continues independently/i);
+
+    const disabled: ObserverDataSource = {
+      getCapabilities: base.getCapabilities.bind(base),
+      getCurrentSnapshot: base.getCurrentSnapshot.bind(base),
+      getDiagnosticsHealth: async () => ({
+        schemaVersion: "observer-diagnostics-health/v1", generatedAt: "2026-09-09T19:00:00Z", enabled: false, available: false, state: "DISABLED", reasonCode: "DIAGNOSTICS_DISABLED",
+        limits: { maxFiles: 5, maxFileBytes: 2_097_152, maxTotalBytes: 10_485_760, maxRecordBytes: 8_192, maxAgeSeconds: 604_800 }, usage: { totalBytes: 0, fileCount: 0 }, counters: { droppedRecords: 0, writeFailures: 0 },
+        policy: { dataClassification: "PUBLIC_METADATA", containsLogContents: false, containsPaths: false, remoteUploadEligible: false }
+      })
+    };
+    rerender(<ObserverDashboard dataSource={disabled} initialView="health" />);
+    expect((await screen.findAllByText("Disabled")).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Retained diagnostics are not enabled/i)).toBeTruthy();
+  });
+
+  it("does not render unavailable diagnostics storage as a healthy zero", async () => {
+    const base = new SyntheticObserverDataSource();
+    render(<ObserverDashboard dataSource={{
+      getCapabilities: base.getCapabilities.bind(base),
+      getCurrentSnapshot: base.getCurrentSnapshot.bind(base),
+      getDiagnosticsHealth: async () => ({
+        schemaVersion: "observer-diagnostics-health/v1", generatedAt: "2026-09-09T19:00:00Z", enabled: true, available: false, state: "UNAVAILABLE", reasonCode: "DIAGNOSTICS_UNAVAILABLE",
+        limits: { maxFiles: 5, maxFileBytes: 2_097_152, maxTotalBytes: 10_485_760, maxRecordBytes: 8_192, maxAgeSeconds: 604_800 }, usage: { totalBytes: 0, fileCount: 0 }, counters: { droppedRecords: 0, writeFailures: 1 },
+        policy: { dataClassification: "PUBLIC_METADATA", containsLogContents: false, containsPaths: false, remoteUploadEligible: false }
+      })
+    }} initialView="health" />);
+    expect((await screen.findAllByText("Unavailable")).length).toBeGreaterThan(0);
+    expect(screen.getByText(/zero is not inferred/i)).toBeTruthy();
+    expect(screen.queryByText("0 B")).toBeNull();
+  });
 });
 
 const containerInventory: ContainerInventory = {

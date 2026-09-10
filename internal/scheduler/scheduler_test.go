@@ -34,6 +34,7 @@ type fakeStore struct {
 	health             history.Health
 	nextErr            error
 	maintainErr        error
+	closeErr           error
 	requireLiveContext bool
 }
 
@@ -62,7 +63,12 @@ func (s *fakeStore) Maintain(context.Context, time.Time) error {
 	return s.maintainErr
 }
 func (s *fakeStore) Health() history.Health { return s.health }
-func (s *fakeStore) Close() error           { s.mu.Lock(); defer s.mu.Unlock(); s.closed = true; return nil }
+func (s *fakeStore) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closed = true
+	return s.closeErr
+}
 
 func completeSnapshot(at time.Time) observation.Snapshot {
 	cpu := observation.CPU{LogicalCPUs: 4, UsagePercent: 10}
@@ -99,6 +105,33 @@ func TestImmediateCollectionMonotonicSequenceAndGracefulStop(t *testing.T) {
 	store.mu.Unlock()
 	if !closed || maintains != 2 || !ticker.stopped.Load() {
 		t.Fatalf("closed=%v maintains=%d tickerStopped=%v", closed, maintains, ticker.stopped.Load())
+	}
+}
+
+func TestStopReturnsDurableStoreCloseFailure(t *testing.T) {
+	ticker := &fakeTicker{channel: make(chan time.Time)}
+	closeErr := errors.New("history close failed")
+	store := &fakeStore{closeErr: closeErr}
+	at := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
+	scheduler, err := New(
+		func(context.Context) observation.Snapshot { return completeSnapshot(at) },
+		store,
+		Config{Interval: time.Hour, NewTicker: func(time.Duration) Ticker { return ticker }},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := scheduler.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { _, ok := scheduler.Current(); return ok })
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := scheduler.Stop(ctx); !errors.Is(err, closeErr) {
+		t.Fatalf("Stop error = %v, want %v", err, closeErr)
+	}
+	if err := scheduler.Stop(ctx); !errors.Is(err, closeErr) {
+		t.Fatalf("repeated Stop error = %v, want %v", err, closeErr)
 	}
 }
 

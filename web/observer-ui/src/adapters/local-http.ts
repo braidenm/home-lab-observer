@@ -4,6 +4,7 @@ import type {
   ContainerInventory,
   ContainerInventoryItem,
   CurrentSnapshot,
+  DiagnosticsHealth,
   Freshness,
   ListSection,
   LogBody,
@@ -27,6 +28,7 @@ const CAPABILITIES_MAX_BYTES = 131_072;
 const SNAPSHOT_MAX_BYTES = 1_048_576;
 const SERIES_MAX_BYTES = 1_048_576;
 const CONTAINER_INVENTORY_MAX_BYTES = 1_048_576;
+const DIAGNOSTICS_HEALTH_MAX_BYTES = 32_768;
 const SECTION_NAMES: SectionName[] = ["overview", "filesystems", "processes", "services", "containers", "logs", "observer"];
 const METRIC_IDS: MetricId[] = [
   "cpu.utilization.percent",
@@ -100,6 +102,10 @@ export class LocalHttpObserverDataSource implements ObserverDataSource {
     return this.request("/api/v1/containers?limit=500", CONTAINER_INVENTORY_MAX_BYTES, mapContainerInventory, signal);
   }
 
+  getDiagnosticsHealth(signal?: AbortSignal): Promise<DiagnosticsHealth> {
+    return this.request("/api/v1/diagnostics/health", DIAGNOSTICS_HEALTH_MAX_BYTES, mapDiagnosticsHealth, signal);
+  }
+
   private async request<T>(path: string, maximumBytes: number, map: (value: unknown) => T, signal?: AbortSignal): Promise<T> {
     const headers = new Headers({ Accept: "application/json" });
     if (this.bearerToken) headers.set("Authorization", `Bearer ${this.bearerToken}`);
@@ -128,6 +134,50 @@ export class LocalHttpObserverDataSource implements ObserverDataSource {
       throw new ObserverTransportError("Observer API returned an invalid contract payload", response.status);
     }
   }
+}
+
+export function mapDiagnosticsHealth(value: unknown): DiagnosticsHealth {
+  const root = object(value);
+  const limits = object(root.limits);
+  const usage = object(root.usage);
+  const counters = object(root.counters);
+  const policy = object(root.policy);
+  const state = diagnosticsState(root.state);
+  const enabled = boolean(root.enabled);
+  const available = boolean(root.available);
+  const reasonCode = diagnosticsReason(root.reason_code);
+  if (state === "AVAILABLE" && (!enabled || !available || reasonCode !== null)) throw new Error("inconsistent available diagnostics health");
+  if (state === "DISABLED" && (enabled || available || reasonCode !== "DIAGNOSTICS_DISABLED")) throw new Error("inconsistent disabled diagnostics health");
+  if (state === "UNAVAILABLE" && (!enabled || available || (reasonCode !== "DIAGNOSTICS_UNAVAILABLE" && reasonCode !== "UNSAFE_DIAGNOSTICS_PATH"))) throw new Error("inconsistent unavailable diagnostics health");
+  const totalBytes = integer(usage.total_bytes, 0, 10_485_760);
+  const fileCount = integer(usage.file_count, 0, 5);
+  if (state === "DISABLED" && (totalBytes !== 0 || fileCount !== 0)) throw new Error("disabled diagnostics health has storage usage");
+  return {
+    schemaVersion: literal(root.schema_version, "observer-diagnostics-health/v1"),
+    generatedAt: rfc3339DateTime(root.generated_at),
+    enabled,
+    available,
+    state,
+    reasonCode,
+    limits: {
+      maxFiles: literal(limits.max_files, 5),
+      maxFileBytes: literal(limits.max_file_bytes, 2_097_152),
+      maxTotalBytes: literal(limits.max_total_bytes, 10_485_760),
+      maxRecordBytes: literal(limits.max_record_bytes, 8_192),
+      maxAgeSeconds: literal(limits.max_age_seconds, 604_800)
+    },
+    usage: { totalBytes, fileCount },
+    counters: {
+      droppedRecords: nonNegativeInteger(counters.dropped_records),
+      writeFailures: nonNegativeInteger(counters.write_failures)
+    },
+    policy: {
+      dataClassification: literal(policy.data_classification, "PUBLIC_METADATA"),
+      containsLogContents: literal(policy.contains_log_contents, false),
+      containsPaths: literal(policy.contains_paths, false),
+      remoteUploadEligible: literal(policy.remote_upload_eligible, false)
+    }
+  };
 }
 
 async function readBoundedResponse(response: Response, maximumBytes: number): Promise<Uint8Array> {
@@ -559,4 +609,6 @@ function severity(value: unknown): Severity { if (value !== "TRACE" && value !==
 function classification(value: unknown): ObserverCapabilities["collectors"][number]["dataClassification"] { if (value !== "PUBLIC_METADATA" && value !== "LOCAL_SENSITIVE") throw new Error("invalid data classification"); return value; }
 function observerMode(value: unknown): ObserverCapabilities["observer"]["mode"] { if (value !== "HEADLESS" && value !== "LOCAL_DASHBOARD") throw new Error("invalid observer mode"); return value; }
 function operatingSystem(value: unknown): ObserverCapabilities["platform"]["os"] { if (value !== "linux" && value !== "windows" && value !== "darwin" && value !== "other") throw new Error("invalid operating system"); return value; }
+function diagnosticsState(value: unknown): DiagnosticsHealth["state"] { if (value !== "AVAILABLE" && value !== "UNAVAILABLE" && value !== "DISABLED") throw new Error("invalid diagnostics state"); return value; }
+function diagnosticsReason(value: unknown): DiagnosticsHealth["reasonCode"] { if (value === null || value === "DIAGNOSTICS_DISABLED" || value === "DIAGNOSTICS_UNAVAILABLE" || value === "UNSAFE_DIAGNOSTICS_PATH") return value; throw new Error("invalid diagnostics reason code"); }
 function excludedField(value: unknown): CurrentSnapshot["privacy"]["excludedFields"][number] { const result = text(value); if (!(EXCLUDED_FIELDS as string[]).includes(result)) throw new Error("invalid excluded field"); return result as CurrentSnapshot["privacy"]["excludedFields"][number]; }

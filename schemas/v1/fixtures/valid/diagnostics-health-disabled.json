@@ -1,0 +1,23 @@
+{
+  "schema_version": "observer-diagnostics-health/v1",
+  "generated_at": "2026-09-09T19:00:00Z",
+  "enabled": false,
+  "available": false,
+  "state": "DISABLED",
+  "reason_code": "DIAGNOSTICS_DISABLED",
+  "limits": {
+    "max_files": 5,
+    "max_file_bytes": 2097152,
+    "max_total_bytes": 10485760,
+    "max_record_bytes": 8192,
+    "max_age_seconds": 604800
+  },
+  "usage": { "total_bytes": 0, "file_count": 0 },
+  "counters": { "dropped_records": 0, "write_failures": 0 },
+  "policy": {
+    "data_classification": "PUBLIC_METADATA",
+    "contains_log_contents": false,
+    "contains_paths": false,
+    "remote_upload_eligible": false
+  }
+}

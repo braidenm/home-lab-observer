@@ -62,6 +62,7 @@ type Scheduler struct {
 	lifecycleMu    sync.Mutex
 	cancel         context.CancelFunc
 	done           chan struct{}
+	closeErr       error
 	mu             sync.RWMutex
 	current        projection.CurrentSnapshot
 	hasCurrent     bool
@@ -111,7 +112,11 @@ func (s *Scheduler) Start(parent context.Context) error {
 
 func (s *Scheduler) loop(ctx context.Context) {
 	defer close(s.done)
-	defer s.store.Close()
+	defer func() {
+		s.lifecycleMu.Lock()
+		s.closeErr = s.store.Close()
+		s.lifecycleMu.Unlock()
+	}()
 	ticker := s.config.NewTicker(s.config.Interval)
 	defer ticker.Stop()
 	s.collectOnce(ctx)
@@ -216,7 +221,10 @@ func (s *Scheduler) Stop(ctx context.Context) error {
 	cancel()
 	select {
 	case <-done:
-		return nil
+		s.lifecycleMu.Lock()
+		err := s.closeErr
+		s.lifecycleMu.Unlock()
+		return err
 	case <-ctx.Done():
 		return ctx.Err()
 	}

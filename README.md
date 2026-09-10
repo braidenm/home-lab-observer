@@ -1,18 +1,29 @@
 # Home Lab Observer
 
-Home Lab Observer is a cross-platform, headless-first observability service for a single machine. The current source preview collects host and process signals, optionally observes local Docker containers, keeps bounded numeric host history, and serves an authenticated local dashboard. Service observations, opt-in logs, downloadable installers, and secure upload to a management application such as Platform Demo are planned extensions.
+Home Lab Observer is a cross-platform, headless-first observability service for a single machine. The downloadable preview collects host and process signals, optionally observes local Docker containers, keeps bounded numeric host history, and serves an authenticated local dashboard. Service observations, opt-in native logs and secure upload to a management application such as Platform Demo are planned extensions.
 
 The project is intentionally public and self-contained. It does not contain, build from, or grant access to the private home-lab infrastructure repository.
 
 ## Project status
 
-The source preview includes the [Spec 005](specs/005-local-data-plane/spec.md) loopback service, bounded history,
+The preview includes the [Spec 005](specs/005-local-data-plane/spec.md) loopback service, bounded history,
 real trends, and embedded local dashboard, plus [Spec 006](specs/006-container-observations/spec.md)
 opt-in container inventory and resource readings. See [build and run instructions](docs/local-service.md)
 and [connect a local Docker engine](docs/container-observations.md).
 The project remains pre-release. [Native delivery instructions](docs/install.md) describe the verified preview archives
 and per-user helpers; [GitHub Releases](https://github.com/braidenm/home-lab-observer/releases) lists published versions.
-Windows/macOS previews are explicitly not publisher-signed/notarized. Background services and remote sync remain separate milestones.
+Windows/macOS previews are explicitly not publisher-signed/notarized. Spec 008 adds optional user-session background
+operation; choose a release whose notes include that support. Remote sync remains a separate milestone.
+
+## Try it without development tools
+
+1. [Choose a verified native preview](https://github.com/braidenm/home-lab-observer/releases)
+   for your Windows, Mac or Linux machine. No GitHub account/token, Docker, Go or Node is needed.
+2. Follow the [short OS-specific install guide](docs/install.md) to verify the archive and open its launch helper.
+3. Open `http://127.0.0.1:9847`, then unlock it with the local token file shown in the console.
+
+The observer stays on your machine. Opening the dashboard is optional; it collects while running headless too.
+Docker readings require an explicit local socket/pipe option. Installation does not start a service or upload anything.
 
 ## Target product shape
 
@@ -35,6 +46,15 @@ Future: an explicitly enrolled outbound uploader -> Platform Demo or another com
 
 Platform Demo is a separate consumer of the observer contract. It does not iframe the local dashboard or require this repository to know about Platform Demo's UI.
 
+### Will this support restarting containers or services later?
+
+Yes, the platform-adapter and owner-bound capability boundaries are intended to support that extension. The current
+observer cannot accept remote restart requests. A future management worker will need separate, explicitly approved
+permissions for named resources and fixed actions, plus authorization and an audit record for each request. Reading
+telemetry must not automatically grant control. Docker, operating-system services and Kubernetes workloads require
+their own adapters and permission models; none will be exposed through a generic shell-command endpoint.
+See the [threat model](docs/security/threat-model.md) for the separation between observation and future control.
+
 ## Native snapshot preview
 
 With Go 1.27 installed, `go run ./cmd/observer --help` prints the command help and
@@ -56,6 +76,7 @@ exits 1 but cannot guarantee a complete JSON document.
 - [Data policy](docs/privacy/data-policy.md)
 - [Reusable observer dashboard](web/observer-ui/README.md)
 - [Run and manage the local preview](docs/local-service.md)
+- [Optional background operation, token location and troubleshooting](docs/background-operation.md)
 - [Enable and understand Docker observations](docs/container-observations.md)
 - [Download, verify, install and manage native previews](docs/install.md)
 - [How native releases are built and verified](docs/releasing.md)
@@ -64,9 +85,9 @@ exits 1 but cannot guarantee a complete JSON document.
 
 | Target | Native binary | Background service | Local UI | Docker observations |
 | --- | --- | --- | --- | --- |
-| Linux amd64/arm64 | Source preview | Planned: systemd | Source preview | Opt-in local Unix socket |
-| macOS Intel/Apple silicon | Source preview | Planned: launchd | Source preview | Opt-in local Unix socket; Desktop live validation pending |
-| Windows amd64/arm64 | Source preview | Planned: Windows Service | Source preview | Opt-in local named pipe; Desktop live validation pending |
+| Linux amd64/arm64 | Downloadable preview | Spec 008: systemd user service | Embedded preview | Opt-in local Unix socket |
+| macOS Intel/Apple silicon | Downloadable preview | Spec 008: user LaunchAgent | Embedded preview | Opt-in local Unix socket; Desktop live validation pending |
+| Windows amd64/arm64 | Downloadable preview | Spec 008: signed-in user task; machine-wide service later | Embedded preview | Opt-in local named pipe; Desktop live validation pending |
 | Linux container amd64/arm64 | Planned | Container restart policy | Planned | Planned through a constrained proxy |
 
 ## License

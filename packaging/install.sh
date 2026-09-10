@@ -143,6 +143,38 @@ validate_version_directory() {
   [ -z "$(find "$directory" -mindepth 1 -maxdepth 1 ! -name observer ! -name LICENSE ! -name START-HERE.md ! -name run-observer.sh -print -quit)" ]
 }
 
+validate_background_area() {
+  background="$install_root/background"
+  [ -d "$background" ] && [ ! -L "$background" ] || die "managed background area is unsafe"
+  active_background=false
+  if [ -e "$background/.managed" ] || [ -L "$background/.managed" ]; then
+    [ -f "$background/.managed" ] && [ ! -L "$background/.managed" ] || die "background marker is unsafe"
+    [ "$(cat "$background/.managed")" = "home-lab-observer-background-v1" ] || die "background marker is invalid"
+    active_background=true
+  fi
+  registration_count=0
+  for path in "$background"/* "$background"/.[!.]* "$background"/..?*; do
+    [ -e "$path" ] || [ -L "$path" ] || continue
+    name=$(basename "$path")
+    case "$name" in
+      .managed|settings.json|.operation-lock)
+        [ -f "$path" ] && [ ! -L "$path" ] || die "background area contains an unsafe $name entry"
+        ;;
+      home-lab-observer.service|com.braidenm.home-lab-observer.plist|task.xml)
+        [ -f "$path" ] && [ ! -L "$path" ] || die "background area contains an unsafe registration"
+        registration_count=$((registration_count + 1))
+        ;;
+      *) die "background area contains an unknown entry: $name" ;;
+    esac
+  done
+  if [ "$active_background" = true ]; then
+    [ -f "$background/settings.json" ] && [ ! -L "$background/settings.json" ] || die "managed background settings are missing"
+    [ "$registration_count" -eq 1 ] || die "managed background registration is missing or ambiguous"
+  else
+    [ "$registration_count" -eq 0 ] && [ ! -e "$background/settings.json" ] || die "partial background registration requires background disable/recovery"
+  fi
+}
+
 validate_managed_tree() {
   require_managed_root
   for path in "$install_root"/* "$install_root"/.[!.]* "$install_root"/..?*; do
@@ -152,12 +184,15 @@ validate_managed_tree() {
       .home-lab-observer-managed|current|previous)
         [ -f "$path" ] && [ ! -L "$path" ] || die "managed root contains an unsafe $name entry"
         ;;
-      bin|versions|.install-lock)
+      bin|versions|background|.install-lock)
         [ -d "$path" ] && [ ! -L "$path" ] || die "managed root contains an unsafe $name entry"
         ;;
       *) die "managed root contains an unknown entry: $name" ;;
     esac
   done
+  if [ -d "$install_root/background" ]; then
+    validate_background_area
+  fi
   if [ -d "$install_root/bin" ]; then
     [ -z "$(find "$install_root/bin" -mindepth 1 -maxdepth 1 ! -name observer -print -quit)" ] || die "managed launcher directory contains unknown files"
     if [ -e "$install_root/bin/observer" ] || [ -L "$install_root/bin/observer" ]; then
@@ -373,6 +408,9 @@ if [ "$action" = install ]; then
     validate_managed_tree
   fi
   acquire_lock
+  # Background lifecycle operations acquire the same guard. Revalidate only
+  # after owning it so enable/disable cannot race program-file mutation.
+  validate_managed_tree
   mkdir -p "$install_root/versions"
   chmod 700 "$install_root" "$install_root/versions"
   target_dir="$install_root/versions/$version"
@@ -413,6 +451,8 @@ elif [ "$action" = rollback ]; then
   validate_managed_tree
   validate_version_directory "$install_root/versions/$version" "$version" || die "rollback version is not installed: $version"
   acquire_lock
+  validate_managed_tree
+  validate_version_directory "$install_root/versions/$version" "$version" || die "rollback version is not installed: $version"
   old_version=$(cat "$install_root/current")
   [ "$old_version" != "$version" ] || die "version is already selected: $version"
   write_atomic "$install_root/previous" "$old_version"
@@ -423,7 +463,14 @@ else
   [ -d "$install_root_arg" ] && [ ! -L "$install_root_arg" ] || die "install root does not exist or is unsafe"
   resolve_install_root "$install_root_arg"
   validate_managed_tree
+  if [ -f "$install_root/background/.managed" ]; then
+    die "background operation is enabled; run 'observer background disable' before uninstalling"
+  fi
   acquire_lock
+  validate_managed_tree
+  if [ -f "$install_root/background/.managed" ]; then
+    die "background operation is enabled; run 'observer background disable' before uninstalling"
+  fi
   if [ -d "$install_root/bin" ]; then
     rm -f "$install_root/bin/observer"
     rmdir "$install_root/bin"
@@ -436,6 +483,10 @@ else
     rmdir "$install_root/versions"
   fi
   rm -f "$install_root/current" "$install_root/previous" "$install_root/.home-lab-observer-managed"
+  if [ -d "$install_root/background" ]; then
+    rm -f "$install_root/background/.operation-lock"
+    rmdir "$install_root/background"
+  fi
   rmdir "$lock_dir"
   lock_dir=
   rmdir "$install_root"

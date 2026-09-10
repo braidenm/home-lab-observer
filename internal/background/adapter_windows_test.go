@@ -1,0 +1,454 @@
+//go:build windows
+
+package background
+
+import (
+	"context"
+	"encoding/base64"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"golang.org/x/sys/windows"
+)
+
+func TestWindowsTaskTemplateIsAcceptedInMemoryWithoutRegistration(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "Home Lab Observer")
+	adapter, err := newPlatformAdapter(nil, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition, err := adapter.registration(Settings{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(definition.content), `-WindowStyle Hidden`) {
+		t.Fatal("generated task does not hide its PowerShell host window")
+	}
+	if !validTaskXML(string(definition.content), definition.content) {
+		t.Fatal("generated task is not its own exact canonical definition")
+	}
+	path := filepath.Join(t.TempDir(), "task.xml")
+	roundTrip := filepath.Join(t.TempDir(), "roundtrip.xml")
+	expectedArgumentsPath := filepath.Join(t.TempDir(), "expected-arguments.txt")
+	expectedArguments := windowsPowerShellArguments(filepath.Join(root, "bin", launcherName()), root)
+	withoutRunLevel := []byte(strings.Replace(string(definition.content), `<RunLevel>LeastPrivilege</RunLevel>`, "", 1))
+	if err := os.WriteFile(path, withoutRunLevel, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(expectedArgumentsPath, []byte(expectedArguments), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	powershell, err := trustedManagerExecutable("powershell.exe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := `$xml=[IO.File]::ReadAllText($args[0]); $expectedArguments=[IO.File]::ReadAllText($args[2]); $service=New-Object -ComObject 'Schedule.Service'; $service.Connect(); $task=$service.NewTask(0); $task.XmlText=$xml; $task.RegistrationInfo.URI='\Home Lab Observer'; $actualArguments=[string]$task.Actions.Item(1).Arguments; if ($task.Principal.LogonType -ne 3 -or $task.Principal.RunLevel -ne 0 -or $task.Settings.ExecutionTimeLimit -ne 'PT0S') { exit 9 }; if ($actualArguments -cne $expectedArguments) { exit 10 }; if ($actualArguments -match '&(?:amp|apos|quot|lt|gt);') { exit 11 }; if ($task.Settings.UseUnifiedSchedulingEngine -ne $true) { exit 12 }; [IO.File]::WriteAllText($args[1],$task.XmlText,(New-Object Text.UTF8Encoding($false)))`
+	scriptPath := filepath.Join(t.TempDir(), "verify-task.ps1")
+	if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(powershell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath, path, roundTrip, expectedArgumentsPath)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("Task Scheduler rejected generated XML: %v: %s", err, output)
+	}
+	normalized, err := os.ReadFile(roundTrip)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !validTaskXML(string(normalized), definition.content) {
+		want, _ := canonicalTaskXML(definition.content)
+		got, _ := canonicalTaskXML(normalized)
+		for index := 0; index < len(want) && index < len(got); index++ {
+			if want[index] != got[index] {
+				t.Fatalf("canonical matcher rejected Task Scheduler XML at %d: want %q got %q; want tail %q got tail %q", index, want[index], got[index], want[index:], got[index:])
+			}
+		}
+		t.Fatalf("canonical matcher rejected Task Scheduler XML token lengths: want %d got %d", len(want), len(got))
+	}
+	registered := string(normalized)
+	if !strings.Contains(registered, `<URI>\Home Lab Observer</URI>`) {
+		t.Fatal("Task Scheduler in-memory round trip did not expose registration URI metadata")
+	}
+	if !validTaskXML(registered, definition.content) {
+		t.Fatal("registered task URI metadata was not normalized")
+	}
+	for _, changed := range []string{
+		strings.Replace(registered, `\Home Lab Observer</URI>`, `\Another Task</URI>`, 1),
+		strings.Replace(registered, "</RegistrationInfo>", `<URI>\Home Lab Observer</URI></RegistrationInfo>`, 1),
+		strings.Replace(registered, "</RegistrationInfo>", `<Author>unexpected</Author></RegistrationInfo>`, 1),
+		strings.Replace(registered, `<URI>\Home Lab Observer</URI>`, `<URI source="unexpected">\Home Lab Observer</URI>`, 1),
+		strings.Replace(registered, `<URI>\Home Lab Observer</URI>`, `<URI><Value>\Home Lab Observer</Value></URI>`, 1),
+	} {
+		if validTaskXML(changed, definition.content) {
+			t.Fatal("unknown or mismatched registration metadata was accepted as owned")
+		}
+	}
+	malicious := strings.Replace(string(definition.content), "</Actions>", "<Exec><Command>cmd.exe</Command></Exec></Actions>", 1)
+	if validTaskXML(malicious, definition.content) {
+		t.Fatal("extra action was accepted as owned")
+	}
+}
+
+func TestWindowsSavedTaskMayOmitOnlyExactKnownDefaults(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "Home Lab Observer")
+	adapter, err := newPlatformAdapter(nil, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition, err := adapter.registration(Settings{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := string(definition.content)
+	if !strings.Contains(original, `<UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>`) {
+		t.Fatal("generated task does not require the unified scheduling engine")
+	}
+	legacyEngine := strings.Replace(original, `<UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>`, `<UseUnifiedSchedulingEngine>false</UseUnifiedSchedulingEngine>`, 1)
+	if validTaskXML(legacyEngine, definition.content) {
+		t.Fatal("saved task with the legacy scheduling engine was accepted as owned")
+	}
+	cases := []struct {
+		name       string
+		element    string
+		occurrence int
+		nonDefault string
+	}{
+		{name: "trigger enabled", element: `<Enabled>true</Enabled>`, occurrence: 1, nonDefault: `<Enabled>false</Enabled>`},
+		{name: "least privilege", element: `<RunLevel>LeastPrivilege</RunLevel>`, occurrence: 1, nonDefault: `<RunLevel>HighestAvailable</RunLevel>`},
+		{name: "hard terminate", element: `<AllowHardTerminate>true</AllowHardTerminate>`, occurrence: 1, nonDefault: `<AllowHardTerminate>false</AllowHardTerminate>`},
+		{name: "network not required", element: `<RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>`, occurrence: 1, nonDefault: `<RunOnlyIfNetworkAvailable>true</RunOnlyIfNetworkAvailable>`},
+		{name: "demand start", element: `<AllowStartOnDemand>true</AllowStartOnDemand>`, occurrence: 1, nonDefault: `<AllowStartOnDemand>false</AllowStartOnDemand>`},
+		{name: "task enabled", element: `<Enabled>true</Enabled>`, occurrence: 2, nonDefault: `<Enabled>false</Enabled>`},
+		{name: "visible", element: `<Hidden>false</Hidden>`, occurrence: 1, nonDefault: `<Hidden>true</Hidden>`},
+		{name: "not idle only", element: `<RunOnlyIfIdle>false</RunOnlyIfIdle>`, occurrence: 1, nonDefault: `<RunOnlyIfIdle>true</RunOnlyIfIdle>`},
+		{name: "remote app allowed", element: `<DisallowStartOnRemoteAppSession>false</DisallowStartOnRemoteAppSession>`, occurrence: 1, nonDefault: `<DisallowStartOnRemoteAppSession>true</DisallowStartOnRemoteAppSession>`},
+		{name: "no wake", element: `<WakeToRun>false</WakeToRun>`, occurrence: 1, nonDefault: `<WakeToRun>true</WakeToRun>`},
+		{name: "priority", element: `<Priority>7</Priority>`, occurrence: 1, nonDefault: `<Priority>6</Priority>`},
+	}
+
+	withoutDefaults := original
+	for index := len(cases) - 1; index >= 0; index-- {
+		test := cases[index]
+		withoutDefaults = replaceOccurrence(t, withoutDefaults, test.element, test.occurrence, "")
+	}
+	if !validTaskXML(withoutDefaults, definition.content) {
+		t.Fatal("saved task with only known default-valued fields omitted was rejected")
+	}
+	registeredWithoutDefaults := strings.Replace(withoutDefaults, "</RegistrationInfo>", `<URI>\Home Lab Observer</URI></RegistrationInfo>`, 1)
+	if !validTaskXML(registeredWithoutDefaults, definition.content) {
+		t.Fatal("saved task with registration URI and only known defaults omitted was rejected")
+	}
+
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			nonDefault := replaceOccurrence(t, original, test.element, test.occurrence, test.nonDefault)
+			if validTaskXML(nonDefault, definition.content) {
+				t.Fatal("non-default value was accepted as owned")
+			}
+			duplicate := replaceOccurrence(t, original, test.element, test.occurrence, test.element+test.element)
+			if validTaskXML(duplicate, definition.content) {
+				t.Fatal("duplicate default-valued field was accepted as owned")
+			}
+		})
+	}
+
+	for _, changed := range []string{
+		strings.Replace(original, `<Priority>7</Priority>`, `<Priority source="unexpected">7</Priority>`, 1),
+		strings.Replace(original, `<Priority>7</Priority>`, `<Priority><Value>7</Value></Priority>`, 1),
+	} {
+		if validTaskXML(changed, definition.content) {
+			t.Fatal("attribute or nested content on a default-valued field was accepted")
+		}
+	}
+}
+
+func TestWindowsTaskAcceptsOnlyKnownCurrentOwnerTriggerAliases(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "Home Lab Observer")
+	adapter, err := newPlatformAdapter(nil, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition, err := adapter.registration(Settings{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner, err := currentWindowsOwnerSID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner.qualifiedSAM = `EXAMPLE-HOST\ObserverOwner`
+	owner.localSAM = "ObserverOwner"
+	original := string(definition.content)
+	sidElement := "<UserId>" + owner.sid + "</UserId>"
+
+	for name, alias := range map[string]string{
+		"qualified SAM":     `example-host\observerowner`,
+		"local SAM":         "OBSERVEROWNER",
+		"current owner SID": owner.sid,
+	} {
+		t.Run(name, func(t *testing.T) {
+			actual := replaceOccurrence(t, original, sidElement, 1, "<UserId>"+alias+"</UserId>")
+			if !validTaskXMLForOwner(actual, definition.content, owner) {
+				t.Fatal("known current-owner trigger identifier was rejected")
+			}
+		})
+	}
+
+	for name, changed := range map[string]string{
+		"different account": replaceOccurrence(t, original, sidElement, 1, `<UserId>EXAMPLE-HOST\AnotherOwner</UserId>`),
+		"different domain":  replaceOccurrence(t, original, sidElement, 1, `<UserId>OTHER\ObserverOwner</UserId>`),
+		"different SID":     replaceOccurrence(t, original, sidElement, 1, `<UserId>S-1-5-18</UserId>`),
+		"empty":             replaceOccurrence(t, original, sidElement, 1, `<UserId></UserId>`),
+		"surrounding space": replaceOccurrence(t, original, sidElement, 1, `<UserId> ObserverOwner </UserId>`),
+		"attribute":         replaceOccurrence(t, original, sidElement, 1, `<UserId source="unexpected">ObserverOwner</UserId>`),
+		"nested":            replaceOccurrence(t, original, sidElement, 1, `<UserId><Value>ObserverOwner</Value></UserId>`),
+		"repeated":          replaceOccurrence(t, original, sidElement, 1, `<UserId>ObserverOwner</UserId><UserId>ObserverOwner</UserId>`),
+		"principal alias":   replaceOccurrence(t, original, sidElement, 2, `<UserId>ObserverOwner</UserId>`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if validTaskXMLForOwner(changed, definition.content, owner) {
+				t.Fatal("unknown or structurally invalid owner identifier was accepted")
+			}
+		})
+	}
+
+	domainOwner := owner
+	domainOwner.localSAM = ""
+	bareAlias := replaceOccurrence(t, original, sidElement, 1, `<UserId>ObserverOwner</UserId>`)
+	if validTaskXMLForOwner(bareAlias, definition.content, domainOwner) {
+		t.Fatal("bare alias for a non-local owner domain was accepted")
+	}
+	emptyOwner := strings.Replace(original, sidElement, `<UserId></UserId>`, 1)
+	if validTaskXMLForOwner(emptyOwner, definition.content, windowsOwnerIdentity{}) {
+		t.Fatal("empty owner identity normalized an all-user trigger")
+	}
+}
+
+func TestWindowsOwnerAliasResolutionUsesOnlyCurrentProcessSID(t *testing.T) {
+	computer, err := windows.ComputerName()
+	if err != nil {
+		t.Fatal(err)
+	}
+	qualified := computer + `\ObserverOwner`
+	runner := &recordingRunner{result: commandResult{output: base64.StdEncoding.EncodeToString([]byte(qualified))}}
+	adapter := &windowsAdapter{runner: runner, root: `C:\Observer`}
+	owner, err := adapter.currentWindowsOwnerIdentity(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if owner.sid == "" || owner.qualifiedSAM != qualified || owner.localSAM != "ObserverOwner" {
+		t.Fatalf("resolved owner identity has unexpected bounded fields: sid=%t qualified=%t local=%t", owner.sid != "", owner.qualifiedSAM == qualified, owner.localSAM == "ObserverOwner")
+	}
+	if len(runner.commands) != 1 || runner.commands[0].name != "powershell.exe" || !runner.commands[0].capture {
+		t.Fatal("current-owner lookup did not use the fixed bounded manager command")
+	}
+	arguments := runner.commands[0].args
+	if len(arguments) == 0 || arguments[len(arguments)-1] != owner.sid {
+		t.Fatal("current-owner lookup did not receive only the trusted process SID")
+	}
+
+	domainRunner := &recordingRunner{result: commandResult{output: base64.StdEncoding.EncodeToString([]byte(`OTHER-DOMAIN\ObserverOwner`))}}
+	domainAdapter := &windowsAdapter{runner: domainRunner, root: `C:\Observer`}
+	domainOwner, err := domainAdapter.currentWindowsOwnerIdentity(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if domainOwner.qualifiedSAM == "" || domainOwner.localSAM != "" {
+		t.Fatal("non-local owner unexpectedly received a bare local alias")
+	}
+}
+
+func TestWindowsOwnerAliasResolutionRejectsMalformedOutput(t *testing.T) {
+	for name, output := range map[string]string{
+		"not base64":     "not-base64!",
+		"missing domain": base64.StdEncoding.EncodeToString([]byte("ObserverOwner")),
+		"empty account":  base64.StdEncoding.EncodeToString([]byte(`EXAMPLE-HOST\`)),
+		"control":        base64.StdEncoding.EncodeToString([]byte("EXAMPLE-HOST\\Owner\nInjected")),
+		"oversized":      base64.StdEncoding.EncodeToString([]byte(`EXAMPLE-HOST\` + strings.Repeat("A", maxOwnerNameBytes))),
+	} {
+		t.Run(name, func(t *testing.T) {
+			runner := &recordingRunner{result: commandResult{output: output}}
+			adapter := &windowsAdapter{runner: runner, root: `C:\Observer`}
+			if _, err := adapter.currentWindowsOwnerIdentity(context.Background()); err == nil {
+				t.Fatal("malformed current-owner resolver output was accepted")
+			}
+		})
+	}
+}
+
+func TestWindowsCurrentOwnerAliasResolvesWithoutTaskRegistration(t *testing.T) {
+	adapter := &windowsAdapter{runner: execRunner{timeout: 5 * time.Second}, root: `C:\Observer`}
+	owner, err := adapter.currentWindowsOwnerIdentity(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if owner.sid == "" || owner.qualifiedSAM == "" {
+		t.Fatal("current Windows owner SID or qualified SAM alias is empty")
+	}
+}
+
+func TestWindowsSavedTaskMayReorderExactSchemaAllGroups(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "Home Lab Observer")
+	adapter, err := newPlatformAdapter(nil, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition, err := adapter.registration(Settings{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := string(definition.content)
+	reorderedRegistration := strings.Replace(original,
+		"<RegistrationInfo><Description>",
+		"<RegistrationInfo><URI>\\Home Lab Observer</URI><Description>", 1)
+	for name, reordered := range map[string]string{
+		"Task":             swapXMLSections(t, original, "Triggers", "Principals"),
+		"RegistrationInfo": reorderedRegistration,
+		"Settings":         swapXMLSections(t, original, "MultipleInstancesPolicy", "StartWhenAvailable"),
+		"IdleSettings":     swapXMLSections(t, original, "StopOnIdleEnd", "RestartOnIdle"),
+		"RestartOnFailure": swapXMLSections(t, original, "Interval", "Count"),
+		"Principal":        swapXMLSectionsWithin(t, original, "Principals", "UserId", "LogonType"),
+		"Exec":             swapXMLSections(t, original, "Command", "Arguments"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if !validTaskXML(reordered, definition.content) {
+				t.Fatal("schema-valid unordered child reordering was rejected")
+			}
+		})
+	}
+
+	actions := xmlSection(t, original, "Actions")
+	orderedTriggerExpected := strings.Replace(original, "<Enabled>true</Enabled>", "<Enabled>true</Enabled><StartBoundary>2026-09-09T00:00:00Z</StartBoundary>", 1)
+	orderedTriggerChanged := strings.Replace(orderedTriggerExpected,
+		"<StartBoundary>2026-09-09T00:00:00Z</StartBoundary><UserId>",
+		"<UserId>", 1)
+	orderedTriggerChanged = strings.Replace(orderedTriggerChanged, "</UserId></LogonTrigger>", "</UserId><StartBoundary>2026-09-09T00:00:00Z</StartBoundary></LogonTrigger>", 1)
+	for name, changed := range map[string]string{
+		"duplicate known child":  strings.Replace(original, "</Task>", xmlSection(t, original, "Triggers")+"\n</Task>", 1),
+		"unknown child":          strings.Replace(original, "</Task>", "<Unknown/>\n</Task>", 1),
+		"missing actions":        strings.Replace(original, actions, "", 1),
+		"duplicate actions":      strings.Replace(original, "</Task>", actions+"\n</Task>", 1),
+		"duplicate nested child": strings.Replace(original, "</Settings>", "<StartWhenAvailable>true</StartWhenAvailable></Settings>", 1),
+		"unknown nested child":   strings.Replace(original, "</IdleSettings>", "<Unknown/></IdleSettings>", 1),
+		"missing restart count":  strings.Replace(original, "<Count>3</Count>", "", 1),
+		"missing command":        strings.Replace(original, xmlSection(t, original, "Command"), "", 1),
+		"sequence changed":       orderedTriggerChanged,
+		"changed namespace":      strings.Replace(original, taskXMLNamespace, "urn:unexpected-task", 1),
+		"direct task text":       strings.Replace(original, "<RegistrationInfo>", "unexpected<RegistrationInfo>", 1),
+		"multiple roots":         original + strings.Replace(original, `<?xml version="1.0"?>`, "", 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			expected := definition.content
+			if name == "sequence changed" {
+				expected = []byte(orderedTriggerExpected)
+			}
+			if validTaskXML(changed, expected) {
+				t.Fatal("non-owned task structure was accepted")
+			}
+		})
+	}
+}
+
+func TestWindowsTaskCanonicalizationBoundsStructure(t *testing.T) {
+	prefix := `<?xml version="1.0"?><Task xmlns="` + taskXMLNamespace + `"><Data>`
+	actions := `<Actions><Exec><Command>x</Command></Exec></Actions>`
+	atDepthLimit := prefix + strings.Repeat("<Nested>", maxTaskXMLDepth-2) + strings.Repeat("</Nested>", maxTaskXMLDepth-2) + `</Data>` + actions + `</Task>`
+	if _, err := canonicalTaskXML([]byte(atDepthLimit)); err != nil {
+		t.Fatalf("task XML at the depth limit was rejected: %v", err)
+	}
+	deep := prefix + strings.Repeat("<Nested>", maxTaskXMLDepth-1) + strings.Repeat("</Nested>", maxTaskXMLDepth-1) + `</Data>` + actions + `</Task>`
+	if _, err := canonicalTaskXML([]byte(deep)); err == nil {
+		t.Fatal("deep task XML was accepted")
+	}
+
+	widePrefix := `<?xml version="1.0"?><Task xmlns="` + taskXMLNamespace + `"><Triggers>`
+	atElementLimit := widePrefix + strings.Repeat("<Entry></Entry>", maxTaskXMLElements-5) + `</Triggers>` + actions + `</Task>`
+	if _, err := canonicalTaskXML([]byte(atElementLimit)); err != nil {
+		t.Fatalf("task XML at the element limit was rejected: %v", err)
+	}
+	wide := widePrefix + strings.Repeat("<Entry></Entry>", maxTaskXMLElements-4) + `</Triggers>` + actions + `</Task>`
+	if _, err := canonicalTaskXML([]byte(wide)); err == nil {
+		t.Fatal("task XML with too many elements was accepted")
+	}
+}
+
+func xmlSection(t *testing.T, value, name string) string {
+	t.Helper()
+	start := strings.Index(value, "<"+name+">")
+	if attributed := strings.Index(value, "<"+name+" "); start < 0 || (attributed >= 0 && attributed < start) {
+		start = attributed
+	}
+	if start < 0 {
+		t.Fatalf("opening %s element is missing", name)
+	}
+	endMarker := "</" + name + ">"
+	endOffset := strings.Index(value[start:], endMarker)
+	if endOffset < 0 {
+		t.Fatalf("closing %s element is missing", name)
+	}
+	return value[start : start+endOffset+len(endMarker)]
+}
+
+func swapXMLSectionsWithin(t *testing.T, value, parentName, firstName, secondName string) string {
+	t.Helper()
+	parent := xmlSection(t, value, parentName)
+	reordered := swapXMLSections(t, parent, firstName, secondName)
+	return strings.Replace(value, parent, reordered, 1)
+}
+
+func swapXMLSections(t *testing.T, value, firstName, secondName string) string {
+	t.Helper()
+	first := xmlSection(t, value, firstName)
+	second := xmlSection(t, value, secondName)
+	firstStart := strings.Index(value, first)
+	secondStart := strings.Index(value, second)
+	if firstStart < 0 || secondStart < 0 || firstStart >= secondStart {
+		t.Fatalf("fixture elements %s and %s are not in the expected order", firstName, secondName)
+	}
+	between := value[firstStart+len(first) : secondStart]
+	return value[:firstStart] + second + between + first + value[secondStart+len(second):]
+}
+
+func replaceOccurrence(t *testing.T, value, old string, occurrence int, replacement string) string {
+	t.Helper()
+	start := 0
+	for index := 1; index <= occurrence; index++ {
+		offset := strings.Index(value[start:], old)
+		if offset < 0 {
+			t.Fatalf("fixture occurrence %d of %q is missing", occurrence, old)
+		}
+		start += offset
+		if index == occurrence {
+			return value[:start] + replacement + value[start+len(old):]
+		}
+		start += len(old)
+	}
+	return value
+}
+
+func TestWindowsBackgroundRejectsCommandAndRemotePathSyntax(t *testing.T) {
+	for _, root := range []string{`C:\safe&calc`, `C:\safe'quote`, `\\server\share\observer`, `\\?\C:\observer`, `\\.\C:\observer`} {
+		if strings.HasPrefix(root, `C:`) {
+			if _, err := newPlatformAdapter(nil, root); err == nil {
+				t.Fatalf("unsafe task command root accepted: %q", root)
+			}
+		} else if _, err := secureAbsolutePath(root, false); err == nil {
+			t.Fatalf("remote/device root accepted: %q", root)
+		}
+	}
+}
+
+func TestWindowsNormalStopUsesOnlyGracefulLifecycle(t *testing.T) {
+	stopper := &fakeStopper{}
+	adapter := &windowsAdapter{root: `C:\Observer`}
+	if err := adapter.stop(context.Background(), false, stopper, Settings{StateDir: `C:\State`}); err != nil {
+		t.Fatal(err)
+	}
+	if stopper.calls != 1 {
+		t.Fatalf("graceful calls = %d", stopper.calls)
+	}
+}

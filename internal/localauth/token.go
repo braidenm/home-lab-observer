@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/braidenm/home-lab-observer/internal/ownerfs"
 )
 
 const tokenBytes = 32
@@ -94,6 +96,45 @@ func Ensure(path string) (token string, created bool, err error) {
 	return token, true, nil
 }
 
+// Load reads and validates an existing private local token without creating or
+// replacing it. Status probes use it instead of the create-if-missing path.
+func Load(path string) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("%w: empty path", ErrInvalidTokenFile)
+	}
+	resolved, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	if err := ownerfs.ValidateDedicatedDirectory(filepath.Dir(resolved)); err != nil {
+		return "", fmt.Errorf("%w: unsafe state directory", ErrInvalidTokenFile)
+	}
+	info, err := ownerfs.ValidateRegular(resolved, 256)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+		return "", fmt.Errorf("%w: unsafe token file", ErrInvalidTokenFile)
+	}
+	if !validPrivateTokenMode(resolved, info) {
+		return "", fmt.Errorf("%w: token permissions are not private", ErrInvalidTokenFile)
+	}
+	file, err := os.Open(resolved)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	opened, err := file.Stat()
+	if err != nil || !os.SameFile(info, opened) {
+		return "", ErrInvalidTokenFile
+	}
+	contents, err := io.ReadAll(io.LimitReader(file, 257))
+	if err != nil || len(contents) > 256 {
+		return "", ErrInvalidTokenFile
+	}
+	return parseToken(contents)
+}
+
 func MatchesAuthorization(header, expectedToken string) bool {
 	scheme, candidate, found := strings.Cut(header, " ")
 	if !found || !strings.EqualFold(scheme, "Bearer") || candidate == "" || strings.ContainsAny(candidate, " \t\r\n") {
@@ -126,6 +167,17 @@ func read(path string) (string, error) {
 	if len(contents) > 256 {
 		return "", ErrInvalidTokenFile
 	}
+	token, err := parseToken(contents)
+	if err != nil {
+		return "", err
+	}
+	if err := restrictFile(path); err != nil {
+		return "", fmt.Errorf("restrict token file: %w", err)
+	}
+	return token, nil
+}
+
+func parseToken(contents []byte) (string, error) {
 	token := strings.TrimSuffix(string(contents), "\n")
 	if strings.ContainsAny(token, "\r\n \t") {
 		return "", ErrInvalidTokenFile
@@ -133,9 +185,6 @@ func read(path string) (string, error) {
 	raw, err := base64.RawURLEncoding.DecodeString(token)
 	if err != nil || len(raw) != tokenBytes {
 		return "", ErrInvalidTokenFile
-	}
-	if err := restrictFile(path); err != nil {
-		return "", fmt.Errorf("restrict token file: %w", err)
 	}
 	return token, nil
 }

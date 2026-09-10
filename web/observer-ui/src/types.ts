@@ -201,6 +201,32 @@ export interface TrendSnapshot {
   series: TrendSeries[];
 }
 
+export type DiagnosticsState = "AVAILABLE" | "UNAVAILABLE" | "DISABLED";
+
+export interface DiagnosticsHealth {
+  schemaVersion: "observer-diagnostics-health/v1";
+  generatedAt: string;
+  enabled: boolean;
+  available: boolean;
+  state: DiagnosticsState;
+  reasonCode: "DIAGNOSTICS_DISABLED" | "DIAGNOSTICS_UNAVAILABLE" | "UNSAFE_DIAGNOSTICS_PATH" | null;
+  limits: {
+    maxFiles: 5;
+    maxFileBytes: 2097152;
+    maxTotalBytes: 10485760;
+    maxRecordBytes: 8192;
+    maxAgeSeconds: 604800;
+  };
+  usage: { totalBytes: number; fileCount: number };
+  counters: { droppedRecords: number; writeFailures: number };
+  policy: {
+    dataClassification: "PUBLIC_METADATA";
+    containsLogContents: false;
+    containsPaths: false;
+    remoteUploadEligible: false;
+  };
+}
+
 export interface ObserverDataSource {
   getCapabilities(signal?: AbortSignal): Promise<ObserverCapabilities>;
   getCurrentSnapshot(signal?: AbortSignal): Promise<CurrentSnapshot>;
@@ -208,6 +234,8 @@ export interface ObserverDataSource {
   getTrends?(range: TrendRange, signal?: AbortSignal): Promise<TrendSnapshot>;
   /** Optional so existing consumers can keep using the legacy snapshot container projection. */
   getContainerInventory?(signal?: AbortSignal): Promise<ContainerInventory>;
+  /** Optional because remote embedding applications may not expose local self-diagnostics. */
+  getDiagnosticsHealth?(signal?: AbortSignal): Promise<DiagnosticsHealth>;
 }
 
 export interface ObserverProblemDetails {
