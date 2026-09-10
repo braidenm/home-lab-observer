@@ -190,3 +190,16 @@ records. The log client also requires the exact truncation/count relationship.
 Full combined Go tests and vet, closed contract tests, and 14 direct Go-handler/schema scenarios passed locally.
 The dashboard's compiled assets were regenerated for the changed parser; UI tests, typechecking and deterministic
 embedding remain mandatory before merge. Native runtime activation and installer integration remain separate gates.
+
+## Release identity and paired archive review
+
+Root independently reviewed the v2 package profile, authoritative identity framing/scan, strict manifest parsing,
+bounded archive verification and retained v1 behavior. Actual stripped, trimpath cross-build fixtures validate the
+binary representation without executing cross-platform outputs; neither framing nor checksums replace attestation.
+Review requested direct hostile archive headers. The resulting test exposed ZIP reparse attributes not represented
+by Go's regular-file mode; verification now rejects those attributes as well as links, duplicate/traversal members,
+special files, elevated modes and nonzero data after tar termination.
+
+Full local Go tests, vet and repository policy passed before the hostile-header follow-up; focused archive tests
+and the full combined suite are required again before merge. This library slice does not activate v2 publication
+or assert the installer/native runtime integration is complete.

@@ -37,6 +37,29 @@ func buildArchive(stage string, in inputs, target target) (Asset, error) {
 		{name: "START-HERE.md", mode: 0o644, data: in.start},
 		{name: target.helperName, mode: 0o755, data: in.helpers[target.helperSource]},
 	}
+	var helper *JournalHelper
+	profile := ""
+	if in.config.SchemaVersion == SchemaVersionV2 {
+		profile = "native-core-v1"
+		if target.os == "linux" {
+			profile = "linux-journal-helper-v1"
+			source := in.binaries[journalInputName(target.arch)]
+			hash, size, err := hashFileBounded(source.path, maxBinarySize)
+			if err != nil {
+				return Asset{}, errors.New("HELPER_INPUT_INVALID")
+			}
+			helper = &JournalHelper{Filename: "observer-journal-helper", SHA256: hash, SizeBytes: size}
+			entries = append(entries, archiveEntry{name: helper.Filename, mode: 0o755, source: sourcePointer(source)})
+		}
+	}
+	var expanded int64 = 1024 + 512 // root and tar end markers
+	for _, entry := range entries {
+		size, _ := entrySize(entry)
+		expanded += 512 + (size+511)/512*512
+	}
+	if expanded > maxArchiveSize {
+		return Asset{}, errors.New("ARCHIVE_SIZE_INVALID")
+	}
 	var err error
 	if target.format == "zip" {
 		err = writeZIP(path, root, entries)
@@ -55,7 +78,8 @@ func buildArchive(stage string, in inputs, target target) (Asset, error) {
 	}
 	return Asset{
 		OS: target.os, Arch: target.arch, Filename: filename, SHA256: hash, SizeBytes: size, Format: target.format,
-		DownloadURL: "https://github.com/" + Repository + "/releases/download/v" + in.config.Version + "/" + filename,
+		DownloadURL:    "https://github.com/" + Repository + "/releases/download/v" + in.config.Version + "/" + filename,
+		ContentProfile: profile, JournalHelper: helper,
 	}, nil
 }
 
