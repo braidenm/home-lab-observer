@@ -77,12 +77,12 @@ func (r *Reader) Read(parent context.Context, request logobs.ReadRequest) (logob
 
 func (a *attempt) run(lower time.Time) error {
 	if a.request.Checkpoint.ResetPending {
-		return a.tail(true)
+		return a.tail(true, 0)
 	}
 	if len(a.request.Checkpoint.Opaque) != 0 {
 		if err := call(a, func() error { return a.journal.SeekCursor(a.request.Checkpoint.Opaque) }); err != nil {
 			if errors.Is(err, ErrInvalidCursor) {
-				return a.tail(true)
+				return a.tail(true, 0)
 			}
 			return err
 		}
@@ -94,7 +94,7 @@ func (a *attempt) run(lower time.Time) error {
 			return err
 		}
 		if !visited {
-			return a.tail(true)
+			return a.tail(true, 0)
 		}
 		a.batch.ExaminedCount++
 		a.batch.ProbeCount++
@@ -107,26 +107,35 @@ func (a *attempt) run(lower time.Time) error {
 			return err
 		}
 		if !exact || err != nil {
-			return a.tail(true)
+			return a.tail(true, 0)
 		}
 		a.batch.NextOpaque = cursor
+		return a.ingest(0)
 	} else {
-		micros := uint64(lower.Unix())*1_000_000 + uint64((lower.Nanosecond()+999)/1000)
+		micros := ceilRealtimeMicros(lower)
 		if err := call(a, func() error { return a.journal.SeekRealtime(micros) }); err != nil {
 			return err
 		}
+		return a.ingest(micros)
 	}
-	return a.ingest()
 }
 
-func (a *attempt) tail(reset bool) error {
+func ceilRealtimeMicros(value time.Time) uint64 {
+	return uint64(value.Unix())*1_000_000 + uint64((value.Nanosecond()+999)/1000)
+}
+
+func (a *attempt) tail(reset bool, initialLowerMicros uint64) error {
 	if reset {
 		a.batch.Kind = logobs.BatchResetPending
 	}
 	if err := call(a, a.journal.SeekTail); err != nil {
 		return err
 	}
-	if err := a.reserveNative(logobs.MaxCheckpointBytes); err != nil {
+	reserve := logobs.MaxCheckpointBytes
+	if !reset {
+		reserve += 8
+	}
+	if err := a.reserveNative(reserve); err != nil {
 		return err
 	}
 	visited, err := callValue(a, a.journal.Previous)
@@ -152,12 +161,25 @@ func (a *attempt) tail(reset bool) error {
 		a.batch.Kind = logobs.BatchResetEstablished
 		a.setState(logobs.SupportSupported, logobs.CollectionPartial, logobs.ReasonCheckpointReset)
 	} else {
+		micros, err := callValue(a, a.journal.RealtimeMicros)
+		if err != nil {
+			return err
+		}
+		if err := a.chargeNative(8); err != nil {
+			return err
+		}
+		// A tail that arrived after the initial range read cannot prove the
+		// queried window empty. Reject the whole attempt instead of advancing
+		// a cursor past a concurrent record.
+		if initialLowerMicros == 0 || micros >= initialLowerMicros {
+			return ErrReadFailed
+		}
 		a.caughtUp()
 	}
 	return nil
 }
 
-func (a *attempt) ingest() error {
+func (a *attempt) ingest(initialLowerMicros uint64) error {
 	maximum := logobs.MaxAcceptedEvents - int(a.batch.ProbeCount)
 	processed := 0
 	for {
@@ -174,7 +196,7 @@ func (a *attempt) ingest() error {
 		}
 		if !visited {
 			if processed == 0 && a.batch.ProbeCount == 0 {
-				return a.tail(false)
+				return a.tail(false, initialLowerMicros)
 			}
 			a.caughtUp()
 			return nil

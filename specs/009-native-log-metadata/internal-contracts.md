@@ -277,7 +277,9 @@ and zero counts. A later 60-second attempt with
 on the following cycle. Any checkpoint with nil `Opaque` and `ResetPending == false` performs a `NORMAL` fixed
 five-minute read regardless of `Revision`; revision is CAS state, not an initialization/reset signal.
 The initial empty-window path may use one metadata-only tail probe to prove a continuation cursor without adding
-counts. A row whose selected metadata can be discarded still requires a valid cursor; failure to acquire a bounded
+counts. That proof reads and charges the tail timestamp and requires it to be strictly before the exact five-minute
+lower bound. A record at or after the bound that arrives between initial EOF and the tail probe rejects the complete
+attempt without advancing a cursor, so the following cycle can ingest it. A row whose selected metadata can be discarded still requires a valid cursor; failure to acquire a bounded
 cursor for any visited row rejects the whole attempt rather than committing counts that could replay. Helper protocol
 identity and framing use a separate closed private DTO; adapters never serialize `Batch` as their wire protocol.
 

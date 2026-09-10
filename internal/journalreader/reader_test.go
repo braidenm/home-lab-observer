@@ -221,8 +221,8 @@ func TestInitialReadAndVisibleTail(t *testing.T) {
 	if len(batch.Events) != 0 || batch.ExaminedCount != 1 || batch.ProbeCount != 1 || !batch.CaughtUp || !bytes.Equal(batch.NextOpaque, old.cursor) {
 		t.Fatal("visible tail failed to prove empty current window")
 	}
-	if calls(j, "realtime") != 0 || calls(j, "priority") != 0 || calls(j, "message-id") != 0 {
-		t.Fatal("tail probe requested ingestion metadata")
+	if calls(j, "realtime") != 1 || calls(j, "priority") != 0 || calls(j, "message-id") != 0 {
+		t.Fatal("tail proof did not request exactly its timestamp and cursor")
 	}
 	j = newJournal()
 	batch = run(t, j, initialRequest())
@@ -234,6 +234,30 @@ func TestInitialReadAndVisibleTail(t *testing.T) {
 	batch = run(t, j, request)
 	if len(batch.Events) != 1 || calls(j, "seek-realtime") != 1 || calls(j, "seek-cursor") != 0 {
 		t.Fatal("cursorless durable revision treated as reset")
+	}
+}
+
+func TestInitialTailMustPrecedeWindowAfterConcurrentArrival(t *testing.T) {
+	for _, at := range []time.Time{queryTime.Add(-5 * time.Minute), queryTime.Add(-time.Minute)} {
+		j := newJournal()
+		j.hook = func(name string) {
+			if name == "seek-tail" {
+				j.rows = append(j.rows, row(at, 1))
+				j.hook = nil
+			}
+		}
+		factory := &fakeFactory{journal: j}
+		reader, err := New(Config{Factory: factory, Now: func() time.Time { return queryTime.Add(time.Millisecond) }})
+		if err != nil {
+			t.Fatal("reader construction failed")
+		}
+		batch, err := reader.Read(context.Background(), initialRequest())
+		if !errors.Is(err, ErrReadFailed) || !reflect.DeepEqual(batch, logobs.Batch{}) {
+			t.Fatal("concurrent in-window tail incorrectly proved an empty window")
+		}
+		if j.closes != 1 || calls(j, "realtime") != 1 || calls(j, "priority") != 0 || calls(j, "message-id") != 0 {
+			t.Fatal("rejected tail proof read outside its bounded metadata allowance")
+		}
 	}
 }
 
