@@ -143,6 +143,11 @@ No ACL on an ancestor, host file, exported event file or installed product is ch
 confirmed unregistration removes these temporary grants with it. Record-count diagnostics validate the exact scalar
 UInt64 variant but do not interpret its inactive array-count member.
 
+Before publication, the harness opens metadata for only the fixed owned publisher (no formatting or metadata output),
+reads only the Boolean enabled property of its two owned channel configurations into fixed 16-byte variants, and
+checks that the fixed EventLog service is running. Every native handle is closed. These are prerequisite checks,
+not evidence that an event was recorded; actual bounded channel queries and native-reader assertions must still pass.
+
 This fixture would prove the real Windows ABI, selected render types, bookmark mechanics, strict seek/reset behavior,
 thread lifetime and private-file continuation. Because it deliberately never queries production channels, it does
 not natively prove that a particular user's live `System` or `Application` permissions contain readable events;

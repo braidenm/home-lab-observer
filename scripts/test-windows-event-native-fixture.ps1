@@ -198,6 +198,17 @@ public static class OwnedEventFixtureMetadataProbe
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [DllImport("wevtapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
+    private static extern IntPtr EvtOpenPublisherMetadata(IntPtr session, string publisherId,
+        string logFilePath, int locale, int flags);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("wevtapi.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EvtGetChannelConfigProperty(IntPtr channel, int propertyId, int flags,
+        int bufferSize, out EvtVariant buffer, out int used);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("wevtapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
     private static extern IntPtr EvtOpenLog(IntPtr session, string path, int flags);
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
@@ -259,6 +270,12 @@ public static class OwnedEventFixtureMetadataProbe
     }
     public static int SystemChannel() { return Probe(EvtOpenChannelConfig(IntPtr.Zero, SystemChannelName, 0)); }
     public static int ApplicationChannel() { return Probe(EvtOpenChannelConfig(IntPtr.Zero, ApplicationChannelName, 0)); }
+    public static bool PublisherResources() {
+        IntPtr metadata = EvtOpenPublisherMetadata(IntPtr.Zero, ProviderName, null, 0, 0);
+        return metadata != IntPtr.Zero && EvtClose(metadata);
+    }
+    public static bool SystemEnabled() { return ChannelEnabled(SystemChannelName); }
+    public static bool ApplicationEnabled() { return ChannelEnabled(ApplicationChannelName); }
     public static int SystemBeforeCount() { return Count(SystemChannelName, SystemBeforeQuery, 2); }
     public static int ApplicationBeforeCount() { return Count(ApplicationChannelName, ApplicationBeforeQuery, 2); }
     public static int SystemAfterCount() { return Count(SystemChannelName, SystemAfterQuery, 1); }
@@ -318,6 +335,23 @@ public static class OwnedEventFixtureMetadataProbe
             if (!EvtClose(query)) count = -1;
         }
         return count;
+    }
+
+    private static bool ChannelEnabled(string channel)
+    {
+        IntPtr config = EvtOpenChannelConfig(IntPtr.Zero, channel, 0);
+        if (config == IntPtr.Zero) return false;
+        bool enabled = false;
+        try {
+            EvtVariant value;
+            int used;
+            // EvtChannelConfigEnabled = 0; EvtVarTypeBoolean = 13.
+            enabled = EvtGetChannelConfigProperty(config, 0, 0, 16, out value, out used) &&
+                used == 16 && value.Type == 13 && (value.UInt64Value & 0xffffffffUL) != 0;
+        } finally {
+            if (!EvtClose(config)) enabled = false;
+        }
+        return enabled;
     }
 
     private static int LogCount(string channel, int expected)
@@ -426,6 +460,17 @@ try {
     }
     Invoke-Quiet 'wevtutil.exe' @('sl', $systemChannel, '/e:true')
     Invoke-Quiet 'wevtutil.exe' @('sl', $applicationChannel, '/e:true')
+    if (-not [OwnedEventFixtureMetadataProbe]::PublisherResources()) {
+        Fail 'owned fixture publisher resources could not be opened'
+    }
+    if (-not [OwnedEventFixtureMetadataProbe]::SystemEnabled() -or
+        -not [OwnedEventFixtureMetadataProbe]::ApplicationEnabled()) {
+        Fail 'owned fixture channels were not confirmed enabled'
+    }
+    $eventLogService = Get-Service -Name 'EventLog' -ErrorAction SilentlyContinue
+    if ($null -eq $eventLogService -or $eventLogService.Status -ne 'Running') {
+        Fail 'event log service was not running on the hosted fixture runner'
+    }
     Invoke-OwnedPublisher $publisher 'before'
     Wait-OwnedRecords 'before'
 
