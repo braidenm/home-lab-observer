@@ -12,4 +12,4 @@
 - [x] Test acquisition/secret boundaries, retries, gaps, retention, native smoke and mobile UX.
 - [x] Verify Linux helper disables core dumps/dumpability before private input; document host-admin crash-capture limits.
 - [x] Record independent review, fix required CI and auto-merge.
-- [ ] Publish and verify the native preview; document supported sources and deliberate gaps.
+- [x] Publish and verify native preview 3; document supported sources and deliberate gaps (see traceability ledger).

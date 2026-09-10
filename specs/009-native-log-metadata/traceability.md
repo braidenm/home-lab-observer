@@ -1,10 +1,11 @@
 # Spec 009 acceptance evidence
 
-This is an implementation ledger, not a claim that the feature is released. The reviewed implementation is merged to
-`main` at `9a60a28`; the last independently verified published Preview 2 does not collect native log metadata. Preview
-3 publication and post-publication verification remain pending and are tracked separately below.
+Spec 009 is implemented, reviewed, and published in immutable
+[Preview 3](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-preview.3), built from `9a60a28`.
+The release verification gates listed below are complete. Preview 2 remains available for rollback but does not
+collect native log metadata. Kubernetes, native remote enrollment, and container actions remain separate specifications.
 
-| Requirement | Current evidence | Remaining acceptance work |
+| Requirement | Current evidence | Release verification (completed below) |
 | --- | --- | --- |
 | L1 Explicit source opt-in | Fixed-alias validation, platform-specific CLI rejection, explicit background persistence, legacy profiles and disabled-no-native-call tests | Preview 3 post-publication verification |
 | L2 Selected-field native acquisition | Both native bindings and private helper entrypoints implemented; Linux owned fixture and Windows x64/ARM64 owned fixtures pass selected-field, normalization, bounds and thread/handle tests; macOS remains explicitly unsupported | Preview 3 post-publication verification |
@@ -22,7 +23,7 @@ Earlier runtime evidence remains recorded in [the exact hosted CI evidence](runt
 release evidence is recorded below. Successful fixture acquisition, packaged degraded/restart behavior, synthetic UI
 evidence and published release support remain distinct claims.
 
-## Main and pending release evidence — 2026-09-10
+## Main and published release evidence — 2026-09-10
 
 - Merged head [`9a60a28`](https://github.com/braidenm/home-lab-observer/commit/9a60a2845d716d2f252a8852f893a5825f6b7ef6)
   passed the required main workflows: [Foundation](https://github.com/braidenm/home-lab-observer/actions/runs/34527769030),
@@ -40,9 +41,15 @@ evidence and published release support remain distinct claims.
   pixels. It confirmed unclipped grids, keyboard-focusable locally scrolling tables, visible GAP/UNKNOWN coverage with
   positive counts, null-as-unavailable rendering and independent recent-session behavior.
 - [Preview 3 publication run 34528402601](https://github.com/braidenm/home-lab-observer/actions/runs/34528402601)
-  was still in progress when this checkpoint was written. The publication task remains incomplete until the actual
-  immutable release, assets, checksums, provenance, anonymous downloads and supported/degraded runtime behavior are
-  independently verified.
+  passed build, vulnerability scanning, all six native target verifications, attestation and publication. GitHub reports
+  the published prerelease immutable, with eleven assets and tag resolved to the exact reviewed commit.
+- Independent post-publication checks downloaded the Windows amd64 archive, manifest and checksums; verified their
+  immutable-release attestations, exact archive hash/size, and archive provenance restricted to the native-release
+  workflow and source commit. The downloaded executable's version command reports `0.1.0-preview.3`, `9a60a28`,
+  Windows amd64 and Go 1.27.1. A credential-free manifest download independently returned the same release identity.
+  This local version smoke did not register a service or read host logs. Six-platform installation/runtime behavior and
+  bounded missing-Linux-runtime/history recovery are established by the successful publication workflow, not this
+  version-only local smoke.
 
 ## Reviewed contract boundaries
 

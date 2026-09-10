@@ -1,6 +1,6 @@
 # Native log runtime integration
 
-Status: implemented and runtime-tested; Windows owned-native-fixture acceptance merged in PR #31; v2 publication pending.
+Status: implemented, runtime-tested, and published in immutable native preview 3. See [release evidence](traceability.md).
 
 - `serve` and `background enable` accept repeated `--log-source system` / `--log-source application`.
   No values means disabled. Reject duplicate, unknown, comma-separated or whitespace-padded values, and more than
@@ -38,4 +38,5 @@ Full combined Windows Go tests/vet pass. Hosted head `7f5a1e3` passed the actual
 including retained synthetic history across graceful restart and forced termination, an empty new-session ring,
 and usable authenticated APIs. See [exact CI evidence](runtime-ci-gates.md). This proves degraded runtime and durable
 recovery, not successful Windows native acquisition. Separate Windows acquisition evidence is linked above.
-Six-target release verification remains a publication gate; no new preview has been published from this integration branch.
+Six-target release verification subsequently passed for preview 3; [release evidence](traceability.md) records the
+published identity and independent post-publication checks.
