@@ -177,7 +177,14 @@ func TestChildUsesExecutableDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, err := childTransport(t, "cwd").exchange(context.Background(), nil)
-	if err != nil || filepath.Clean(string(out)) != filepath.Dir(executable) {
+	if err != nil {
+		t.Fatal("child working directory unavailable")
+	}
+	// macOS can report /private/var while os.Executable uses the /var alias.
+	// Compare directory identity, not spelling, without relaxing the boundary.
+	actual, actualErr := os.Stat(string(out))
+	expected, expectedErr := os.Stat(filepath.Dir(executable))
+	if actualErr != nil || expectedErr != nil || !os.SameFile(actual, expected) {
 		t.Fatal("child inherited working directory")
 	}
 }
