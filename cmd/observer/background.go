@@ -11,6 +11,7 @@ import (
 	"mime"
 	"net/http"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/braidenm/home-lab-observer/internal/background"
@@ -18,6 +19,7 @@ import (
 	"github.com/braidenm/home-lab-observer/internal/lifecycle"
 	"github.com/braidenm/home-lab-observer/internal/localapi"
 	"github.com/braidenm/home-lab-observer/internal/localauth"
+	"github.com/braidenm/home-lab-observer/internal/logobs"
 )
 
 const (
@@ -46,6 +48,7 @@ type backgroundOptions struct {
 	stateDir       string
 	listenAddress  string
 	dockerEndpoint string
+	logSources     logSourceFlags
 	force          bool
 	json           bool
 }
@@ -81,6 +84,9 @@ func runBackgroundWith(args []string, stdout, stderr io.Writer, newManager backg
 		if settings.DockerEndpoint != "" {
 			arguments = append(arguments, "--docker-endpoint", settings.DockerEndpoint)
 		}
+		for _, source := range settings.LogSources {
+			arguments = append(arguments, "--log-source", source)
+		}
 		return serveCommand(arguments, io.Discard, io.Discard)
 	}
 
@@ -89,7 +95,7 @@ func runBackgroundWith(args []string, stdout, stderr io.Writer, newManager backg
 	var status background.Status
 	switch options.action {
 	case "enable":
-		status, err = manager.Enable(ctx, background.Settings{StateDir: options.stateDir, ListenAddress: options.listenAddress, DockerEndpoint: options.dockerEndpoint})
+		status, err = manager.Enable(ctx, background.Settings{StateDir: options.stateDir, ListenAddress: options.listenAddress, DockerEndpoint: options.dockerEndpoint, LogSources: options.logSources})
 	case "start":
 		status, err = manager.Start(ctx)
 	case "status":
@@ -133,6 +139,7 @@ func parseBackgroundOptions(args []string, stdout, stderr io.Writer) (background
 		flags.StringVar(&options.stateDir, "state-dir", "", "dedicated observer state directory")
 		flags.StringVar(&options.listenAddress, "listen", options.listenAddress, "explicit local IPv4 address and port")
 		flags.StringVar(&options.dockerEndpoint, "docker-endpoint", "", "opt-in local Docker socket or named pipe")
+		flags.Var(&options.logSources, "log-source", "opt-in native metadata source: system or application; repeat per source")
 	}
 	if options.action == "stop" || options.action == "restart" || options.action == "disable" {
 		flags.BoolVar(&options.force, "force", false, "explicitly authorize manager termination")
@@ -150,6 +157,10 @@ func parseBackgroundOptions(args []string, stdout, stderr io.Writer) (background
 		fmt.Fprintln(stderr, "invalid background options: --install-root is required")
 		return backgroundOptions{}, 2
 	}
+	if _, err := logobs.ParseSources(runtime.GOOS, options.logSources); err != nil {
+		fmt.Fprintln(stderr, "invalid native log source configuration")
+		return backgroundOptions{}, 2
+	}
 	if options.action == "enable" && options.stateDir == "" {
 		tokenPath, err := localauth.DefaultTokenPath()
 		if err != nil {
@@ -162,7 +173,7 @@ func parseBackgroundOptions(args []string, stdout, stderr io.Writer) (background
 }
 
 func printBackgroundUsage(writer io.Writer) {
-	fmt.Fprintln(writer, "usage: observer background enable --install-root PATH [--state-dir PATH] [--listen 127.0.0.1:9847] [--docker-endpoint LOCAL_SOCKET]")
+	fmt.Fprintln(writer, "usage: observer background enable --install-root PATH [--state-dir PATH] [--listen 127.0.0.1:9847] [--docker-endpoint LOCAL_SOCKET] [--log-source SOURCE]")
 	fmt.Fprintln(writer, "       observer background <start|status|stop|restart|disable> --install-root PATH")
 	fmt.Fprintln(writer, "Use --force only with stop, restart, or disable; it is never an automatic timeout fallback.")
 }

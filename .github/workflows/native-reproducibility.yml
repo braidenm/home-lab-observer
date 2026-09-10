@@ -1,0 +1,35 @@
+name: Native reproducibility
+
+on:
+  pull_request:
+    paths:
+      - 'cmd/**'
+      - 'internal/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'scripts/build-native-v2.sh'
+      - 'scripts/test-build-native-v2.sh'
+      - '.github/workflows/native-reproducibility.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-reproducibility-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  paired-build-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Compare two isolated paired builds without running target outputs
+        env:
+          OBSERVER_TEST_REPRODUCIBLE_BUILDS: '1'
+        run: bash scripts/test-build-native-v2.sh

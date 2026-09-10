@@ -70,9 +70,10 @@ const (
 )
 
 type Settings struct {
-	StateDir       string `json:"state_dir"`
-	ListenAddress  string `json:"listen_address"`
-	DockerEndpoint string `json:"docker_endpoint"`
+	StateDir       string   `json:"state_dir"`
+	ListenAddress  string   `json:"listen_address"`
+	DockerEndpoint string   `json:"docker_endpoint"`
+	LogSources     []string `json:"log_sources,omitempty"`
 }
 
 type StopOptions struct {

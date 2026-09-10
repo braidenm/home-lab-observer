@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"time"
 
+	"github.com/braidenm/home-lab-observer/internal/buildidentity"
 	"github.com/braidenm/home-lab-observer/internal/collector"
 	"github.com/braidenm/home-lab-observer/internal/observation"
 	"github.com/braidenm/home-lab-observer/internal/projection"
@@ -17,7 +19,18 @@ import (
 var version = "dev"
 var commit = "unknown"
 
-func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, nil)) }
+func main() {
+	if handled, code := dispatchPrivateLogHelper(os.Args[1:], os.Stdin, os.Stdout); handled {
+		os.Exit(code)
+	}
+	identity, err := buildidentity.Resolve(releaseIdentity, version, commit, "observer", runtime.GOOS, runtime.GOARCH)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "BUILD_IDENTITY_INVALID")
+		os.Exit(1)
+	}
+	version, commit = identity.Version, identity.Commit
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, nil))
+}
 
 type collectFunc func(context.Context) observation.Snapshot
 
@@ -84,7 +97,7 @@ func runCommandWithBackground(args []string, stdout, stderr io.Writer, collect c
 
 func printUsage(writer io.Writer) {
 	fmt.Fprintln(writer, "usage: observer collect-once [--max-processes N] [--processes=true|false] [--timeout DURATION]")
-	fmt.Fprintln(writer, "       observer serve [--listen 127.0.0.1:9847] [--state-dir PATH] [--docker-endpoint LOCAL_SOCKET]")
+	fmt.Fprintln(writer, "       observer serve [--listen 127.0.0.1:9847] [--state-dir PATH] [--docker-endpoint LOCAL_SOCKET] [--log-source SOURCE]")
 	fmt.Fprintln(writer, "       observer background <enable|start|status|stop|restart|disable> --install-root PATH")
 	fmt.Fprintln(writer, "       observer version [--json]")
 	fmt.Fprintln(writer, "Running observer without arguments starts the foreground local server. No background service is installed.")

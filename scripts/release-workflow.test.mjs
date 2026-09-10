@@ -34,7 +34,8 @@ test("manager smoke preserves sanitized task shape when cleanup is unconfirmed",
 });
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const version = "0.1.0-preview.7";
+// Exercise the actual CI fixture identity through finalization and manifest checks.
+const version = "0.1.0-preview.999999";
 const commit = "0123456789abcdef0123456789abcdef01234567";
 const platforms = [
   ["linux", "amd64", "tar.gz"], ["linux", "arm64", "tar.gz"],
@@ -259,4 +260,24 @@ test("workflows keep publication manual, permission-scoped and fully pinned", as
   assert.match(smoke, /"--manifest".+"--checksums"/u);
   assert.match(smoke, /"-Manifest".+"-Checksums"/u);
   assert.match(smoke, /verifyHelperFile/u);
+});
+
+test("paired native delivery uses verified checkout and isolated reproducibility gate", async () => {
+  const delivery = await readFile(path.join(repositoryRoot, ".github/workflows/native-delivery.yml"), "utf8");
+  const proof = await readFile(path.join(repositoryRoot, ".github/workflows/native-reproducibility.yml"), "utf8");
+  assert.match(delivery, /test "\$\(git rev-parse HEAD\)" = "\$GITHUB_SHA"/u);
+  assert.match(delivery, /bash scripts\/build-native-v2\.sh "\$PREVIEW_VERSION" "\$GITHUB_SHA" dist\/binaries/u);
+  assert.match(delivery, /--schema-version observer-release\/v2/u);
+  assert(delivery.includes(`PREVIEW_VERSION: ${version}`));
+  assert.match(delivery, /--schema schemas\/release-v2\.schema\.json/u);
+  assert.match(delivery, /run: node scripts\/test-missing-linux-runtime\.mjs dist\/release/u);
+  assert(delivery.indexOf('run: node scripts/test-missing-linux-runtime.mjs') < delivery.indexOf('name: Generate SPDX'));
+  assert.match(proof, /runs-on: ubuntu-24\.04/u);
+  assert.match(proof, /timeout-minutes: 12/u);
+  assert.match(proof, /OBSERVER_TEST_REPRODUCIBLE_BUILDS: '1'/u);
+  assert.match(proof, /run: bash scripts\/test-build-native-v2\.sh/u);
+  assert.doesNotMatch(proof, /(?:contents|id-token|attestations): write|self-hosted/u);
+  for (const line of proof.match(/^\s*- uses: .+$/gmu) ?? []) {
+    assert.match(line, /@[a-f0-9]{40}(?:\s+#|$)/u);
+  }
 });

@@ -17,6 +17,7 @@ export function LogSummaryPanel({ summary, range, onRangeChange }: { summary: Re
         </div>
       </div>
       <p className="observer-log-history__privacy"><strong>Local-sensitive metadata</strong> · read-only · bodies and identity fields omitted · remote upload not eligible</p>
+      <p className="observer-log-history__privacy">Operational history, not a forensic audit. On Windows, clearing a log and recreating an event with identical identity fields can evade reset detection.</p>
       <LogSummaryState summary={summary} />
     </section>
   );
