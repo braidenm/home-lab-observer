@@ -96,7 +96,11 @@ func TestServeDrainsAndReleasesHistory(t *testing.T) {
 	}
 	address := reservation.Addr().String()
 	_ = reservation.Close()
-	state := filepath.Join(t.TempDir(), "state")
+	temporary, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := filepath.Join(temporary, "state")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan error, 1)
