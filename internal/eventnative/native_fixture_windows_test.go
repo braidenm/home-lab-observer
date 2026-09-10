@@ -250,7 +250,7 @@ func TestOwnedWindowsNativeFixture(t *testing.T) {
 
 	before := &fileFactory{api: api, system: files.systemBefore, application: files.applicationBefore}
 	systemBookmark := assertFixtureSequence(t, before, logobs.SourceSystem, "system-before", []uint16{101, 102}, []uint8{4, 3})
-	_ = assertFixtureSequence(t, before, logobs.SourceApplication, "application-before", []uint16{201, 202}, []uint8{2, 1})
+	applicationBookmark := assertFixtureSequence(t, before, logobs.SourceApplication, "application-before", []uint16{201, 202}, []uint8{2, 1})
 	markFixtureStage(t, "system-reverse-tail")
 	assertReverseTail(t, before, logobs.SourceSystem, 102)
 	markFixtureStage(t, "system-bookmark-roundtrip")
@@ -258,7 +258,10 @@ func TestOwnedWindowsNativeFixture(t *testing.T) {
 
 	after := &fileFactory{api: api, system: files.systemAfter, application: files.applicationAfter}
 	markFixtureStage(t, "system-reset")
-	assertReset(t, after, systemBookmark)
+	assertReset(t, after, logobs.SourceSystem, systemBookmark, 103)
+	assertFixtureSequence(t, after, logobs.SourceApplication, "application-after", []uint16{203}, []uint8{4})
+	markFixtureStage(t, "application-reset")
+	assertReset(t, after, logobs.SourceApplication, applicationBookmark, 203)
 	markFixtureStage(t, "handle-accounting")
 	if len(api.open) != 0 || api.calls < 20 {
 		t.Fatalf("native handle evidence incomplete: open=%d calls=%d", len(api.open), api.calls)
@@ -368,7 +371,7 @@ func assertBookmarkRoundTrip(t *testing.T, factory *fileFactory, source logobs.S
 	}
 }
 
-func assertReset(t *testing.T, factory *fileFactory, saved []byte) {
+func assertReset(t *testing.T, factory *fileFactory, source logobs.Source, saved []byte, wantID uint16) {
 	t.Helper()
 	reader, err := eventreader.New(eventreader.Config{Factory: factory, Now: time.Now})
 	if err != nil {
@@ -376,7 +379,7 @@ func assertReset(t *testing.T, factory *fileFactory, saved []byte) {
 	}
 	started := time.Now().UTC().Add(-time.Second)
 	batch, err := reader.Read(context.Background(), logobs.ReadRequest{
-		Source: logobs.SourceSystem, QueryStartedAt: started,
+		Source: source, QueryStartedAt: started,
 		Checkpoint: logobs.Checkpoint{Revision: 1, Opaque: append([]byte(nil), saved...)},
 	})
 	if err != nil {
@@ -390,7 +393,7 @@ func assertReset(t *testing.T, factory *fileFactory, saved []byte) {
 		t.Fatalf("unexpected reset batch: kind=%s support=%s collection=%s examined=%d", batch.Kind, batch.SupportState, batch.CollectionState, batch.ExaminedCount)
 	}
 	decoded, decodeErr := decodeAnchor(batch.NextOpaque)
-	if decodeErr != nil || decoded.eventID != 103 || decoded.source != logobs.SourceSystem {
+	if decodeErr != nil || decoded.eventID != wantID || decoded.source != source {
 		t.Fatal("reset did not establish the owned post-clear tail")
 	}
 }
