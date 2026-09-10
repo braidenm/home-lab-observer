@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { EventEmitter } from "node:events";
 import { waitForProcessExit } from "./wait-for-process-exit.mjs";
 import { managerSmokeFailure } from "./windows-manager-smoke-failure.mjs";
+import { verifyArchivedHelper, verifyHelperFile, verifyManifest } from "./smoke-native-delivery.mjs";
 
 test("process exit waits release listeners and recognize signal termination", async () => {
   const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
@@ -53,13 +54,13 @@ async function shaAndSize(filename) {
   return { sha256: createHash("sha256").update(bytes).digest("hex"), size_bytes: bytes.length };
 }
 
-async function fixture(directory) {
+async function fixture(directory, schemaVersion = "observer-release/v1") {
   const assets = [];
   for (const [platform, arch, format] of platforms) {
     const filename = `home-lab-observer_${version}_${platform}_${arch}.${format}`;
     await writeFile(path.join(directory, filename), `final-${platform}-${arch}-archive-bytes`, "utf8");
     const digest = await shaAndSize(path.join(directory, filename));
-    assets.push({
+    const asset = {
       os: platform,
       arch,
       filename,
@@ -67,10 +68,17 @@ async function fixture(directory) {
       size_bytes: digest.size_bytes,
       format,
       download_url: `https://github.com/braidenm/home-lab-observer/releases/download/v${version}/${filename}`,
-    });
+    };
+    if (schemaVersion === "observer-release/v2") {
+      asset.content_profile = platform === "linux" ? "linux-journal-helper-v1" : "native-core-v1";
+      asset.journal_helper = platform === "linux"
+        ? { filename: "observer-journal-helper", sha256: createHash("sha256").update(`helper-${arch}`).digest("hex"), size_bytes: 13 }
+        : null;
+    }
+    assets.push(asset);
   }
   const manifest = {
-    schema_version: "observer-release/v1",
+    schema_version: schemaVersion,
     version,
     tag: `v${version}`,
     repository: "braidenm/home-lab-observer",
@@ -83,6 +91,10 @@ async function fixture(directory) {
   await writeFile(path.join(directory, "install.ps1"), "exit 0\n", "utf8");
   await writeFile(path.join(directory, "observer.spdx.json"), JSON.stringify({ spdxVersion: "SPDX-2.3", dataLicense: "CC0-1.0", packages: [] }), "utf8");
   await writeFile(path.join(directory, "SHA256SUMS"), "provisional\n", "utf8");
+}
+
+async function readChecksums(directory) {
+  return new Map((await readFile(path.join(directory, "SHA256SUMS"), "utf8")).trim().split(/\r?\n/u).map((line) => [line.slice(66), line.slice(0, 64)]));
 }
 
 async function schemaFixture() {
@@ -121,6 +133,64 @@ test("finalization replaces provisional sums with exact final-byte coverage", as
   } finally {
     await rm(directory, { recursive: true, force: true });
     await rm(schema.directory, { recursive: true, force: true });
+  }
+});
+
+test("v2 finalization keeps the download set stable and validates explicit helper profiles", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "observer release v2 finalize "));
+  const schema = path.join(repositoryRoot, "schemas", "release-v2.schema.json");
+  try {
+    await fixture(directory, "observer-release/v2");
+    const result = run("release-finalize.mjs", ["--version", version, "--commit", commit, "--directory", directory, "--schema", schema]);
+    assert.equal(result.status, 0, result.stderr);
+    const checksums = await readChecksums(directory);
+    assert.equal(checksums.size, 10);
+    const release = await verifyManifest(directory, version, checksums);
+    assert.equal(release.schemaVersion, "observer-release/v2");
+    assert.equal(release.assets.get("linux/amd64").journal_helper.filename, "observer-journal-helper");
+
+    const manifestPath = path.join(directory, "release-manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.assets.find((asset) => asset.os === "linux").content_profile = "native-core-v1";
+    await writeFile(manifestPath, JSON.stringify(manifest), "utf8");
+    assert.notEqual(run("release-finalize.mjs", ["--version", version, "--commit", commit, "--directory", directory, "--schema", schema]).status, 0);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("delivery helper verification is bounded and matches manifest bytes", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "observer release helper verify "));
+  const helper = path.join(directory, "observer-journal-helper");
+  try {
+    await writeFile(helper, "synthetic-helper", "utf8");
+    const metadata = await shaAndSize(helper);
+    await verifyHelperFile(helper, metadata);
+    await assert.rejects(() => verifyHelperFile(helper, { ...metadata, sha256: "0".repeat(64) }), /helper bytes/u);
+    await assert.rejects(() => verifyHelperFile(helper, { ...metadata, size_bytes: metadata.size_bytes + 1 }), /bounded regular file/u);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("delivery streams the exact helper member from a real archive", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "observer release helper archive "));
+  const root = "home-lab-observer_0.1.0-preview.7_linux_amd64";
+  const helperMember = `${root}/observer-journal-helper`;
+  const helper = path.join(directory, root, "observer-journal-helper");
+  const archive = path.join(directory, "helper.tar.gz");
+  try {
+    await mkdir(path.dirname(helper), { recursive: true });
+    await writeFile(helper, "synthetic-archived-helper", "utf8");
+    const packed = spawnSync("tar", ["-czf", archive, "-C", directory, helperMember], { encoding: "utf8" });
+    assert.equal(packed.status, 0, packed.stderr);
+    const metadata = await shaAndSize(helper);
+    await verifyArchivedHelper(archive, helperMember, metadata);
+    await assert.rejects(() => verifyArchivedHelper(archive, helperMember, { ...metadata, size_bytes: metadata.size_bytes - 1 }), /does not match/u);
+    await assert.rejects(() => verifyArchivedHelper(archive, helperMember, { ...metadata, sha256: "0".repeat(64) }), /does not match/u);
+    await assert.rejects(() => verifyArchivedHelper(archive, `${root}/missing-helper`, metadata), /does not match/u);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
   }
 });
 
@@ -186,4 +256,7 @@ test("workflows keep publication manual, permission-scoped and fully pinned", as
   assert.match(smoke, /smoke-windows-manager\.mjs/u);
   assert.match(smoke, /OBSERVER_SMOKE_INSTALL_ROOT: installRoot/u);
   assert.match(smoke, /if \(preserveForManagerFailure\)/u);
+  assert.match(smoke, /"--manifest".+"--checksums"/u);
+  assert.match(smoke, /"-Manifest".+"-Checksums"/u);
+  assert.match(smoke, /verifyHelperFile/u);
 });

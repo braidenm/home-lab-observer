@@ -8,6 +8,8 @@ import addFormats from "ajv-formats";
 
 const REPOSITORY = "braidenm/home-lab-observer";
 const POLICY = "UNSIGNED_PREVIEW_WITH_CHECKSUMS_AND_PROVENANCE";
+const SCHEMA_V1 = "observer-release/v1";
+const SCHEMA_V2 = "observer-release/v2";
 const PLATFORMS = [
   ["linux", "amd64", "tar.gz"],
   ["linux", "arm64", "tar.gz"],
@@ -93,11 +95,22 @@ async function main() {
   const schema = JSON.parse(await readFile(schemaPath, "utf8"));
   const ajv = new Ajv({ allErrors: true, strict: false });
   addFormats(ajv);
+  if (schema.$id !== "urn:home-lab-observer:schema:release:v1") {
+    const v1Schema = JSON.parse(await readFile(new URL("../schemas/release-v1.schema.json", import.meta.url), "utf8"));
+    ajv.addSchema(v1Schema);
+  }
   const validate = ajv.compile(schema);
   if (!validate(manifest)) fail(`manifest does not satisfy its JSON Schema: ${ajv.errorsText(validate.errors)}`);
   exactKeys(manifest, ["schema_version", "version", "tag", "repository", "commit_sha", "signing_policy", "assets"], "manifest");
+  const schemaProfiles = new Map([
+    ["urn:home-lab-observer:schema:release:v1", SCHEMA_V1],
+    ["urn:home-lab-observer:schema:release:v2", SCHEMA_V2],
+  ]);
+  if (schemaProfiles.has(schema.$id) && manifest.schema_version !== schemaProfiles.get(schema.$id)) {
+    fail("manifest schema_version does not match the selected schema");
+  }
+  if (![SCHEMA_V1, SCHEMA_V2].includes(manifest.schema_version)) fail("manifest schema_version is unsupported");
   const expectedTopLevel = {
-    schema_version: "observer-release/v1",
     version,
     tag: `v${version}`,
     repository: REPOSITORY,
@@ -113,7 +126,9 @@ async function main() {
 
   const seen = new Set();
   for (const asset of manifest.assets) {
-    exactKeys(asset, ["os", "arch", "filename", "sha256", "size_bytes", "format", "download_url"], "manifest asset");
+    const assetKeys = ["os", "arch", "filename", "sha256", "size_bytes", "format", "download_url"];
+    if (manifest.schema_version === SCHEMA_V2) assetKeys.push("content_profile", "journal_helper");
+    exactKeys(asset, assetKeys, "manifest asset");
     const platform = PLATFORMS.find(([os, arch]) => os === asset.os && arch === asset.arch);
     if (!platform) fail(`unsupported manifest platform ${asset.os}/${asset.arch}`);
     const format = platform[2];
@@ -124,6 +139,23 @@ async function main() {
     if (asset.filename !== filename || asset.format !== format) fail(`incorrect filename or format for ${platformKey}`);
     const expectedURL = `https://github.com/${REPOSITORY}/releases/download/v${version}/${filename}`;
     if (asset.download_url !== expectedURL) fail(`download URL for ${platformKey} is not immutable and version-pinned`);
+    if (manifest.schema_version === SCHEMA_V2) {
+      const linux = asset.os === "linux";
+      if (asset.content_profile !== (linux ? "linux-journal-helper-v1" : "native-core-v1")) {
+        fail(`incorrect content profile for ${platformKey}`);
+      }
+      if (linux) {
+        exactKeys(asset.journal_helper, ["filename", "sha256", "size_bytes"], "manifest journal helper");
+        if (asset.journal_helper.filename !== "observer-journal-helper" ||
+            !/^[a-f0-9]{64}$/.test(asset.journal_helper.sha256) ||
+            !Number.isSafeInteger(asset.journal_helper.size_bytes) || asset.journal_helper.size_bytes < 1 ||
+            asset.journal_helper.size_bytes > 200 * 1024 * 1024) {
+          fail(`invalid journal helper metadata for ${platformKey}`);
+        }
+      } else if (asset.journal_helper !== null) {
+        fail(`journal helper metadata is forbidden for ${platformKey}`);
+      }
+    }
     const actual = await hashFile(path.join(directory, filename));
     if (asset.sha256 !== actual.sha256 || asset.size_bytes !== actual.size) {
       fail(`manifest digest or size does not match final ${filename} bytes`);
