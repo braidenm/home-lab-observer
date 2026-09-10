@@ -25,3 +25,22 @@ func stop(command *exec.Cmd, done <-chan error) error {
 		return errProof
 	}
 }
+
+func killAndReap(command *exec.Cmd, done <-chan error) error {
+	if command.Process.Kill() != nil {
+		return errProof
+	}
+	select {
+	case <-done:
+		if command.ProcessState == nil {
+			return errProof
+		}
+		status, ok := command.ProcessState.Sys().(syscall.WaitStatus)
+		if !ok || !status.Signaled() || status.Signal() != syscall.SIGKILL {
+			return errProof
+		}
+		return nil
+	case <-time.After(2 * time.Second):
+		return errProof
+	}
+}

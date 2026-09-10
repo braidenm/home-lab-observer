@@ -180,8 +180,19 @@ func probe() (result error) {
 	if verify.Run() != nil {
 		return errProof
 	}
+	if err := probeEmpty(ctx, verify.Env); err != nil {
+		return errProof
+	}
+	return probeHistory(ctx)
+}
+
+// Keep the original null-count missing-runtime proof independent of seeded history.
+func probeEmpty(ctx context.Context, environment []string) (result error) {
+	if ctx.Err() != nil {
+		return errProof
+	}
 	command := exec.Command("/package/observer", "serve", "--listen", "127.0.0.1:9847", "--state-dir", "/state/observer", "--log-source", "system")
-	command.Env = verify.Env
+	command.Env = environment
 	command.WaitDelay = time.Second
 	if command.Start() != nil {
 		return errProof

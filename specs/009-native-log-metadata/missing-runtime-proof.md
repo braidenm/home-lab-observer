@@ -31,3 +31,23 @@ v2 releasepack archives, and stages both Linux profiles. An optional new `OBSERV
 that fixture for `TestStageExportedV2` under Linux using `OBSERVER_TEST_STAGE_INPUT`; the latter needs no Go compiler
 or Docker. These synthetic binaries prove staging/layout, not actual helper runtime operation. Runtime JSON predicates
 are also checked against the real local API projection and SQLite summary with synthetic failure batches.
+
+## Separate durable-history and restart scenario
+
+The original empty-store/no-runtime case must still pass its null-count checks and gracefully stop/reap the packaged
+primary before any seeding occurs. Only then the test probe opens the private tmpfs history database through the actual
+history.Store, loads its checkpoint and commits one synthetic ERROR event (`SYSTEMD_PRIORITY_3`) with a fixed safe
+private cursor. Its timestamp is two completed UTC minutes before seeding, keeping it inside the requested hour across
+minute boundaries. Replaying the same CAS batch must conflict. The probe closes the store before restarting the primary.
+
+The restarted actual package must report exactly one captured event and no discards in source/aggregate/bucket totals,
+while a fresh attempted runtime failure stays explicit. The current-session log ring must be an actual empty list with
+zero returned/total counts, not reconstructed from compact history. Readiness and the authenticated snapshot remain
+available. The probe force-kills and reaps only this owned primary, starts it again, repeats those checks and finishes
+with a graceful stop/reap. No user mutation API or production fixture setting is added.
+
+All three sessions share the original 50-second probe context; child shutdown remains separately bounded and the outer
+Docker operation keeps its existing 80-second timeout. No next child starts after context expiration. Test-only database
+seeding is linked into the static probe, never the primary/helper. DB files stay in the private tmpfs and are not exported.
+Unit tests exercise CAS/reopen and real runtime projection with synthetic readers; actual packaged crash/restart execution
+remains hosted-CI evidence, not a claim from compilation or synthetic tests.
