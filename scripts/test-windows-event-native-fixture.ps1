@@ -19,8 +19,25 @@ $fixturePassed = $false
 function Fail([string] $Message) { throw "owned Windows event fixture failed: $Message" }
 
 function Invoke-Quiet([string] $File, [string[]] $Arguments) {
+    $stage = switch ($File) {
+        'mc.exe' { 'manifest-compile' }
+        'rc.exe' { 'resource-compile' }
+        'link.exe' { 'resource-link' }
+        'cl.exe' { 'publisher-compile' }
+        'go.exe' { 'test-compile' }
+        'wevtutil.exe' {
+            switch ($Arguments[0]) {
+                'im' { 'manifest-register' }
+                'sl' { 'channel-configure' }
+                'epl' { 'owned-export' }
+                'cl' { 'owned-clear' }
+                default { Fail 'unknown fixture command' }
+            }
+        }
+        default { Fail 'unknown fixture command' }
+    }
     & $File @Arguments 1>$null 2>$null
-    if ($LASTEXITCODE -ne 0) { Fail "required fixture command failed" }
+    if ($LASTEXITCODE -ne 0) { Fail "required fixture command failed at $stage" }
 }
 
 function Invoke-OwnedPublisher([string] $Path, [string] $Phase) {
