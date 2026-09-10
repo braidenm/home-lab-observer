@@ -8,6 +8,13 @@ Decision update 2026-09-10: owner approved the optional separately bundled Linux
 history, not the accepted implementation. The main executable must not acquire the helper's dynamic-loader dependency.
 Exact native cursor proof, accessible-view limitations and initial-empty evidence are mandatory acceptance tests.
 
+Independent helper review also identified crash dumps as a separate privacy/retention surface. Linux
+[PR_SET_DUMPABLE](https://man7.org/linux/man-pages/man2/PR_SET_DUMPABLE.2const.html) controls process dumpability;
+[RLIMIT_CORE](https://man7.org/linux/man-pages/man2/getrlimit.2.html) bounds core-file size and can be lowered by an
+unprivileged process. Verified 2026-09-10: require both process-local non-dumpability and a zero core limit before
+private input/native journal access, with native readback tests and fail-closed behavior. Do not alter global kernel
+crash policy or claim protection from the host administrator.
+
 ## Question and current implementation
 
 How can the dashboard correlate errors with resource pressure without becoming an unrestricted log reader?
