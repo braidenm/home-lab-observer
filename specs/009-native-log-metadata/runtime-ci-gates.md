@@ -29,5 +29,6 @@ run `34451723117` passed in 4m56s, and all three native archive/installer smoke 
 This is actual packaged persistence/restart evidence, not successful native journal acquisition.
 
 Local full Go tests/vet, repository policy, release tests, schema/contract tests and actual current-snapshot
-validation passed before draft submission. Native Windows fixture acceptance remains a separate gate. The manual
+validation passed before draft submission. Native Windows fixture acceptance subsequently passed on both architectures
+and merged in PR #31; see [owned Windows evidence](windows-native-fixture.md). The manual
 release workflow still needs a separately reviewed v2 promotion before preview publication.
