@@ -16,6 +16,11 @@ without host mounts or a Docker socket inside the container. It requires an atte
 the authenticated dashboard API remains usable, then verifies graceful shutdown. Only fixed pass/fail output leaves
 the fixture. This is not evidence of successful journal acquisition; the owned native fixture covers that separately.
 
+The first actual scratch proof passed at PR 30 head `67ff165`, in hosted job `102779980756` on 2026-09-10. The probe
+took four seconds and the complete cross-build job took 3m7s. Earlier head `05fc316` also passed the isolated paired
+reproducibility gate and all three native archive/installer smoke targets. These are evidence for those exact heads,
+not a substitute for rerunning CI after the independently identified HTTP shutdown fix.
+
 Local full Go tests/vet, repository policy, 14 release tests, schema/contract tests and actual current-snapshot
 validation passed before draft submission. Native Windows fixture acceptance and final packaged enabled-source
 history/restart checks remain separate gates, not inferred from these results.
