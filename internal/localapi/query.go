@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/braidenm/home-lab-observer/internal/history"
 	"github.com/braidenm/home-lab-observer/internal/series"
@@ -28,6 +29,12 @@ type seriesQuery struct {
 }
 
 type containerQuery struct{ limit int }
+
+type logSummaryQuery struct {
+	rangeValue  string
+	interval    time.Duration
+	bucketCount int
+}
 
 func parseCurrentQuery(raw string) (currentQuery, error) {
 	result := currentQuery{sections: make(map[string]bool), processLimit: 50, containerLimit: 100, logLimit: 50}
@@ -102,6 +109,28 @@ func parseContainerQuery(raw string) (containerQuery, error) {
 		return containerQuery{}, err
 	}
 	return containerQuery{limit: limit}, nil
+}
+
+func parseLogSummaryQuery(raw string) (logSummaryQuery, error) {
+	values, err := parseQuery(raw, map[string]bool{"range": true})
+	if err != nil {
+		return logSummaryQuery{}, err
+	}
+	if len(values["range"]) != 1 {
+		return logSummaryQuery{}, errors.New("range must occur exactly once")
+	}
+	switch values["range"][0] {
+	case "1h":
+		return logSummaryQuery{rangeValue: "1h", interval: time.Minute, bucketCount: 60}, nil
+	case "6h":
+		return logSummaryQuery{rangeValue: "6h", interval: 5 * time.Minute, bucketCount: 72}, nil
+	case "24h":
+		return logSummaryQuery{rangeValue: "24h", interval: 15 * time.Minute, bucketCount: 96}, nil
+	case "7d":
+		return logSummaryQuery{rangeValue: "7d", interval: time.Hour, bucketCount: 168}, nil
+	default:
+		return logSummaryQuery{}, errors.New("range is not allowlisted")
+	}
 }
 
 func parseQuery(raw string, allowed map[string]bool) (url.Values, error) {
