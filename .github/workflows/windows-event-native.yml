@@ -36,4 +36,5 @@ jobs:
           RUNNER_ENVIRONMENT: ${{ runner.environment }}
         run: |
           call "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -no_logo -arch=${{ matrix.architecture }}
+          pwsh -NoProfile -NonInteractive -File scripts\test-windows-event-native-fixture.ps1 -ValidateConditionsOnly
           pwsh -NoProfile -NonInteractive -File scripts\test-windows-event-native-fixture.ps1
