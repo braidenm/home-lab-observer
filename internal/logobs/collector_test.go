@@ -230,16 +230,18 @@ func TestCollectorLoadsCheckpointsBeforeStartingNativeLane(t *testing.T) {
 	loadFinished := make(chan time.Time, 1)
 	store := &collectorStore{load: func(context.Context, Source) (Checkpoint, error) {
 		if loads.Add(1) == 2 {
-			time.Sleep(600 * time.Millisecond)
 			loadFinished <- time.Now()
 		}
 		return Checkpoint{}, nil
 	}}
 	reader := collectorReader(func(ctx context.Context, request ReadRequest) (Batch, error) {
 		if request.Source == SourceSystem {
+			if loads.Load() != 2 {
+				return Batch{}, errors.New("native read began before all checkpoints loaded")
+			}
 			finished := <-loadFinished
 			deadline, ok := ctx.Deadline()
-			if !ok || deadline.Sub(finished) < 3700*time.Millisecond {
+			if !ok || deadline.Add(-collectionTimeout).Before(finished) {
 				return Batch{}, errors.New("native lane deadline was consumed by checkpoint loading")
 			}
 		}
