@@ -23,6 +23,13 @@ function Invoke-Quiet([string] $File, [string[]] $Arguments) {
     if ($LASTEXITCODE -ne 0) { Fail "required fixture command failed" }
 }
 
+function Invoke-OwnedPublisher([string] $Path, [string] $Phase) {
+    if ($Phase -cne 'before' -and $Phase -cne 'after') { Fail 'unknown publisher phase' }
+    & $Path $Phase 1>$null 2>$null
+    if ($LASTEXITCODE -eq 3) { Fail 'generated fixture descriptor was not enabled' }
+    if ($LASTEXITCODE -ne 0) { Fail 'owned fixture publisher failed' }
+}
+
 function Test-WevtMissing([string] $Kind, [string] $Name) {
     if ($Kind -eq 'provider' -and $Name -ceq $provider) { $exitCode = [OwnedEventFixtureMetadataProbe]::Publisher() }
     elseif ($Kind -eq 'channel' -and $Name -ceq $systemChannel) { $exitCode = [OwnedEventFixtureMetadataProbe]::SystemChannel() }
@@ -225,7 +232,7 @@ try {
     if (Test-AnyMissing $providerMissing $systemMissing $applicationMissing) {
         Fail 'fixture registration was not observable'
     }
-    Invoke-Quiet $publisher @('before')
+    Invoke-OwnedPublisher $publisher 'before'
 
     $systemBefore = Join-Path $ownedRoot 'system-before.evtx'
     $applicationBefore = Join-Path $ownedRoot 'application-before.evtx'
@@ -234,7 +241,7 @@ try {
 
     Invoke-Quiet 'wevtutil.exe' @('cl', $systemChannel)
     Invoke-Quiet 'wevtutil.exe' @('cl', $applicationChannel)
-    Invoke-Quiet $publisher @('after')
+    Invoke-OwnedPublisher $publisher 'after'
     $systemAfter = Join-Path $ownedRoot 'system-after.evtx'
     $applicationAfter = Join-Path $ownedRoot 'application-after.evtx'
     Invoke-Quiet 'wevtutil.exe' @('epl', $systemChannel, $systemAfter, "/q:*[System[Provider[@Name='$provider'] and EventID=103]]")

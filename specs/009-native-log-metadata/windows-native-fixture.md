@@ -30,6 +30,10 @@ writer or binary fixture copied from a real machine is acceptable.
 [`EVENT_DESCRIPTOR`](https://learn.microsoft.com/en-us/windows/win32/api/evntprov/ns-evntprov-event_descriptor),
 [wevtutil](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/wevtutil)
 
+The publisher gives the event-log subscription one shared ten-second monotonic readiness window and writes only after
+[`EventEnabled`](https://learn.microsoft.com/en-us/windows/win32/api/evntprov/nf-evntprov-eventenabled) accepts every
+generated descriptor. It emits no event data or native error details while waiting.
+
 The generator exports exact synthetic provider/event-ID selections into private EVTX files before and after clearing
 only an owned fixture channel. `EvtExportLog` is non-destructive and supports exact XPath selection; its target must
 be a new absolute path. Exported files are never uploaded or committed.

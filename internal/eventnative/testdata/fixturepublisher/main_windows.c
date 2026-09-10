@@ -11,8 +11,16 @@ static DWORD write_descriptors(REGHANDLE registration,
                                const EVENT_DESCRIPTOR *const *descriptors,
                                size_t count) {
     size_t index;
+    ULONGLONG started = GetTickCount64();
     for (index = 0; index < count; ++index) {
-        DWORD status = EventWrite(registration, descriptors[index], 0, NULL);
+        DWORD status;
+        while (!EventEnabled(registration, descriptors[index])) {
+            if (GetTickCount64() - started >= 10000) {
+                return ERROR_NOT_READY;
+            }
+            Sleep(25);
+        }
+        status = EventWrite(registration, descriptors[index], 0, NULL);
         if (status != ERROR_SUCCESS) {
             return status;
         }
@@ -56,6 +64,9 @@ int wmain(int argc, wchar_t **argv) {
     status = write_descriptors(registration, selected, count);
     if (EventUnregister(registration) != ERROR_SUCCESS) {
         status = ERROR_INVALID_STATE;
+    }
+    if (status == ERROR_NOT_READY) {
+        return 3;
     }
     return status == ERROR_SUCCESS ? 0 : 1;
 }
