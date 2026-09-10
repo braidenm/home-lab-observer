@@ -30,7 +30,10 @@ useful without Platform Demo, with honest cross-platform gaps.
   their creating OS thread. Linux uses the separately bundled, digest-verified helper in ADR 010; the main process must
   still start on hosts without its loader/library. Both helpers exchange private checkpoints only through bounded
   pipes, never argv/environment/staging files. Cancellation closes/reaps all native resources. Intersecting byte/row
-  limits can stop work before 512 records. A nil cursor with reset-pending false is a normal five-minute initial read
+  limits can stop work before 512 records. Linux helper startup disables process dumpability and core-file generation
+  before reading private input or opening journals; failure to establish that policy is unavailable. Do not change
+  host-wide crash-reporting policy. Host administrators can still inspect processes and are outside this boundary.
+  A nil cursor with reset-pending false is a normal five-minute initial read
   regardless of checkpoint revision. On a stale/invalid checkpoint, run one metadata-only tail probe:
   Windows queries the fixed channel in reverse order and reads at most one event to produce a bookmark; Linux uses
   seek-tail/previous/get-cursor outside the five-minute filter. Normal Linux continuation must first prove exact cursor

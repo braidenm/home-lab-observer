@@ -82,6 +82,11 @@ permission-limited views, missing-loader fallback, private-checkpoint canaries a
 before shipping. This section describes accepted controls under implementation, not protections already in preview 2.
 See [ADR 010](../adr/010-optional-linux-journal-helper.md).
 
+Independent review additionally requires Linux helper core-dump suppression before private input/journal access:
+set process-local non-dumpability and a zero core-size limit, failing closed if unavailable. This prevents ordinary
+helper crashes from creating an extra unbounded private-data dump. It does not change host-wide crash-reporting policy
+or protect memory from the host administrator. Verify the process-local policy in native tests.
+
 ## Explicit exclusions
 
 The first release has no arbitrary shell, arbitrary file reader, arbitrary log path, arbitrary Docker operation, generic plugin execution, LAN listener, or remote configuration that can broaden local collection. Adding one requires a new threat model and ADR.
