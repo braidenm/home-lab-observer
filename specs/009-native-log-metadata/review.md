@@ -63,3 +63,17 @@ fractional gap preservation, initialized-empty/reset/clock rollback rejection, f
 successive minute attempts retaining one coalesced row. Full Go tests, vet and repository policy passed locally.
 SQLite transactions, shared age/size maintenance and native integration remain outstanding; this evidence does not
 claim those features are delivered.
+
+## Summary HTTP implementation review
+
+The optional authenticated GET/HEAD summary handler was independently reviewed by root, including strict query
+parsing, the shared latest-status reducer, closed DTO projection and unavailable/error responses. Its source is a
+read-only summary port; HTTP never starts native acquisition. The response clock is captured after querying, with at
+most one fixed-grid rollover retry so concurrent latest status is retained without silently shifting the requested
+window. Missing optional wiring returns a fixed unavailable Problem, not invented empty data.
+
+Root requested direct producer/schema verification and stronger large-grid fixtures. The resulting Go-handler
+response is validated by the closed JSON schema and shared semantic validator, including two sources, 168 buckets,
+non-null partial reasons, large safe counters and nanosecond timestamps. Root independently ran all 12 emitted
+handler scenarios, focused API/domain tests, vet and repository policy successfully. Native wiring, current-event
+projection and UI remain pending; this endpoint slice does not claim those are enabled.
