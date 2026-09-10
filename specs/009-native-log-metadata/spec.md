@@ -19,6 +19,9 @@ useful without Platform Demo, with honest cross-platform gaps.
   native helper loading the host's libsystemd, with only severity/message-ID, realtime and private cursor fields,
   a minimal controlled environment and no shell. Do not render full event XML, format Windows messages, request journald
   MESSAGE or acquire bodies before trying to redact. macOS returns explicit unsupported without spawning `log show`.
+  Windows continuation follows [ADR 011](../../docs/adr/011-windows-log-continuation-proof.md): strict bookmark
+  positioning plus selected identity comparison, with the owner-accepted limitation that clearing and recreating an
+  identical tuple can evade reset detection. Describe this as operational history, never forensic audit evidence.
 - L3: Native work runs in a scheduler-owned lane that is independent of the 15-second host snapshot cycle. It starts
   once immediately and then at fixed 60-second intervals and is single-flight. Native acquisition never runs in or
   reschedules the host lane; brief bounded serialization on the shared SQLite writer is expected. It is bounded to
