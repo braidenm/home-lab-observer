@@ -210,6 +210,13 @@ if (!validateSnapshot(zeroLimitRetainedLogs)) fail(`Current logs rejected a zero
 const falselyHealthyRetainedLogs = structuredClone(currentLogFixture);
 falselyHealthyRetainedLogs.sections.logs.collection_state = "OK";
 if (validateSnapshot(falselyHealthyRetainedLogs)) fail("Current logs accepted non-supported retained records as successfully collected");
+const firstUnavailableFailure = structuredClone(currentLogFixture);
+firstUnavailableFailure.sections.logs = { support_state: "UNAVAILABLE", collection_state: "FAILED", freshness: "UNKNOWN", observed_at: null, reason_code: "READER_FAILED", total_count: 0, returned_count: 0, truncated: false, items: [] };
+if (!validateSnapshot(firstUnavailableFailure)) fail(`Current logs rejected an empty first failure: ${ajv.errorsText(validateSnapshot.errors)}`);
+const staleUnavailableAfterEmpty = structuredClone(firstUnavailableFailure);
+staleUnavailableAfterEmpty.sections.logs.freshness = "STALE";
+staleUnavailableAfterEmpty.sections.logs.observed_at = currentLogFixture.sections.logs.observed_at;
+if (!validateSnapshot(staleUnavailableAfterEmpty)) fail(`Current logs rejected stale evidence after a healthy empty cycle: ${ajv.errorsText(validateSnapshot.errors)}`);
 const unknownRetainedLogs = structuredClone(currentLogFixture);
 unknownRetainedLogs.sections.logs.freshness = "UNKNOWN";
 unknownRetainedLogs.sections.logs.observed_at = null;

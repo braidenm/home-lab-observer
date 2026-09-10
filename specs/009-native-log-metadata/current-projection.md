@@ -49,12 +49,16 @@ reason code, and a nil success reason remains nil.
 A later failed or permission-denied observation may keep the last validated ring. When records are retained, the log
 section is explicitly `STALE`, and `observed_at` is the newest retained record's time when the latest source status has
 no observation time. Support, collection and reason continue to describe the latest attempt; they are never promoted
-to imply success. A non-supported section with `UNKNOWN` freshness or a nil observation time is always empty.
+to imply success. A first `UNAVAILABLE/FAILED/UNKNOWN` attempt is valid and empty. An `UNAVAILABLE/FAILED/STALE`
+status may also retain a prior successful observation time while the ring is empty; this is truthful evidence of a
+previous caught-up empty cycle, not an invented record count.
 
 This is a narrow additive exception to the v1 generic list rule. The current-snapshot schema and UI parser permit
 retained non-supported data only for the `logs` section when freshness is `STALE`, `observed_at` is non-null,
 `total_count` proves a non-empty ring, and a code-owned reason is present. `log_limit=0` may intentionally return no
-items while retaining that bounded count. Filesystem, process, service, container and observer sections remain unchanged. Producer,
+items while retaining that bounded count. The same exception permits an empty `UNAVAILABLE/FAILED/STALE` section
+whose non-null observation time came from a prior healthy empty cycle, and an empty first
+`UNAVAILABLE/FAILED/UNKNOWN` attempt. Filesystem, process, service, container and observer sections remain unchanged. Producer,
 direct-schema and client-parser tests must cover both the allowed retained case and rejected UNKNOWN/non-supported,
 extra-field and inconsistent-count cases before merge.
 

@@ -147,6 +147,23 @@ func TestWithLogsRejectsInvalidSnapshotAndLimit(t *testing.T) {
 	}
 }
 
+func TestWithLogsPreservesEmptyUnavailableFailureQuality(t *testing.T) {
+	now := time.Date(2026, 9, 9, 19, 0, 0, 0, time.UTC)
+	observed := now.Add(-time.Minute)
+	reason := logobs.ReasonReaderFailed
+	for name, status := range map[string]logobs.Status{
+		"first failure":               {SupportState: logobs.SupportUnavailable, CollectionState: logobs.CollectionFailed, Freshness: logobs.FreshnessUnknown, AttemptedAt: &now, ReasonCode: &reason},
+		"failure after healthy empty": {SupportState: logobs.SupportUnavailable, CollectionState: logobs.CollectionFailed, Freshness: logobs.FreshnessStale, ObservedAt: &observed, AttemptedAt: &now, ReasonCode: &reason},
+	} {
+		t.Run(name, func(t *testing.T) {
+			section := WithLogs(CurrentSnapshot{}, logobs.Snapshot{Status: status}, 50).Sections.Logs
+			if section.SupportState != "UNAVAILABLE" || section.CollectionState != "FAILED" || section.Freshness != string(status.Freshness) || len(section.Items) != 0 || section.TotalCount != 0 || section.ObservedAt == nil != (status.ObservedAt == nil) {
+				t.Fatalf("section=%+v", section)
+			}
+		})
+	}
+}
+
 func TestUnavailableListCannotProjectItems(t *testing.T) {
 	items := []observation.Process{{PID: 7, Name: "must-not-appear", State: "running"}}
 	raw := observation.Snapshot{ObservedAt: time.Unix(0, 0), Quality: observation.Quality{State: observation.Failed}, Processes: observation.Section[[]observation.Process]{State: observation.PermissionDenied, ReasonCode: observation.ReasonPermissionDenied, Data: &items}}

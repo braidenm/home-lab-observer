@@ -517,14 +517,18 @@ function mapLogSection(value: unknown): ListSection<LogRecord> {
   const returnedCount = integer(item.returned_count, 0, 200);
   const truncated = boolean(item.truncated);
   const items = boundedArray(item.items, 0, 200).map(mapLogRecord);
-  if (returnedCount !== items.length || returnedCount > totalCount || (!truncated && totalCount > returnedCount)) throw new Error("list section counts are inconsistent");
+  if (returnedCount !== items.length || returnedCount > totalCount || truncated !== (returnedCount < totalCount)) throw new Error("log list section counts are inconsistent");
   if (quality.supportState !== "SUPPORTED") {
-    const emptyUnknown = quality.collectionState === "NOT_RUN" && quality.freshness === "UNKNOWN" && quality.observedAt === null && quality.reasonCode !== null && totalCount === 0 && returnedCount === 0 && !truncated && items.length === 0;
+    const nonSupportedCollectionIsTruthful = quality.supportState === "UNAVAILABLE"
+      ? quality.collectionState === "FAILED" || quality.collectionState === "NOT_RUN"
+      : quality.collectionState === "NOT_RUN";
+    const emptyUnknown = nonSupportedCollectionIsTruthful && quality.freshness === "UNKNOWN" && quality.observedAt === null && quality.reasonCode !== null && totalCount === 0 && returnedCount === 0 && !truncated && items.length === 0;
     const retainedCollectionIsTruthful = quality.supportState === "UNAVAILABLE"
       ? quality.collectionState === "FAILED" || quality.collectionState === "NOT_RUN"
       : quality.collectionState === "NOT_RUN";
     const retainedStale = quality.freshness === "STALE" && quality.observedAt !== null && quality.reasonCode !== null && totalCount > 0 && retainedCollectionIsTruthful;
-    if (!emptyUnknown && !retainedStale) throw new Error("non-supported log section must be empty or explicitly retain stale records");
+    const emptyStaleUnavailable = quality.supportState === "UNAVAILABLE" && quality.collectionState === "FAILED" && quality.freshness === "STALE" && quality.observedAt !== null && quality.reasonCode !== null && totalCount === 0 && returnedCount === 0 && !truncated && items.length === 0;
+    if (!emptyUnknown && !retainedStale && !emptyStaleUnavailable) throw new Error("non-supported log section must be empty or explicitly retain stale evidence");
   }
   return { ...quality, totalCount, returnedCount, truncated, items };
 }

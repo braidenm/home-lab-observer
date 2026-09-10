@@ -166,7 +166,6 @@
             "oneOf": [
               {
                 "properties": {
-                  "collection_state": { "const": "NOT_RUN" },
                   "freshness": { "const": "UNKNOWN" },
                   "observed_at": { "type": "null" },
                   "reason_code": { "type": "string" },
@@ -174,7 +173,17 @@
                   "returned_count": { "const": 0 },
                   "truncated": { "const": false },
                   "items": { "maxItems": 0 }
-                }
+                },
+                "allOf": [
+                  {
+                    "if": { "properties": { "support_state": { "enum": ["DISABLED", "PERMISSION_DENIED", "UNSUPPORTED"] } }, "required": ["support_state"] },
+                    "then": { "properties": { "collection_state": { "const": "NOT_RUN" } } }
+                  },
+                  {
+                    "if": { "properties": { "support_state": { "const": "UNAVAILABLE" } }, "required": ["support_state"] },
+                    "then": { "properties": { "collection_state": { "enum": ["FAILED", "NOT_RUN"] } } }
+                  }
+                ]
               },
               {
                 "properties": {
@@ -195,6 +204,19 @@
                     "then": { "properties": { "collection_state": { "enum": ["FAILED", "NOT_RUN"] } } }
                   }
                 ]
+              },
+              {
+                "properties": {
+                  "support_state": { "const": "UNAVAILABLE" },
+                  "collection_state": { "const": "FAILED" },
+                  "freshness": { "const": "STALE" },
+                  "observed_at": { "type": "string", "format": "date-time" },
+                  "reason_code": { "type": "string" },
+                  "total_count": { "const": 0 },
+                  "returned_count": { "const": 0 },
+                  "truncated": { "const": false },
+                  "items": { "maxItems": 0 }
+                }
               }
             ]
           }

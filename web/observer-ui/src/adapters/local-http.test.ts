@@ -302,6 +302,19 @@ describe("LocalHttpObserverDataSource", () => {
     falselyHealthyRetainedData.sections.logs.collection_state = "OK";
     expect(() => mapCurrentSnapshot(falselyHealthyRetainedData)).toThrow(/non-supported log section/);
 
+    const firstUnavailableFailure = cloneFixture(linuxSnapshot);
+    firstUnavailableFailure.sections.logs = { support_state: "UNAVAILABLE", collection_state: "FAILED", freshness: "UNKNOWN", observed_at: null, reason_code: "READER_FAILED", total_count: 0, returned_count: 0, truncated: false, items: [] };
+    expect(mapCurrentSnapshot(firstUnavailableFailure).sections.logs).toMatchObject({ supportState: "UNAVAILABLE", collectionState: "FAILED", freshness: "UNKNOWN", items: [] });
+
+    const staleUnavailableAfterEmpty = cloneFixture(firstUnavailableFailure);
+    staleUnavailableAfterEmpty.sections.logs.freshness = "STALE";
+    staleUnavailableAfterEmpty.sections.logs.observed_at = "2026-09-09T11:59:00Z";
+    expect(mapCurrentSnapshot(staleUnavailableAfterEmpty).sections.logs).toMatchObject({ supportState: "UNAVAILABLE", collectionState: "FAILED", freshness: "STALE", totalCount: 0 });
+
+    const falseTruncation = cloneFixture(linuxSnapshot);
+    falseTruncation.sections.logs.truncated = true;
+    expect(() => mapCurrentSnapshot(falseTruncation)).toThrow(/log list section counts/);
+
     const retainedWithUnsafeField = cloneFixture(retainedAfterPermissionFailure);
     retainedWithUnsafeField.sections.logs.items[0].checkpoint = "opaque-secret";
     expect(() => mapCurrentSnapshot(retainedWithUnsafeField)).toThrow(/contract field/);
