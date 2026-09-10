@@ -79,6 +79,9 @@ function LogHistogram({ source, intervalSeconds, label }: { source: LogSourceSum
   return (
     <div className="observer-log-histogram-wrap">
       <div className="observer-log-legend" aria-label="Severity legend">{severityKeys.map((severity) => <span key={severity}><i className={`observer-log-severity observer-log-severity--${severity}`} aria-hidden="true" />{titleCase(severity)}</span>)}</div>
+      <ul className="observer-log-coverage-legend" aria-label="Coverage legend">
+        {(["FULL", "PARTIAL", "GAP", "UNKNOWN"] as const).map((state) => <li key={state}><i className={`observer-log-coverage-key observer-log-coverage-key--${state.toLowerCase()}`} aria-hidden="true" />{titleCase(state)}</li>)}
+      </ul>
       <div className="observer-log-histogram" role="img" aria-label={`${label} captured severity histogram. Complete bucket values and coverage are available in the table below.`}>
         {source.buckets.map((bucket) => (
           <div key={bucket.at} className={`observer-log-histogram__bucket observer-log-histogram__bucket--${bucket.coverageState.toLowerCase()}`} aria-hidden="true">

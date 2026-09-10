@@ -19,6 +19,8 @@ describe("LogSummaryPanel", () => {
 
     expect(screen.getByText("Local-sensitive metadata")).toBeTruthy();
     expect(screen.getByText(/bodies and identity fields omitted/i)).toBeTruthy();
+    const coverageLegend = screen.getByRole("list", { name: "Coverage legend" });
+    expect(within(coverageLegend).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["Full", "Partial", "Gap", "Unknown"]);
     expect(screen.getByRole("img", { name: /System captured severity histogram/i }).querySelector(".observer-log-histogram__bucket--gap")).toBeTruthy();
     expect(screen.getByRole("img", { name: /System captured severity histogram/i }).querySelector(".observer-log-histogram__bucket--unknown")).toBeTruthy();
 
