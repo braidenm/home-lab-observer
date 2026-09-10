@@ -1,11 +1,21 @@
 # Private helper process transport
 
-Status: Implementation slice; no runtime entrypoint or source activation yet.
+Status: Implemented transport/reader/dispatcher slice; no runtime entrypoint or source activation yet.
 
 The private transport accepts only a code-owned, already verified command from the
-future fixed platform resolver. It is internal and has no exported command/path
-runner. Linux resolution, embedded digest and ownership checks, and Windows
-same-executable verification remain separate required integration gates.
+fixed platform resolver. It is internal and has no exported command/path runner.
+Linux resolution, embedded digest/ownership checks, and Windows same-executable
+verification are described in [helper-identity.md](helper-identity.md).
+
+`NewReader` takes only the code-owned release version, commit and embedded Linux
+digest. Construction performs no I/O; one instance is shared across configured
+sources. Read validates input, resolves the fixed helper, uses private protocol
+encoding/decoding and rejects uncorrelated output. Missing/mismatched helpers have
+closed unavailable batches. Other process/protocol failures return a fixed error
+for the collector's failed-attempt projection without asserting native support.
+macOS returns explicit unsupported without touching the filesystem or launching.
+Linux rejects the Windows-only application preset. Resolver errors are reduced to
+canonical sentinels even if wrapped with private operating-system details.
 
 Each transport instance has one non-queuing child slot. A request is bounded to
 32 KiB before any launch; stdout retains at most 2 MiB. Stderr is discarded and

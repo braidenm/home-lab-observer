@@ -42,6 +42,12 @@ func newTransport(resolve func() (commandSpec, error)) *transport {
 	return &transport{slot: make(chan struct{}, 1), run: func(ctx context.Context, input []byte) ([]byte, error) {
 		spec, err := resolve()
 		if err != nil {
+			if errors.Is(err, ErrHelperUnavailable) {
+				return nil, ErrHelperUnavailable
+			}
+			if errors.Is(err, ErrHelperMismatch) {
+				return nil, ErrHelperMismatch
+			}
 			return nil, errProcessFailed
 		}
 		return runCommand(ctx, spec, input)
