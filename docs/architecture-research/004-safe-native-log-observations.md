@@ -69,6 +69,19 @@ reads and silently skip older records. Bound streaming output and preserve the l
 `-n 1` is reserved for explicit reset-tail proof. Verify stale-cursor detection against the native implementation before
 claiming reset recovery; seeking near a missing cursor is not proof of contiguous coverage.
 
+### Open Linux checkpoint decision
+
+Independent review found that [v242 journalctl's continuation implementation](https://github.com/systemd/systemd/blob/v242/src/journal/journalctl.c#L2248)
+seeks and skips after a cursor without testing that the exact referenced event still exists. Root verified this source
+on 2026-09-09. A zero exit code therefore cannot establish the stale-cursor detection promised above. Linux native-log
+implementation is paused until this is resolved; existing host/process/container support is unaffected.
+
+The owner is being asked to choose an optional native systemd-library adapter with exact cursor validation, or defer
+Linux log metadata while completing the Windows slice. Neither leaking the opaque cursor in command arguments nor
+silently calling unverified continuation complete is an accepted workaround. A native adapter must preserve the
+single-download/CGO-disabled packaging goal, selected-field privacy, optional system-library capability, hard deadlines,
+bounded output and missing-library fallback, with new primary evidence and native tests before acceptance.
+
 **macOS:** keep native logs explicitly unsupported in this slice. Apple's
 [OSLogStore local access](https://developer.apple.com/documentation/oslog/oslogstore/local()) has entitlement and
 privilege requirements that need a separately packaged native design. The pure-Go preview must not quietly request
