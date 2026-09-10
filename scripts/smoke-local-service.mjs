@@ -8,6 +8,7 @@ import { createServer } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import Ajv from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
+import { validateLogSummaryFixture } from './log-summary-contract.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const temporary = await realpath(await mkdtemp(join(tmpdir(), 'observer-smoke-')));
@@ -35,7 +36,7 @@ try {
   const ajv = new Ajv({ allErrors: true, strict: false });
   addFormats(ajv);
   const validators = {};
-  for (const name of ['capabilities', 'current-snapshot', 'metric-series', 'container-inventory', 'diagnostics-health', 'problem-details']) {
+  for (const name of ['capabilities', 'current-snapshot', 'metric-series', 'container-inventory', 'diagnostics-health', 'problem-details', 'log-summary']) {
     validators[name] = ajv.compile(JSON.parse(await readFile(join(root, `schemas/v1/${name}-v1.schema.json`), 'utf8')));
   }
   async function validated(path, name, status = 200, requestHeaders = headers) {
@@ -177,6 +178,61 @@ try {
       await page.screenshot({ path: join(temporary, `diagnostics-unavailable-${width}.png`), fullPage: true });
     }
     await page.unroute('**/api/v1/diagnostics/health');
+    // Synthetic log summaries exercise the real embedded client without reading
+    // native host logs. The complete 168-bucket grid must fit on mobile, not clip.
+    const logFixture = JSON.parse(await readFile(join(root, 'schemas/v1/fixtures/valid/log-summary-1h.json'), 'utf8'));
+    const logRanges = { '1h': [3600, 60, 60], '6h': [21600, 300, 72], '24h': [86400, 900, 96], '7d': [604800, 3600, 168] };
+    await page.route('**/api/v1/logs/summary?range=*', route => {
+      const range = new URL(route.request().url()).searchParams.get('range');
+      const [duration, interval, count] = logRanges[range];
+      const fixture = structuredClone(logFixture);
+      const end = Math.floor(Date.parse(fixture.generated_at) / (interval * 1000)) * interval * 1000;
+      const start = end - duration * 1000;
+      fixture.range = range;
+      fixture.window_start = new Date(start).toISOString();
+      fixture.window_end = new Date(end).toISOString();
+      fixture.bucket_interval_seconds = interval;
+      fixture.expected_bucket_count = count;
+      for (const source of fixture.sources) {
+        const original = source.buckets;
+        source.buckets = Array.from({ length: count }, (_, index) => ({
+          ...(index < 4 ? original[index] : { coverage_state: 'UNKNOWN', covered_seconds: 0, reason_code: 'NOT_YET_OBSERVED', counts: null }),
+          ...(index === 3 ? { covered_seconds: interval } : {}),
+          at: new Date(start + index * interval * 1000).toISOString()
+        }));
+        source.covered_seconds = interval + 30;
+      }
+      assert(validators['log-summary'](fixture), 'log browser fixture violates schema');
+      validateLogSummaryFixture(fixture, 'synthetic browser summary');
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fixture) });
+    });
+    for (const width of [390, 768, 1440]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await page.reload();
+      await page.getByRole('button', { name: 'Logs', exact: true }).click();
+      assert(await page.getByLabel('Filter safe metadata', { exact: true }).evaluate(element => element.getBoundingClientRect().height <= 60), `Log filter stretches vertically at ${width}px`);
+      const selector = page.getByRole('group', { name: 'Log summary range', exact: true });
+      for (const range of ['1h', '7d']) {
+        await selector.getByRole('button', { name: range, exact: true }).click();
+        const chart = page.getByRole('img', { name: /System captured severity histogram/ });
+        await chart.waitFor();
+        await page.waitForFunction(expected => document.querySelectorAll('.observer-log-histogram__bucket').length === expected, logRanges[range][2]);
+        assert(await chart.evaluate(element => {
+          const last = element.lastElementChild.getBoundingClientRect();
+          return last.right <= element.getBoundingClientRect().right + 1;
+        }), `Log buckets clipped at ${width}px for ${range}`);
+        assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `Log summary overflows at ${width}px`);
+        await page.screenshot({ path: join(temporary, `log-summary-${range}-${width}.png`), fullPage: true });
+      }
+      await page.getByText('View accessible bucket data', { exact: true }).click();
+      const region = page.getByRole('region', { name: 'System log summary bucket data', exact: true });
+      await region.focus();
+      assert(await region.evaluate(element => element === document.activeElement), `Log table is not keyboard-focusable at ${width}px`);
+      if (width <= 768) assert(await region.evaluate(element => element.scrollWidth > element.clientWidth), `Log table lacks local scrolling at ${width}px`);
+      assert((await region.innerText()).includes('Unavailable'), 'Unknown counts became fabricated zero');
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `Expanded log table overflows at ${width}px`);
+    }
+    await page.unroute('**/api/v1/logs/summary?range=*');
     await page.getByRole('button', { name: 'Lock dashboard', exact: true }).click();
     await page.getByRole('button', { name: 'Unlock dashboard', exact: true }).waitFor();
     assert(!(await page.evaluate(() => JSON.stringify(sessionStorage))).includes(token), 'lock retained the token');

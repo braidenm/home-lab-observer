@@ -5,8 +5,9 @@ transport-neutral component and normalized view contracts only. Consumers provid
 HTTP adapter and synthetic demo source are explicit subpath imports.
 
 The observer binary can use `LocalHttpObserverDataSource` against its loopback API. It reads only the accepted
-capabilities, current-snapshot, bounded metric-series and dedicated container-inventory `GET` contracts. Platform Demo provides its own authenticated
-adapter rather than trying to call or iframe another machine's loopback dashboard.
+capabilities, current-snapshot, bounded metric-series, dedicated container-inventory and log-summary `GET` contracts.
+Platform Demo provides its own authenticated adapter rather than trying to call or iframe another machine's loopback
+dashboard.
 
 ## Development
 
@@ -30,8 +31,10 @@ CDN, analytics, external fonts, or external runtime assets.
 
 The view model excludes process accounts, owners, user identifiers, arguments, and environment variables. Its log
 record is an exact closed metadata/body union: metadata contains only observation time, source, severity, and event
-code; a body is either omitted or the bounded `REDACTED_LOCAL_ONLY` contract object. There is no summary, arbitrary
-structured-field map, or raw-body property. Display labels are derived only from `event_code`, never message text.
+code; a body is either omitted or the bounded `REDACTED_LOCAL_ONLY` contract object. There is no arbitrary
+structured-field map or raw-body property. The optional persisted summary contains fixed source/severity counts and
+coverage only; it excludes bodies, event codes, identities, and arbitrary source queries. Display labels for current
+events are derived only from `event_code`, never message text.
 
 ## Use
 
@@ -56,6 +59,13 @@ bearer token only in memory, enforces the contract response ceilings, and parses
 responses. Trends request the six code-owned metric identifiers at `/api/v1/metrics/series`; the adapter preserves null
 gaps, actual sample resolution, support state, and truncation metadata. The optional data-source method lets remote
 consumers omit local history rather than inventing it from snapshots.
+
+`getLogSummary(range, signal?)` is similarly optional. The local adapter calls the fixed
+`/api/v1/logs/summary?range=1h|6h|24h|7d` endpoint with a 256-KiB response ceiling. The Logs view loads it independently
+from the current snapshot, keeps `GAP`, `UNKNOWN`, and `PARTIAL` coverage visible even when captured counts are known,
+and renders null counts as unavailable rather than zero. Unknown additive response fields are discarded by the client;
+known fields, fixed grids, count totals, time ordering, privacy literals, and source-status combinations remain
+validated. The range selector never controls collection and the dashboard exposes no source configuration action.
 
 `getContainerInventory(signal?)` is also optional on `ObserverDataSource`. The local adapter calls
 `/api/v1/containers?limit=500`, applies the one-MiB ceiling and maps the closed inventory contract independently of

@@ -27,6 +27,21 @@
 4. API/UI slice: explicit source startup settings, current/capability projection, closed summary schema, optional source,
    histogram/filter/status presentation and native service smoke. Extend background settings without enabling sources
    in older settings; maintain uninstall/upgrade behavior.
+
+   The summary UI is an independent region within Logs, with its own `1h`/`6h`/`24h`/`7d` selector and request
+   lifecycle. It does not gate or reset the recent memory/session list and its filters. Aggregate captured/discarded
+   cards lead into at most two source cards. Each source card keeps latest support, collection, freshness, attempt,
+   coverage watermark and reason separate from its historical grid. A stacked, code-colored severity histogram is a
+   visual summary only; a keyboard-focusable table is the complete accessible representation of every bucket. GAP and
+   UNKNOWN use overlays that remain visible over positive bars, because known counts do not prove coverage. Null counts
+   render as `Unavailable`, while covered empty buckets render numeric zero.
+
+   At 390 px, source cards stack, legends wrap, and the bucket table remains in a labeled horizontal-scroll region
+   with visible guidance; at 768/1440 px source cards may use two columns. An unsupported source with an entirely
+   UNKNOWN/null grid keeps its status card but omits the empty histogram/table. Missing optional client support and
+   request failure get bounded in-panel explanations and never blank the current list. The panel explicitly says its
+   persisted values are local-sensitive metadata, omit bodies and identities, omit event codes, and are not eligible
+   for remote upload. No source control, native read, raw JSON, arbitrary query or installation action is presented.
 5. Package the Linux helper under ADR 010's closed manifest-v2 content profile. Embed its build digest in the main
    binary; verify same-commit helper identity, exact archive entries, anonymous install, upgrade/rollback and core
    startup without the helper's dynamic dependencies. Preserve v1 rollback and the existing total archive byte bounds.
