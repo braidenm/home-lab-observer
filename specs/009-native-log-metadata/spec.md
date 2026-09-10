@@ -1,6 +1,7 @@
 # Spec 009: Opt-in native log metadata and meaningful local summaries
 
-Status: Proposed; implementation starts only after Spec 008 is merged. No native source is enabled by this document.
+Status: Proposed contract checkpoint; Spec 008 is merged. Implementation follows preview verification and acceptance
+of the executable contracts. No native source is enabled by this document.
 
 ## Outcome
 
@@ -19,20 +20,24 @@ useful without Platform Demo, with honest cross-platform gaps.
   a controlled environment and no shell. Do not render full event XML, format Windows messages, request journald
   MESSAGE or acquire bodies before trying to redact. macOS returns explicit unsupported without spawning `log show`.
 - L3: Native work runs in a scheduler-owned lane that is independent of the 15-second host snapshot cycle. It starts
-  once immediately and then at fixed 60-second intervals, is single-flight, and never delays or changes host snapshot
-  publication. It is bounded to two sources maximum, a four-second overall deadline,
-  two seconds per source, 512 accepted events plus one lookahead, two MiB output per source, four KiB journal lines,
+  once immediately and then at fixed 60-second intervals and is single-flight. Native acquisition never runs in or
+  reschedules the host lane; brief bounded serialization on the shared SQLite writer is expected. It is bounded to
+  two sources maximum, a four-second overall deadline, two seconds per source, 512 accepted-plus-discarded records
+  plus one deferred lookahead (at most 513 examined), two MiB output per source, four KiB journal lines,
   16 KiB checkpoints and 200 recent in-memory records. Windows reads run in a fixed hidden helper process using the
   same verified executable, with bounded stdin/stdout and parent-enforced kill/wait on timeout; query handles stay on
   their creating OS thread. Linux passes the opaque checkpoint value through a private per-attempt cursor file; the
   fixed `--cursor-file=<code-owned-path>` option necessarily exposes only that non-observed temporary path in argv.
-  Cancellation closes/reaps all native resources. Intersecting byte/row limits can stop work before 512 events.
-  Initial reads capture at most the last five minutes. On a stale/invalid checkpoint, run one metadata-only tail probe:
+  Fixed owner-only per-source cursor staging files are bounded and cleaned after attempts and at restart; random
+  crash-left cursor files must not accumulate. Cancellation closes/reaps all native resources. Intersecting byte/row
+  limits can stop work before 512 records. A nil cursor with reset-pending false is a normal five-minute initial read
+  regardless of checkpoint revision. On a stale/invalid checkpoint, run one metadata-only tail probe:
   Windows queries the fixed channel in reverse order and reads at most one event to produce a bookmark; Linux runs the
   fixed selected-field journal query with `-n 1`, outside the five-minute filter, and accepts only its automatic cursor.
   The probe uses the same source deadline, byte/checkpoint limits and field allowlist, never requests a message/body,
   and contributes neither captured nor discarded counts or covered-through advancement. Atomically persist the proved
-  cursor with `CHECKPOINT_RESET` and an unknown-size gap. If the source is empty, atomically clear the stale cursor and
+  cursor with `CHECKPOINT_RESET` and a bounded attempt-window gap, without estimating unknown lost events. If the source
+  is empty, atomically clear the stale cursor and
   remain `CHECKPOINT_RESET_PENDING`/cursorless; repeat the same bounded probe until a tail is proved, then resume
   normal after-cursor collection on the following cycle.
 - L4: Normalize only UTC time, exact lowercase source alias (`system` or Windows-only `application`), seven code-owned
@@ -54,6 +59,9 @@ useful without Platform Demo, with honest cross-platform gaps.
   `log_metadata_schema_version` value in existing `store_metadata`; the previous preview must ignore the additive
   tables instead of quarantining the database. Do not persist one row for every 60-second attempt. Defaults
   must not create another unbounded history store or write observed metadata into self-diagnostic logs.
+  Persist `PreviousAttemptAt` for every committed success/failure/reset, and update `CoverageThrough` only on caught-up
+  normal success. The collector borrows the store: shutdown joins its loop/native children before the host scheduler
+  closes that shared store.
 - L6: Expose an additive authenticated read-only `GET/HEAD /api/v1/logs/summary?range=1h|6h|24h|7d`, at most 256 KiB,
   with closed `observer-log-summary/v1` schema. Fixed source/severity dimensions, nullable captured/discarded counts,
   non-null coverage buckets and latest source status. Every configured source always receives the fixed grid, including
@@ -62,7 +70,7 @@ useful without Platform Demo, with honest cross-platform gaps.
   No free-text search, arbitrary facet, source parameter or file/log body download. HTTP requests read cached/store
   views and never invoke native readers.
 - L7: Summary latest support/collection/freshness/reason is separate from historical points. An empty successful read
-  is a captured zero; permission failure, unsupported source, missed coverage or failed persistence is a gap. Last
+  is a captured zero; committed permission failure, unsupported source and missed coverage are not healthy zero. Last
   useful recent records can remain explicitly stale after failure. Counts describe captured observations, not all
   machine events. Only successful caught-up reads advance covered-through time to the query start time. Backlogs and
   missed polls remain partial/gaps. A lookahead deferred to the next cursor is not falsely counted as a dropped event;
@@ -76,6 +84,13 @@ useful without Platform Demo, with honest cross-platform gaps.
   FULL covers the complete bucket and has no reason; PARTIAL covers 1..interval-1 seconds and has a reason; GAP and
   UNKNOWN cover zero seconds and have a reason. Source/window coverage is FULL only when all buckets are full, UNKNOWN
   when all are unknown, GAP when no seconds are covered and any bucket is a gap, and PARTIAL otherwise.
+  Store derives at most two half-open UTC coverage segments per commit: with query start `q` and prior committed
+  attempt `p`, first caught-up success covers `[q-5m,q)`; later success covers `[max(p,q-60s),q)` and an older prefix
+  is `GAP/MISSED_COLLECTION`. Failed, non-caught-up and reset attempts cover nothing and record the attempt window as
+  GAP. Clamp starts to `q-7d`. Only explicit GAP is sticky over later overlapping coverage; UNKNOWN is absent evidence
+  and can be resolved. `CoverageThrough` is never an interval start. Persistence failure overlays volatile latest
+  status only; it cannot fabricate durable gaps, counts or an advanced attempt timestamp. The next committed attempt
+  derives missing coverage from the last durable `PreviousAttemptAt`.
 - L8: Populate the existing current log contract, newest first, and enforce `log_limit` 0..200 with truthful total,
   returned and truncated counts. This is explicitly a recent process-memory/session cache: `total_count` is the current
   bounded ring length, `returned_count=min(log_limit,total_count)`, and `truncated=returned_count<total_count`. Summary
@@ -94,7 +109,7 @@ useful without Platform Demo, with honest cross-platform gaps.
 All counters are non-negative JSON-safe integers. Any increment, persisted value or aggregate greater than
 9,007,199,254,740,991 aborts the atomic batch without advancing its checkpoint; values never wrap or silently round.
 The executable contract checkpoint must encode these exact patterns rather than accept provider strings. This
-specification remains proposed until Spec 008 is merged.
+specification remains proposed until its executable contract checkpoint is accepted.
 
 ## Initial platform gaps
 
@@ -105,5 +120,5 @@ to work where supported. Missing MESSAGE_ID uses a fixed severity-derived fallba
 See [the source research](../../docs/architecture-research/004-safe-native-log-observations.md). This is a read-only,
 metadata-only feature, not a SIEM or a new command-execution capability.
 
-The [independent-review decisions](review-decisions.md) define the batch, coverage and failure-state checkpoint to
-freeze with executable contracts before implementation.
+The [wire checkpoint](contract-checkpoint.md) and [internal ports](internal-contracts.md) define the exact contracts
+to freeze before implementation. [Independent-review decisions](review-decisions.md) retain their rationale.

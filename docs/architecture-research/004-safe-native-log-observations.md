@@ -62,6 +62,13 @@ The same manual defines `-n 1` as selecting the most recent journal event and sa
 fixed `-n 1` query with only PRIORITY and MESSAGE_ID requested, no five-minute filter and no MESSAGE, then use the
 automatic cursor as tail proof. It must ignore the record for all captured/discarded counts.
 
+Before implementation, root also checked the [v242 manual itself](https://github.com/systemd/systemd/blob/v242/man/journalctl.xml)
+on 2026-09-09. It contains both cursor-file continuation and selected JSON fields, including automatic cursor/time/boot
+addressing fields. Its numeric line limit selects the newest records: do not apply `-n 513` to ordinary forward backlog
+reads and silently skip older records. Bound streaming output and preserve the last fully examined cursor instead;
+`-n 1` is reserved for explicit reset-tail proof. Verify stale-cursor detection against the native implementation before
+claiming reset recovery; seeking near a missing cursor is not proof of contiguous coverage.
+
 **macOS:** keep native logs explicitly unsupported in this slice. Apple's
 [OSLogStore local access](https://developer.apple.com/documentation/oslog/oslogstore/local()) has entitlement and
 privilege requirements that need a separately packaged native design. The pure-Go preview must not quietly request

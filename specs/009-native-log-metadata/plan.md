@@ -1,19 +1,27 @@
 # Plan
 
 1. Freeze the selected-field reader, normalized event/batch, atomic cursor/rollup store and summary contracts before
-   independent implementation. Put native reading, domain state, storage and HTTP/UI projection behind small interfaces.
+   independent implementation using [the wire checkpoint](contract-checkpoint.md) and
+   [the internal ports](internal-contracts.md). Put native reading, domain state, storage and HTTP/UI projection behind
+   small interfaces.
 2. Native reader slice: fixed Windows WEVTAPI and Linux journalctl adapters, macOS unsupported adapter, bounded fake/native
-   tests. Run the log collector immediately and every 60 seconds in its own single-flight lane; it must never block or
-   reschedule the 15-second host snapshot lane. Never run an unrestricted host-log query during development.
+   tests. Run the log collector immediately and every 60 seconds in its own single-flight acquisition lane; it must
+   not run inside or reschedule the 15-second host lane. Brief bounded shared-store contention is expected. Never run
+   an unrestricted host-log query during development.
    Enforce Windows deadlines with a fixed same-executable helper process, preserving query-handle thread affinity and
    cancellation-before-close ordering inside the child. Linux requires journalctl 242+ with private per-attempt cursor
-   files. Test actual child timeout/reaping, not only context-aware fakes.
+   files with fixed per-source names and restart cleanup. Bound accepted-plus-discarded records to 512 and one deferred
+   sentinel. Test actual child timeout/reaping, not only context-aware fakes.
 3. Store/domain slice: one bounded session-only current ring, compact minute source/severity rollups, coalesced coverage,
    latest-attempt metadata, atomic checkpoint transaction, coverage queries and bounded retention/migration tests.
    Keep SQLite `user_version=2`; use additive tables plus a dedicated log-metadata version in `store_metadata` so the
    prior preview ignores the new tables. Freeze revision-CAS commits, ambiguous-outcome rereads, metadata-only tail
    reset without counts, reset-pending empty-source behavior and caught-up query-start coverage from
-   review-decisions.md. Do not introduce cyclic package dependencies between readers, history and projection.
+   internal-contracts.md. Store derives conservative 5-minute/60-second coverage from `PreviousAttemptAt`, retains
+   sticky explicit gaps, resolves unknown cells only with evidence, and clamps starts to seven-day retention.
+   Verify initial empty success, ordinary success, ten-minute missed poll, failure then success, backlog counts,
+   long shutdown and shutdown cancellation/no-commit fixtures. Join log work before the host scheduler closes the
+   borrowed store. Do not introduce cyclic package dependencies between readers, history and projection.
 4. API/UI slice: explicit source startup settings, current/capability projection, closed summary schema, optional source,
    histogram/filter/status presentation and native service smoke. Extend background settings without enabling sources
    in older settings; maintain uninstall/upgrade behavior.

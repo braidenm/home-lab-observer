@@ -1,8 +1,9 @@
-# Contract checkpoint decisions from independent review
+# Rationale from independent contract review
 
 Proposed on 2026-09-09 after a read-only review by `runtime_architecture`. These conservative defaults refine the
 metadata-only slice; they do not enable sources or expand authority. Incorporate them into the accepted ADR and
-executable contract before implementation begins, after Spec 008 merges.
+executable contract before implementation begins, after Spec 008 merges. The authoritative exact checkpoint is
+[the wire contract](contract-checkpoint.md) and [the internal ports](internal-contracts.md); this document is rationale.
 
 1. **Windows hard deadlines:** use one hidden fixed helper process per enabled source (maximum two), executing the
    same verified observer binary in a code-owned internal mode. Pass the private checkpoint through bounded stdin,
@@ -15,8 +16,9 @@ executable contract before implementation begins, after Spec 008 merges.
    temporary path in argv. Never use that temporary file as durable progress: ignore its final cursor, remove it after
    the attempt and atomically persist only the last accepted/fully examined record cursor in our database.
 3. **Atomic progress:** the batch carries expected checkpoint revision, start/finish times, normalized events, next
-   checkpoint, examined/discarded counts, deferred/caught-up flags and stable state/reason. Commit event-time rollups,
-   attempt coverage, checkpoint and incremented revision in one compare-and-swap transaction. An ambiguous outcome
+   checkpoint, examined/discarded counts, deferred/caught-up flags and stable state/reason, not coverage intervals.
+   Store derives coverage and commits it with event-time rollups, checkpoint and incremented revision in one
+   compare-and-swap transaction. An ambiguous outcome
    requires rereading the revision; no blind repeat increment.
 4. **Recoverable reset without counts:** an initial empty checkpoint may capture the last five minutes and may remain
    cursorless when it returns no rows. After an invalid/stale checkpoint, use a fixed metadata-only tail probe outside
@@ -24,17 +26,23 @@ executable contract before implementation begins, after Spec 008 merges.
    event, renders only the selected properties and creates its bookmark. Linux uses fixed `journalctl -n 1` selected
    JSON fields and accepts the automatic `__CURSOR`; it never requests MESSAGE. The probe obeys the ordinary two-second,
    byte, checkpoint and field bounds, contributes no captured or discarded counts or covered-through advancement, and
-   CAS-commits the new cursor with `CHECKPOINT_RESET` and an unknown-size gap. An empty source clears the stale cursor
+   CAS-commits the new cursor with `CHECKPOINT_RESET` and a bounded attempt-window gap, without estimating lost events.
+   Any cursorless checkpoint without reset-pending remains a normal five-minute read regardless of revision.
+   An empty source clears the stale cursor
    and remains `CHECKPOINT_RESET_PENDING`/cursorless; later cycles repeat the bounded probe until one tail record proves a cursor,
    and the cycle after that resumes normal after-cursor reads. Rebuilding skipped historical counts needs a later
    deduplication design.
-5. **Coverage is not a count:** store each attempt and covered-through time separately. Only a successful caught-up
+5. **Coverage is not a count:** retain the latest committed `PreviousAttemptAt` and covered-through watermark, not one
+   row per attempt. Only a successful caught-up
    read advances coverage through its query start time. Histogram events use event timestamps. Backlog, timeout,
-   permission/storage failure and absent polls remain partial/gaps; a successful caught-up empty read can be zero.
+   committed permission failure and absent polls remain partial/gaps; a successful caught-up empty read can be zero.
+   First success proves five minutes, later success at most the final 60 seconds since the prior attempt; older missed
+   time is GAP. Failed/reset attempts prove no coverage. Clamp starts to seven days. Explicit gaps are sticky, while
+   unknown cells may resolve with proof. Storage failure overlays volatile status only and cannot invent durable gaps.
 6. **Intersecting limits:** four KiB is a per-line maximum, not a promise that 513 maximum-sized lines fit into two MiB.
    A stream byte cap may end sooner; only fully examined complete rows can contribute to a trustworthy completed batch.
-   Preserve the last complete cursor, disclose partial/deferred status and reap the reader. At most the first 512 of
-   513 examined lookahead rows commit; the sentinel must be read again, not counted as discarded.
+   Preserve the last complete cursor, disclose partial/deferred status and reap the reader. Accepted plus discarded
+   records total at most 512; a 513th examined record is only a deferred sentinel and must be read again, not discarded.
 7. **Counter meanings:** captured means normalized events committed; discarded means known examined rows intentionally
    skipped, such as invalid or outside retention. Deferred lookahead is not loss; ring eviction and retention expiry
    are not source discards. Unknown loss is a gap, never an invented numeric estimate.
@@ -45,8 +53,9 @@ executable contract before implementation begins, after Spec 008 merges.
 9. **Preset validation:** application is Windows-only and rejected on Linux. macOS never runs a log reader; any displayed
    source request is explicitly unsupported. No automatic aliasing, source substitution or environment enablement.
 10. **Independent cadence and compact persistence:** collect immediately and every 60 seconds in a separate single-flight
-    lane that cannot block the 15-second host snapshot. Persist minute source/severity rollups, coalesced coverage and
-    latest attempt/checkpoint state, not one row per poll. All use the existing writer, retention and WAL budget.
+    acquisition lane outside the 15-second host snapshot. Brief bounded shared-writer contention is expected. Persist
+    minute source/severity rollups, coalesced coverage and latest attempt/checkpoint state, not one row per poll. All use
+    the existing writer, retention and WAL budget. Join log work before the host scheduler closes the borrowed store.
 11. **Current versus history:** one 200-record ring is recent process-memory/session state. Current `total_count` is
     exactly the ring length, `returned_count=min(log_limit,total_count)`, and truncation means the limit is below that
     length. It is valid for a restarted process to show persisted summary history and an empty current ring.

@@ -17,8 +17,9 @@ Linux system logs use journalctl 242+ selected-field output. macOS remains expli
 Bodies are never acquired or exposed by this slice. Native source authority is unchanged: no elevation, new group
 membership, user-selected path/channel/query, shell, remote host or arbitrary command API.
 
-Log work starts immediately and then every 60 seconds in a separate scheduler-owned single-flight lane. It cannot
-block, delay or reschedule the existing 15-second host snapshot cycle. API requests consume cache/store views only.
+Log work starts immediately and then every 60 seconds in a separate scheduler-owned single-flight acquisition lane.
+It does not run in or reschedule the 15-second host cycle; brief bounded shared-database serialization is expected.
+API requests consume cache/store views only. Shutdown joins log work before the host scheduler closes the borrowed store.
 
 Windows reads use a bounded hidden helper invocation of the same verified binary. The child pins its query to its
 creating thread, returns a closed metadata batch and cannot write history. The parent enforces the deadline and reaps
@@ -31,10 +32,17 @@ compare-and-swap prevents replayed batches from incrementing counts twice; an un
 the revision. A stale checkpoint triggers one bounded metadata-only latest-record probe: Windows uses a reverse fixed-
 channel query and bookmark; Linux uses fixed `journalctl -n 1` selected JSON fields and its automatic cursor. The probe
 never requests bodies, adds no counts or covered-through time, and CAS-commits only the proved cursor,
-`CHECKPOINT_RESET` and an unknown-size gap.
+`CHECKPOINT_RESET` and a bounded attempt-window gap, without estimating lost events.
 An empty source stays reset-pending and cursorless until a later probe proves a tail; normal collection resumes on the
 following cycle. Coverage uses caught-up query-start time and remains separate from event-time histogram counts.
 Unknown loss is a gap, never an invented number.
+
+A nil cursor without reset-pending state is a normal five-minute read even when its revision is nonzero. Store derives
+coverage rather than accepting native-reader intervals: first caught-up success proves five minutes; later success
+proves at most the final 60 seconds since the prior committed attempt. Older missed time is a gap. Failed/reset
+attempts prove no coverage. Every committed attempt updates `PreviousAttemptAt`; the latest caught-up watermark is
+status only. Clamp interval starts to seven-day retention. Explicit gaps remain sticky; unknown cells are merely absent
+evidence and can be resolved. Persistence failure can overlay volatile current status but cannot invent durable history.
 
 Recent event codes live only in one 200-record process-memory/session ring. Current counts describe that ring, not
 persisted history; a restart can therefore retain summary history while the current list is empty. Persist no raw
@@ -68,5 +76,6 @@ then start the old binary; never run both versions against the same live state d
 removes old rollups while the new version is active.
 
 See [Spec 009](../../specs/009-native-log-metadata/spec.md), its
-[contract checkpoint](../../specs/009-native-log-metadata/review-decisions.md), and the
+[wire checkpoint](../../specs/009-native-log-metadata/contract-checkpoint.md),
+[internal ports](../../specs/009-native-log-metadata/internal-contracts.md), and the
 [dated primary-source research](../architecture-research/004-safe-native-log-observations.md).
