@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/braidenm/home-lab-observer/internal/buildidentity"
 )
 
 func TestVersionDoesNotStartCollectionOrService(t *testing.T) {
@@ -26,6 +28,34 @@ func TestVersionDoesNotStartCollectionOrService(t *testing.T) {
 		} else if !strings.Contains(out.String(), "Home Lab Observer "+version) {
 			t.Fatalf("missing readable version: %s", out.String())
 		}
+	}
+}
+
+func TestVersionUsesAuthoritativeRecordWithoutChangingWire(t *testing.T) {
+	previous := releaseIdentity
+	defer func() { releaseIdentity = previous }()
+	i := buildidentity.Identity{Role: "observer", Version: "0.1.0-preview.99", Commit: strings.Repeat("a", 40), OS: runtime.GOOS, Arch: runtime.GOARCH}
+	if runtime.GOOS == "linux" {
+		i.HelperSHA256 = strings.Repeat("b", 64)
+	}
+	var err error
+	releaseIdentity, err = buildidentity.Encode(i)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut strings.Builder
+	if runVersion([]string{"--json"}, &out, &errOut) != 0 {
+		t.Fatal("record version failed")
+	}
+	var decoded map[string]any
+	if json.Unmarshal([]byte(out.String()), &decoded) != nil || len(decoded) != 6 || decoded["version"] != i.Version || decoded["commit"] != i.Commit {
+		t.Fatal("record identity or closed wire changed")
+	}
+	releaseIdentity = "private-canary-invalid"
+	out.Reset()
+	errOut.Reset()
+	if runVersion(nil, &out, &errOut) != 1 || out.Len() != 0 || errOut.String() != "BUILD_IDENTITY_INVALID\n" {
+		t.Fatal("invalid record fell back or leaked")
 	}
 }
 

@@ -5,9 +5,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/braidenm/home-lab-observer/internal/buildidentity"
 	"io"
 	"runtime"
 )
+
+// Authoritative for v2 releases; empty only for legacy builds and development.
+var releaseIdentity = ""
 
 type buildVersion struct {
 	SchemaVersion string `json:"schema_version"`
@@ -32,7 +36,12 @@ func runVersion(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "invalid version options")
 		return 2
 	}
-	info := buildVersion{SchemaVersion: "observer-build/v1", Version: version, Commit: commit, OS: runtime.GOOS, Arch: runtime.GOARCH, GoVersion: runtime.Version()}
+	identity, identityErr := buildidentity.Resolve(releaseIdentity, version, commit, "observer", runtime.GOOS, runtime.GOARCH)
+	if identityErr != nil {
+		fmt.Fprintln(stderr, "BUILD_IDENTITY_INVALID")
+		return 1
+	}
+	info := buildVersion{SchemaVersion: "observer-build/v1", Version: identity.Version, Commit: identity.Commit, OS: runtime.GOOS, Arch: runtime.GOARCH, GoVersion: runtime.Version()}
 	var err error
 	if *asJSON {
 		err = json.NewEncoder(stdout).Encode(info)

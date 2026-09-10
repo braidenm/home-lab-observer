@@ -1,10 +1,7 @@
 package releasepack
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -20,7 +17,7 @@ func Verify(directory string) error {
 	// the exact filename set is checked after decoding that version.
 	for _, entry := range entries {
 		info, err := os.Lstat(filepath.Join(directory, entry.Name()))
-		if err != nil || !info.Mode().IsRegular() || info.Size() < 0 || info.Size() > maxArchiveSize {
+		if err != nil || !info.Mode().IsRegular() || info.Size() < 0 || info.Size() > maxArchiveSize || !singleLink(filepath.Join(directory, entry.Name()), info) {
 			return errors.New("OUTPUT_SET_INVALID")
 		}
 	}
@@ -28,15 +25,9 @@ func Verify(directory string) error {
 	if err != nil {
 		return errors.New("MANIFEST_READ_FAILED")
 	}
-	var manifest Manifest
-	decoder := json.NewDecoder(bytes.NewReader(manifestBytes))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&manifest); err != nil {
-		return errors.New("MANIFEST_INVALID")
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
-		return errors.New("MANIFEST_INVALID")
+	manifest, err := DecodeManifest(manifestBytes)
+	if err != nil {
+		return err
 	}
 	if err := validateManifest(manifest, directory); err != nil {
 		return err
@@ -81,8 +72,8 @@ func Verify(directory string) error {
 }
 
 func validateManifest(manifest Manifest, directory string) error {
-	if manifest.SchemaVersion != SchemaVersion || !validVersion(manifest.Version) || manifest.Tag != "v"+manifest.Version || manifest.Repository != Repository || !commitPattern.MatchString(manifest.CommitSHA) || manifest.SigningPolicy != SigningPolicy || len(manifest.Assets) != len(targets) {
-		return errors.New("MANIFEST_INVALID")
+	if err := validateManifestShape(manifest); err != nil {
+		return err
 	}
 	for index, target := range targets {
 		asset := manifest.Assets[index]
@@ -95,6 +86,9 @@ func validateManifest(manifest Manifest, directory string) error {
 		hash, size, err := hashFileBounded(filepath.Join(directory, filename), maxArchiveSize)
 		if err != nil || hash != asset.SHA256 || size != asset.SizeBytes {
 			return errors.New("ASSET_MISMATCH")
+		}
+		if err := verifyArchive(filepath.Join(directory, filename), asset); err != nil {
+			return err
 		}
 	}
 	return nil
