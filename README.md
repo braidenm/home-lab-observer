@@ -65,6 +65,8 @@ It adds opt-in Windows/Linux event metadata and meaningful severity trends witho
 host/Docker monitoring. Charts distinguish captured counts, proven empty periods and missing coverage; Linux results
 describe only logs accessible to the running account. macOS native logs, raw bodies and remote log upload remain later
 work. No installation grants elevated permissions or enables log collection automatically.
+The [in-development operator guide](docs/native-log-history.md) explains source selection, history, rollback and
+the [accepted Windows reset-detection limitation](docs/adr/011-windows-log-continuation-proof.md).
 
 ## Native snapshot preview
 
