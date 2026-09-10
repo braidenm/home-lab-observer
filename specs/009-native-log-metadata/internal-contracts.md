@@ -107,6 +107,13 @@ historical codes and a lower rank wins. There is no lexical/arbitrary fallback. 
 latest-status aggregation matrix. `LOG_STORAGE_UNAVAILABLE` is a separate new status-only reason for a definite
 persistence-write failure visible in the current process; it is never a historical gap reason.
 
+Additional closed source-status reasons are `NO_VISIBLE_JOURNAL` (no visible initial journal evidence),
+`LOG_HELPER_UNAVAILABLE` (missing helper/loader/library/required symbol), and `LOG_HELPER_MISMATCH`
+(digest/build/protocol identity mismatch). Their committed attempt gaps use `READER_FAILED`; latest status preserves
+the specific code. `PLATFORM_UNSUPPORTED` likewise maps to `READER_FAILED` if an unavailable attempt is committed.
+`LOG_SOURCES_DISABLED` and `SOURCE_PARTIAL` are aggregate/cache codes, never persisted gap reasons. Endpoint absence
+uses `LOG_SUMMARY_UNAVAILABLE` Problem Details, not a fabricated historical response. No raw native error is exposed.
+
 ## Checkpoint and bounded reader
 
 ```go

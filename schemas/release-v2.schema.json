@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:home-lab-observer:schema:release:v2",
+  "title": "Home Lab Observer release manifest v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "version", "tag", "repository", "commit_sha", "signing_policy", "assets"],
+  "properties": {
+    "schema_version": { "const": "observer-release/v2" },
+    "version": { "$ref": "urn:home-lab-observer:schema:release:v1#/properties/version" },
+    "tag": { "$ref": "urn:home-lab-observer:schema:release:v1#/properties/tag" },
+    "repository": { "const": "braidenm/home-lab-observer" },
+    "commit_sha": { "$ref": "urn:home-lab-observer:schema:release:v1#/properties/commit_sha" },
+    "signing_policy": { "const": "UNSIGNED_PREVIEW_WITH_CHECKSUMS_AND_PROVENANCE" },
+    "assets": {
+      "type": "array", "minItems": 6, "maxItems": 6, "uniqueItems": true,
+      "items": { "$ref": "#/$defs/asset" },
+      "allOf": [
+        { "$ref": "urn:home-lab-observer:schema:release:v1#/$defs/oneLinuxAMD64" },
+        { "$ref": "urn:home-lab-observer:schema:release:v1#/$defs/oneLinuxARM64" },
+        { "$ref": "urn:home-lab-observer:schema:release:v1#/$defs/oneDarwinAMD64" },
+        { "$ref": "urn:home-lab-observer:schema:release:v1#/$defs/oneDarwinARM64" },
+        { "$ref": "urn:home-lab-observer:schema:release:v1#/$defs/oneWindowsAMD64" },
+        { "$ref": "urn:home-lab-observer:schema:release:v1#/$defs/oneWindowsARM64" }
+      ]
+    }
+  },
+  "$defs": {
+    "helper": {
+      "type": "object", "additionalProperties": false,
+      "required": ["filename", "sha256", "size_bytes"],
+      "properties": {
+        "filename": { "const": "observer-journal-helper" },
+        "sha256": { "$ref": "urn:home-lab-observer:schema:release:v1#/$defs/asset/properties/sha256" },
+        "size_bytes": { "type": "integer", "minimum": 1, "maximum": 209715200 }
+      }
+    },
+    "asset": {
+      "type": "object", "additionalProperties": false,
+      "required": ["os", "arch", "filename", "sha256", "size_bytes", "format", "download_url", "content_profile", "journal_helper"],
+      "properties": {
+        "os": { "enum": ["linux", "darwin", "windows"] },
+        "arch": { "enum": ["amd64", "arm64"] },
+        "filename": { "$ref": "urn:home-lab-observer:schema:release:v1#/$defs/asset/properties/filename" },
+        "sha256": { "$ref": "urn:home-lab-observer:schema:release:v1#/$defs/asset/properties/sha256" },
+        "size_bytes": { "$ref": "urn:home-lab-observer:schema:release:v1#/$defs/asset/properties/size_bytes" },
+        "format": { "enum": ["tar.gz", "zip"] },
+        "download_url": { "$ref": "urn:home-lab-observer:schema:release:v1#/$defs/asset/properties/download_url" },
+        "content_profile": { "enum": ["native-core-v1", "linux-journal-helper-v1"] },
+        "journal_helper": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/helper" }] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "os": { "const": "linux" } }, "required": ["os"] },
+          "then": { "properties": { "content_profile": { "const": "linux-journal-helper-v1" }, "journal_helper": { "$ref": "#/$defs/helper" }, "format": { "const": "tar.gz" } } },
+          "else": { "properties": { "content_profile": { "const": "native-core-v1" }, "journal_helper": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "os": { "const": "windows" } }, "required": ["os"] },
+          "then": { "properties": { "format": { "const": "zip" } } },
+          "else": { "properties": { "format": { "const": "tar.gz" } } }
+        }
+      ]
+    }
+  }
+}
