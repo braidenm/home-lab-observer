@@ -30,6 +30,26 @@ function Invoke-OwnedPublisher([string] $Path, [string] $Phase) {
     if ($LASTEXITCODE -ne 0) { Fail 'owned fixture publisher failed' }
 }
 
+function Wait-OwnedRecords([string] $Phase) {
+    if ($Phase -cne 'before' -and $Phase -cne 'after') { Fail 'unknown record readiness phase' }
+    $expected = if ($Phase -ceq 'before') { 2 } else { 1 }
+    $watch = [Diagnostics.Stopwatch]::StartNew()
+    while ($watch.Elapsed -lt [TimeSpan]::FromSeconds(10)) {
+        if ($Phase -ceq 'before') {
+            $systemCount = [OwnedEventFixtureMetadataProbe]::SystemBeforeCount()
+            $applicationCount = [OwnedEventFixtureMetadataProbe]::ApplicationBeforeCount()
+        } else {
+            $systemCount = [OwnedEventFixtureMetadataProbe]::SystemAfterCount()
+            $applicationCount = [OwnedEventFixtureMetadataProbe]::ApplicationAfterCount()
+        }
+        if ($systemCount -lt 0 -or $applicationCount -lt 0) { Fail 'owned fixture record readiness query failed' }
+        if ($systemCount -gt $expected -or $applicationCount -gt $expected) { Fail 'owned fixture record count exceeded its fixed bound' }
+        if ($systemCount -eq $expected -and $applicationCount -eq $expected) { return }
+        Start-Sleep -Milliseconds 25
+    }
+    Fail 'owned fixture records did not become visible before the fixed deadline'
+}
+
 function Test-WevtMissing([string] $Kind, [string] $Name) {
     if ($Kind -eq 'provider' -and $Name -ceq $provider) { $exitCode = [OwnedEventFixtureMetadataProbe]::Publisher() }
     elseif ($Kind -eq 'channel' -and $Name -ceq $systemChannel) { $exitCode = [OwnedEventFixtureMetadataProbe]::SystemChannel() }
@@ -103,6 +123,12 @@ public static class OwnedEventFixtureMetadataProbe
     private const int MaxPublisherCharacters = 2048;
     private const int ErrorNoMoreItems = 259;
     private const int MissingProvider = 15002;
+    private const int EvtQueryChannelPath = 0x1;
+    private const int EvtQueryForwardDirection = 0x100;
+    private const string SystemBeforeQuery = "*[System[Provider[@Name='BraidenM-HomeLabObserver-NativeFixture'] and (EventID=101 or EventID=102)]]";
+    private const string ApplicationBeforeQuery = "*[System[Provider[@Name='BraidenM-HomeLabObserver-NativeFixture'] and (EventID=201 or EventID=202)]]";
+    private const string SystemAfterQuery = "*[System[Provider[@Name='BraidenM-HomeLabObserver-NativeFixture'] and EventID=103]]";
+    private const string ApplicationAfterQuery = "*[System[Provider[@Name='BraidenM-HomeLabObserver-NativeFixture'] and EventID=203]]";
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [DllImport("wevtapi.dll", ExactSpelling = true, SetLastError = true)]
@@ -116,6 +142,15 @@ public static class OwnedEventFixtureMetadataProbe
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [DllImport("wevtapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
     private static extern IntPtr EvtOpenChannelConfig(IntPtr session, string channelPath, int flags);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("wevtapi.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
+    private static extern IntPtr EvtQuery(IntPtr session, string path, string query, int flags);
+
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("wevtapi.dll", ExactSpelling = true, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EvtNext(IntPtr resultSet, int eventsSize, [Out] IntPtr[] events, int timeout, int flags, out int returned);
 
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [DllImport("wevtapi.dll", ExactSpelling = true, SetLastError = true)]
@@ -153,6 +188,10 @@ public static class OwnedEventFixtureMetadataProbe
     }
     public static int SystemChannel() { return Probe(EvtOpenChannelConfig(IntPtr.Zero, SystemChannelName, 0)); }
     public static int ApplicationChannel() { return Probe(EvtOpenChannelConfig(IntPtr.Zero, ApplicationChannelName, 0)); }
+    public static int SystemBeforeCount() { return Count(SystemChannelName, SystemBeforeQuery, 2); }
+    public static int ApplicationBeforeCount() { return Count(ApplicationChannelName, ApplicationBeforeQuery, 2); }
+    public static int SystemAfterCount() { return Count(SystemChannelName, SystemAfterQuery, 1); }
+    public static int ApplicationAfterCount() { return Count(ApplicationChannelName, ApplicationAfterQuery, 1); }
 
     private static int Probe(IntPtr handle)
     {
@@ -162,6 +201,44 @@ public static class OwnedEventFixtureMetadataProbe
         }
         if (!EvtClose(handle)) return 1;
         return 0;
+    }
+
+    private static int Count(string channel, string queryText, int expected)
+    {
+        IntPtr query = EvtQuery(IntPtr.Zero, channel, queryText, EvtQueryChannelPath | EvtQueryForwardDirection);
+        if (query == IntPtr.Zero) return -1;
+        int count = 0;
+        try {
+            while (count <= expected) {
+                IntPtr[] events = new IntPtr[1];
+                int returned;
+                bool found = EvtNext(query, 1, events, 0, 0, out returned);
+                int nextError = Marshal.GetLastWin32Error();
+                if (!found) {
+                    if (events[0] != IntPtr.Zero) {
+                        EvtClose(events[0]);
+                        count = -1;
+                        break;
+                    }
+                    if (nextError == ErrorNoMoreItems && returned == 0) break;
+                    count = -1;
+                    break;
+                }
+                if (returned != 1 || events[0] == IntPtr.Zero) {
+                    if (events[0] != IntPtr.Zero) EvtClose(events[0]);
+                    count = -1;
+                    break;
+                }
+                if (!EvtClose(events[0])) {
+                    count = -1;
+                    break;
+                }
+                count++;
+            }
+        } finally {
+            if (!EvtClose(query)) count = -1;
+        }
+        return count;
     }
 }
 '@
@@ -233,6 +310,7 @@ try {
         Fail 'fixture registration was not observable'
     }
     Invoke-OwnedPublisher $publisher 'before'
+    Wait-OwnedRecords 'before'
 
     $systemBefore = Join-Path $ownedRoot 'system-before.evtx'
     $applicationBefore = Join-Path $ownedRoot 'application-before.evtx'
@@ -242,6 +320,7 @@ try {
     Invoke-Quiet 'wevtutil.exe' @('cl', $systemChannel)
     Invoke-Quiet 'wevtutil.exe' @('cl', $applicationChannel)
     Invoke-OwnedPublisher $publisher 'after'
+    Wait-OwnedRecords 'after'
     $systemAfter = Join-Path $ownedRoot 'system-after.evtx'
     $applicationAfter = Join-Path $ownedRoot 'application-after.evtx'
     Invoke-Quiet 'wevtutil.exe' @('epl', $systemChannel, $systemAfter, "/q:*[System[Provider[@Name='$provider'] and EventID=103]]")
