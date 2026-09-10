@@ -55,6 +55,28 @@ func TestSchemaScenarioContracts(t *testing.T) {
 		}
 		t.Logf("SCHEMA_SCENARIO metric-series %s", strings.TrimSpace(response.Body.String()))
 	}
+
+	logAt, attempted := now.Add(-time.Minute), now
+	logSource := &fakeLogSource{snapshot: logobs.Snapshot{
+		Status:     logobs.Status{SupportState: logobs.SupportSupported, CollectionState: logobs.CollectionOK, Freshness: logobs.FreshnessCurrent, ObservedAt: &logAt, AttemptedAt: &attempted},
+		TotalCount: 1,
+		Events:     []logobs.Event{{ObservedAt: logAt, Source: logobs.SourceSystem, Severity: logobs.SeverityError, EventCode: "SYSTEMD_PRIORITY_3"}},
+	}}
+	handler := newTestHandlerWithLogs(t, fakeSource{current: current, ok: true}, handlerReader{}, logSource, now)
+	response := serve(handler, http.MethodGet, "/api/v1/snapshots/current?section=logs&include_log_bodies=true", testToken, "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("current logs status=%d body=%s", response.Code, response.Body.String())
+	}
+	t.Logf("SCHEMA_SCENARIO current-snapshot %s", strings.TrimSpace(response.Body.String()))
+
+	reason := logobs.ReasonPermissionDenied
+	logSource.snapshot.Status = logobs.Status{SupportState: logobs.SupportPermissionDenied, CollectionState: logobs.CollectionNotRun, Freshness: logobs.FreshnessUnknown, AttemptedAt: &attempted, ReasonCode: &reason}
+	handler = newTestHandlerWithLogs(t, fakeSource{current: current, ok: true}, handlerReader{}, logSource, now)
+	response = serve(handler, http.MethodGet, "/api/v1/snapshots/current?section=logs", testToken, "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("retained logs status=%d body=%s", response.Code, response.Body.String())
+	}
+	t.Logf("SCHEMA_SCENARIO current-snapshot %s", strings.TrimSpace(response.Body.String()))
 }
 
 func TestContainerSchemaScenarioContract(t *testing.T) {

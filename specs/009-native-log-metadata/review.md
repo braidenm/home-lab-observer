@@ -179,6 +179,18 @@ development host's permissive ancestors, and must pass rather than skip in CI.
 Linux native filesystem and child tests remain required CI evidence. This slice
 does not enable sources, install a helper or claim packaged native support.
 
+## Current log API and retained-evidence review
+
+Root independently reviewed typed metadata projection, cache-only source calls, section selection, 120-second
+log-specific freshness, capability states, and the narrow log-only client/schema exception for stale evidence.
+Review found two valid empty states that the first schema/client draft rejected: initial unavailable failure and
+failure following a prior healthy empty cycle. Both now preserve their true failure/freshness/time without inventing
+records. The log client also requires the exact truncation/count relationship.
+
+Full combined Go tests and vet, closed contract tests, and 14 direct Go-handler/schema scenarios passed locally.
+The dashboard's compiled assets were regenerated for the changed parser; UI tests, typechecking and deterministic
+embedding remain mandatory before merge. Native runtime activation and installer integration remain separate gates.
+
 ## Release identity and paired archive review
 
 Root independently reviewed the v2 package profile, authoritative identity framing/scan, strict manifest parsing,

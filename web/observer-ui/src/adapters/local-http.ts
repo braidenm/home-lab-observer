@@ -328,7 +328,7 @@ export function mapCurrentSnapshot(value: unknown): CurrentSnapshot {
         exactKeys(item, ["id_alias", "name", "image", "state", "cpu_percent", "memory_bytes"]);
         return { idAlias: boundedText(item.id_alias, 1, 64), name: boundedText(item.name, 1, 128), image: boundedText(item.image, 1, 256), state: boundedText(item.state, 1, 32), cpuPercent: boundedNumber(item.cpu_percent, 0, 100), memoryBytes: nonNegativeInteger(item.memory_bytes) };
       }),
-      logs: mapListSection(sections.logs, 200, mapLogRecord),
+      logs: mapLogSection(sections.logs),
       observer: mapListSection(sections.observer, 32, (entry) => {
         const item = object(entry);
         exactKeys(item, ["name", "state", "value", "unit"]);
@@ -506,6 +506,30 @@ function mapListSection<T>(value: unknown, maximumItems: number, mapItem: (value
   const items = boundedArray(item.items, 0, maximumItems).map(mapItem);
   if (returnedCount !== items.length || returnedCount > totalCount || (!truncated && totalCount > returnedCount)) throw new Error("list section counts are inconsistent");
   assertNonSupportedSectionIsEmpty(quality, totalCount === 0 && returnedCount === 0 && !truncated && items.length === 0);
+  return { ...quality, totalCount, returnedCount, truncated, items };
+}
+
+function mapLogSection(value: unknown): ListSection<LogRecord> {
+  const item = object(value);
+  exactKeys(item, ["support_state", "collection_state", "freshness", "observed_at", "reason_code", "total_count", "returned_count", "truncated", "items"]);
+  const quality = mapQuality(item);
+  const totalCount = integer(item.total_count, 0, 200);
+  const returnedCount = integer(item.returned_count, 0, 200);
+  const truncated = boolean(item.truncated);
+  const items = boundedArray(item.items, 0, 200).map(mapLogRecord);
+  if (returnedCount !== items.length || returnedCount > totalCount || truncated !== (returnedCount < totalCount)) throw new Error("log list section counts are inconsistent");
+  if (quality.supportState !== "SUPPORTED") {
+    const nonSupportedCollectionIsTruthful = quality.supportState === "UNAVAILABLE"
+      ? quality.collectionState === "FAILED" || quality.collectionState === "NOT_RUN"
+      : quality.collectionState === "NOT_RUN";
+    const emptyUnknown = nonSupportedCollectionIsTruthful && quality.freshness === "UNKNOWN" && quality.observedAt === null && quality.reasonCode !== null && totalCount === 0 && returnedCount === 0 && !truncated && items.length === 0;
+    const retainedCollectionIsTruthful = quality.supportState === "UNAVAILABLE"
+      ? quality.collectionState === "FAILED" || quality.collectionState === "NOT_RUN"
+      : quality.collectionState === "NOT_RUN";
+    const retainedStale = quality.freshness === "STALE" && quality.observedAt !== null && quality.reasonCode !== null && totalCount > 0 && retainedCollectionIsTruthful;
+    const emptyStaleUnavailable = quality.supportState === "UNAVAILABLE" && quality.collectionState === "FAILED" && quality.freshness === "STALE" && quality.observedAt !== null && quality.reasonCode !== null && totalCount === 0 && returnedCount === 0 && !truncated && items.length === 0;
+    if (!emptyUnknown && !retainedStale && !emptyStaleUnavailable) throw new Error("non-supported log section must be empty or explicitly retain stale evidence");
+  }
   return { ...quality, totalCount, returnedCount, truncated, items };
 }
 

@@ -13,6 +13,7 @@ import (
 	"github.com/braidenm/home-lab-observer/internal/containerobs"
 	"github.com/braidenm/home-lab-observer/internal/diagnostics"
 	"github.com/braidenm/home-lab-observer/internal/history"
+	"github.com/braidenm/home-lab-observer/internal/logobs"
 	"github.com/braidenm/home-lab-observer/internal/projection"
 	"github.com/braidenm/home-lab-observer/internal/scheduler"
 	"github.com/braidenm/home-lab-observer/internal/series"
@@ -21,6 +22,7 @@ import (
 
 const requestTimeout = 5 * time.Second
 const snapshotStaleAfter = 45 * time.Second
+const logSnapshotStaleAfter = 120 * time.Second
 
 type DiagnosticsSource interface{ Health() diagnostics.Health }
 
@@ -31,6 +33,7 @@ type Source interface {
 }
 
 type ContainerSource interface{ Current() containerobs.Inventory }
+type LogSource interface{ Current() logobs.Snapshot }
 
 type Config struct {
 	Port             int
@@ -39,6 +42,7 @@ type Config struct {
 	Source           Source
 	History          series.Reader
 	ContainerSource  ContainerSource
+	LogSource        LogSource
 	Diagnostics      DiagnosticsSource
 	LogSummarySource LogSummarySource
 	Now              func() time.Time
@@ -100,7 +104,10 @@ func (h *handler) api(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		current, ok := h.config.Source.Current()
-		h.writeJSON(w, r, http.StatusOK, buildCapabilities(h.config.Version, h.config.Now(), current, ok), capabilitiesResponseLimit)
+		if h.config.LogSource != nil {
+			current = projection.WithLogs(current, h.config.LogSource.Current(), 0)
+		}
+		h.writeJSON(w, r, http.StatusOK, buildCapabilities(h.config.Version, h.config.Now(), current, ok, h.config.LogSource != nil), capabilitiesResponseLimit)
 	case "/api/v1/snapshots/current":
 		h.current(w, r)
 	case "/api/v1/containers":
@@ -147,9 +154,13 @@ func (h *handler) current(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	current = addObserverSignals(current, h.config.Now(), h.config.Source.Stats(), h.config.Source.StoreHealth())
+	if query.sections["logs"] && h.config.LogSource != nil {
+		current = projection.WithLogs(current, h.config.LogSource.Current(), query.logLimit)
+	}
 	current = selectSections(current, query)
-	current = projection.RecomputeCollectionState(current)
 	markStale(&current, h.config.Now())
+	markLogStale(&current, h.config.Now())
+	current = projection.RecomputeCollectionState(current)
 	h.writeJSON(w, r, http.StatusOK, current, currentResponseLimit)
 }
 
@@ -216,7 +227,7 @@ func selectSections(current projection.CurrentSnapshot, query currentQuery) proj
 		current.Sections.Containers = projection.EmptySection{ListStatus: notSelectedListStatus(), Items: []any{}}
 	}
 	if !query.sections["logs"] {
-		current.Sections.Logs = projection.EmptySection{ListStatus: notSelectedListStatus(), Items: []any{}}
+		current.Sections.Logs = projection.LogSection{ListStatus: notSelectedListStatus(), Items: []projection.LogRecord{}}
 	}
 	if !query.sections["observer"] {
 		current.Sections.Observer = projection.ObserverSection{ListStatus: notSelectedListStatus(), Items: []projection.ObserverSignal{}}
@@ -247,8 +258,14 @@ func markStale(current *projection.CurrentSnapshot, now time.Time) {
 	stale(&current.Sections.Processes.SectionStatus)
 	stale(&current.Sections.Services.SectionStatus)
 	stale(&current.Sections.Containers.SectionStatus)
-	stale(&current.Sections.Logs.SectionStatus)
 	stale(&current.Sections.Observer.SectionStatus)
+}
+
+func markLogStale(current *projection.CurrentSnapshot, now time.Time) {
+	status := &current.Sections.Logs.SectionStatus
+	if status.ObservedAt != nil && now.UTC().Sub(status.ObservedAt.UTC()) > logSnapshotStaleAfter {
+		status.Freshness = "STALE"
+	}
 }
 
 func isStale(observedAt, now time.Time) bool {

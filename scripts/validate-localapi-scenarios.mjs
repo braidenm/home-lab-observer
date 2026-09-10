@@ -24,5 +24,5 @@ for (const line of run.stdout.split('\n')) {
   if (match[1] === 'log-summary') validateLogSummaryFixture(fixture, 'Go handler log summary scenario');
   count++;
 }
-assert(count >= 12, 'expected all synthetic handler scenarios');
+assert(count >= 14, 'expected all synthetic handler scenarios');
 console.log(`Validated ${count} synthetic handler responses, including container, log summary, and partial/stale/selected/unavailable reads.`);
