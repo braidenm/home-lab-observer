@@ -12,6 +12,7 @@ import (
 
 	"github.com/braidenm/home-lab-observer/internal/diagnostics"
 	"github.com/braidenm/home-lab-observer/internal/history"
+	"github.com/braidenm/home-lab-observer/internal/logobs"
 	"github.com/braidenm/home-lab-observer/internal/projection"
 	"github.com/braidenm/home-lab-observer/internal/scheduler"
 )
@@ -37,6 +38,17 @@ type fakeMetricSource struct {
 type fakeDiagnosticsSource struct{ health diagnostics.Health }
 
 func (source fakeDiagnosticsSource) Health() diagnostics.Health { return source.health }
+
+type fakeLogSource struct {
+	snapshot       logobs.Snapshot
+	privateCanary  string
+	currentCallCnt int
+}
+
+func (source *fakeLogSource) Current() logobs.Snapshot {
+	source.currentCallCnt++
+	return source.snapshot.Clone()
+}
 
 func (s fakeMetricSource) MetricStatuses() map[history.MetricID]projection.SectionStatus {
 	return s.statuses
@@ -267,6 +279,117 @@ func TestMarkStaleUsesEachSectionTimestamp(t *testing.T) {
 	}
 }
 
+func TestCurrentProjectsCacheOnlyLogsWithOmittedBodiesAndIndependentFreshness(t *testing.T) {
+	now := time.Date(2026, 9, 9, 19, 0, 0, 0, time.UTC)
+	logObserved := now.Add(-snapshotStaleAfter - time.Second)
+	attempted := logObserved
+	logSource := &fakeLogSource{
+		privateCanary: "opaque-checkpoint-and-secret-canary",
+		snapshot: logobs.Snapshot{
+			Status:     logobs.Status{SupportState: logobs.SupportSupported, CollectionState: logobs.CollectionOK, Freshness: logobs.FreshnessCurrent, ObservedAt: &logObserved, AttemptedAt: &attempted},
+			TotalCount: 2,
+			Events: []logobs.Event{
+				{ObservedAt: logObserved, Source: logobs.SourceSystem, Severity: logobs.SeverityWarn, EventCode: "SYSTEMD_PRIORITY_4"},
+				{ObservedAt: logObserved.Add(-time.Second), Source: logobs.SourceApplication, Severity: logobs.SeverityError, EventCode: "WIN_500"},
+			},
+		},
+	}
+	handler := newTestHandlerWithLogs(t, fakeSource{current: snapshotAt(now), ok: true}, handlerReader{}, logSource, now)
+	response := serve(handler, http.MethodGet, "/api/v1/snapshots/current?section=logs&log_limit=1&include_log_bodies=true", testToken, "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("current=%d %s", response.Code, response.Body.String())
+	}
+	var current projection.CurrentSnapshot
+	if err := json.Unmarshal(response.Body.Bytes(), &current); err != nil {
+		t.Fatal(err)
+	}
+	logs := current.Sections.Logs
+	if logSource.currentCallCnt != 1 || logs.TotalCount != 2 || logs.ReturnedCount != 1 || !logs.Truncated || len(logs.Items) != 1 {
+		t.Fatalf("calls=%d logs=%+v", logSource.currentCallCnt, logs)
+	}
+	if logs.Freshness != "CURRENT" { // logs age at 120 seconds, independently of the 45-second host threshold
+		t.Fatalf("log freshness=%s", logs.Freshness)
+	}
+	if logs.Items[0].Body.State != "OMITTED" || strings.Contains(response.Body.String(), logSource.privateCanary) || strings.Contains(response.Body.String(), "redacted_text") {
+		t.Fatalf("unsafe log response=%s", response.Body.String())
+	}
+	if current.ObservedAt != now || current.SnapshotID != "snapshot_12345678" || current.Sequence != 9 {
+		t.Fatalf("host envelope was rewritten: %+v", current)
+	}
+
+	response = serve(handler, http.MethodGet, "/api/v1/snapshots/current?section=overview", testToken, "")
+	if response.Code != http.StatusOK || logSource.currentCallCnt != 1 {
+		t.Fatalf("unselected logs called source: status=%d calls=%d", response.Code, logSource.currentCallCnt)
+	}
+}
+
+func TestCurrentRetainsPermissionDeniedRingAsStale(t *testing.T) {
+	now := time.Date(2026, 9, 9, 19, 0, 0, 0, time.UTC)
+	eventAt, attempted := now.Add(-time.Minute), now
+	reason := logobs.ReasonPermissionDenied
+	logSource := &fakeLogSource{snapshot: logobs.Snapshot{
+		Status:     logobs.Status{SupportState: logobs.SupportPermissionDenied, CollectionState: logobs.CollectionNotRun, Freshness: logobs.FreshnessUnknown, AttemptedAt: &attempted, ReasonCode: &reason},
+		TotalCount: 1,
+		Events:     []logobs.Event{{ObservedAt: eventAt, Source: logobs.SourceSystem, Severity: logobs.SeverityInfo, EventCode: "WIN_42"}},
+	}}
+	response := serve(newTestHandlerWithLogs(t, fakeSource{current: snapshotAt(now), ok: true}, handlerReader{}, logSource, now), http.MethodGet, "/api/v1/snapshots/current?section=logs", testToken, "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("current=%d %s", response.Code, response.Body.String())
+	}
+	var current projection.CurrentSnapshot
+	if err := json.Unmarshal(response.Body.Bytes(), &current); err != nil {
+		t.Fatal(err)
+	}
+	logs := current.Sections.Logs
+	if logs.SupportState != "PERMISSION_DENIED" || logs.CollectionState != "NOT_RUN" || logs.Freshness != "STALE" || logs.ObservedAt == nil || !logs.ObservedAt.Equal(eventAt) || len(logs.Items) != 1 {
+		t.Fatalf("logs=%+v", logs)
+	}
+	response = serve(newTestHandlerWithLogs(t, fakeSource{current: snapshotAt(now), ok: true}, handlerReader{}, logSource, now), http.MethodGet, "/api/v1/snapshots/current?section=logs&log_limit=0", testToken, "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("zero-limit current=%d %s", response.Code, response.Body.String())
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &current); err != nil {
+		t.Fatal(err)
+	}
+	logs = current.Sections.Logs
+	if logs.TotalCount != 1 || logs.ReturnedCount != 0 || !logs.Truncated || len(logs.Items) != 0 || logs.Freshness != "STALE" {
+		t.Fatalf("zero-limit logs=%+v", logs)
+	}
+}
+
+func TestLogFreshnessAgesAfterTwoCollectionIntervalsWithoutInventingReason(t *testing.T) {
+	now := time.Date(2026, 9, 9, 19, 0, 0, 0, time.UTC)
+	current := snapshotAt(now)
+	old := now.Add(-logSnapshotStaleAfter - time.Nanosecond)
+	current.Sections.Logs = projection.LogSection{ListStatus: projection.ListStatus{SectionStatus: projection.SectionStatus{SupportState: "SUPPORTED", CollectionState: "OK", Freshness: "CURRENT", ObservedAt: &old}}, Items: []projection.LogRecord{}}
+	markStale(&current, now)
+	if current.Sections.Logs.Freshness != "CURRENT" {
+		t.Fatal("host freshness rule aged logs")
+	}
+	markLogStale(&current, now)
+	if current.Sections.Logs.Freshness != "STALE" || current.Sections.Logs.ReasonCode != nil {
+		t.Fatalf("log freshness=%+v", current.Sections.Logs.SectionStatus)
+	}
+}
+
+func TestCapabilitiesUseConfiguredLogCacheState(t *testing.T) {
+	now := time.Date(2026, 9, 9, 19, 0, 0, 0, time.UTC)
+	for _, test := range []struct {
+		support logobs.SupportState
+		reason  logobs.ReasonCode
+	}{
+		{logobs.SupportDisabled, logobs.ReasonLogSourcesDisabled},
+		{logobs.SupportUnsupported, logobs.ReasonPlatformUnsupported},
+	} {
+		logSource := &fakeLogSource{snapshot: logobs.Snapshot{Status: logobs.Status{SupportState: test.support, CollectionState: logobs.CollectionNotRun, Freshness: logobs.FreshnessUnknown, ReasonCode: &test.reason}}}
+		response := serve(newTestHandlerWithLogs(t, fakeSource{current: snapshotAt(now), ok: true}, handlerReader{}, logSource, now), http.MethodGet, "/api/v1/capabilities", testToken, "")
+		want := `"name":"logs","support_state":"` + string(test.support) + `","reason_code":"` + string(test.reason) + `"`
+		if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), want) {
+			t.Fatalf("capabilities=%d %s", response.Code, response.Body.String())
+		}
+	}
+}
+
 func TestSeriesUsesBuilderAndConvertsFailuresToSafeProblems(t *testing.T) {
 	now := time.Date(2026, 9, 9, 18, 0, 0, 0, time.UTC)
 	reader := handlerReader{samples: map[history.MetricID][]history.Sample{
@@ -331,7 +454,8 @@ func snapshotAt(at time.Time) projection.CurrentSnapshot {
 			Overview:    projection.OverviewSection{SectionStatus: status, Data: &projection.OverviewData{HostAlias: "local-host", OS: "linux", Architecture: "amd64", CPULogicalCount: 8}},
 			Filesystems: projection.FilesystemSection{ListStatus: projection.ListStatus{SectionStatus: status}, Items: []projection.Filesystem{}},
 			Processes:   projection.ProcessSection{ListStatus: projection.ListStatus{SectionStatus: status}, Items: []projection.Process{}},
-			Services:    projection.EmptySection{ListStatus: unsupported, Items: []any{}}, Containers: projection.EmptySection{ListStatus: unsupported, Items: []any{}}, Logs: projection.EmptySection{ListStatus: unsupported, Items: []any{}},
+			Services:    projection.EmptySection{ListStatus: unsupported, Items: []any{}}, Containers: projection.EmptySection{ListStatus: unsupported, Items: []any{}},
+			Logs:     projection.LogSection{ListStatus: unsupported, Items: []projection.LogRecord{}},
 			Observer: projection.ObserverSection{ListStatus: unsupported, Items: []projection.ObserverSignal{}},
 		},
 	}
@@ -340,6 +464,15 @@ func snapshotAt(at time.Time) projection.CurrentSnapshot {
 func newTestHandler(t *testing.T, source Source, reader handlerReader, now time.Time) http.Handler {
 	t.Helper()
 	handler, err := NewHandler(Config{Port: 9847, Token: testToken, Version: "0.1.0", Source: source, History: reader, Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return handler
+}
+
+func newTestHandlerWithLogs(t *testing.T, source Source, reader handlerReader, logs LogSource, now time.Time) http.Handler {
+	t.Helper()
+	handler, err := NewHandler(Config{Port: 9847, Token: testToken, Version: "0.1.0", Source: source, History: reader, LogSource: logs, Now: func() time.Time { return now }})
 	if err != nil {
 		t.Fatal(err)
 	}

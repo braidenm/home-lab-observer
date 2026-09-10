@@ -9,12 +9,14 @@ import (
 	"unicode/utf8"
 
 	"github.com/braidenm/home-lab-observer/internal/history"
+	"github.com/braidenm/home-lab-observer/internal/logobs"
 	"github.com/braidenm/home-lab-observer/internal/observation"
 )
 
 const CurrentSnapshotVersion = "observer-current-snapshot/v1"
 const MaxProjectedFilesystems = 16
 const MaxProjectedProcesses = 200
+const MaxProjectedLogs = logobs.MaxRecentEvents
 
 type SystemInfo struct {
 	OS           string
@@ -99,6 +101,27 @@ type EmptySection struct {
 	Items []any `json:"items"`
 }
 
+type LogMetadata struct {
+	ObservedAt time.Time `json:"observed_at"`
+	Source     string    `json:"source"`
+	Severity   string    `json:"severity"`
+	EventCode  string    `json:"event_code"`
+}
+
+type LogBody struct {
+	State string `json:"state"`
+}
+
+type LogRecord struct {
+	Metadata LogMetadata `json:"metadata"`
+	Body     LogBody     `json:"body"`
+}
+
+type LogSection struct {
+	ListStatus
+	Items []LogRecord `json:"items"`
+}
+
 type ObserverSignal struct {
 	Name  string  `json:"name"`
 	State string  `json:"state"`
@@ -117,7 +140,7 @@ type Sections struct {
 	Processes   ProcessSection    `json:"processes"`
 	Services    EmptySection      `json:"services"`
 	Containers  EmptySection      `json:"containers"`
-	Logs        EmptySection      `json:"logs"`
+	Logs        LogSection        `json:"logs"`
 	Observer    ObserverSection   `json:"observer"`
 }
 
@@ -137,7 +160,9 @@ func Current(raw observation.Snapshot, system SystemInfo) CurrentSnapshot {
 	unsupported := unsupportedSection("COLLECTOR_NOT_IMPLEMENTED")
 	sections := Sections{
 		Overview: projectOverview(raw, system), Filesystems: projectFilesystems(raw), Processes: projectProcesses(raw),
-		Services: unsupported, Containers: unsupported, Logs: unsupported, Observer: unsupportedObserverSection("COLLECTOR_NOT_IMPLEMENTED"),
+		Services: unsupported, Containers: unsupported,
+		Logs:     LogSection{ListStatus: unsupported.ListStatus, Items: []LogRecord{}},
+		Observer: unsupportedObserverSection("COLLECTOR_NOT_IMPLEMENTED"),
 	}
 	return CurrentSnapshot{
 		SchemaVersion:   CurrentSnapshotVersion,
@@ -153,6 +178,68 @@ func Current(raw observation.Snapshot, system SystemInfo) CurrentSnapshot {
 		},
 		Sections: sections,
 	}
+}
+
+// WithLogs projects only the validated, bounded in-memory log snapshot. It never
+// retains or mutates caller-owned slices and never exposes native checkpoints.
+func WithLogs(current CurrentSnapshot, snapshot logobs.Snapshot, limit int) CurrentSnapshot {
+	if limit < 0 || limit > MaxProjectedLogs || snapshot.Validate() != nil {
+		reason := "INVALID_RESPONSE"
+		current.Sections.Logs = LogSection{
+			ListStatus: ListStatus{SectionStatus: SectionStatus{
+				SupportState: "UNAVAILABLE", CollectionState: "NOT_RUN", Freshness: "UNKNOWN", ReasonCode: &reason,
+			}},
+			Items: []LogRecord{},
+		}
+		return current
+	}
+
+	status := projectLogStatus(snapshot)
+	returned := min(limit, snapshot.TotalCount)
+	items := make([]LogRecord, 0, returned)
+	for _, event := range snapshot.Events[:returned] {
+		items = append(items, LogRecord{
+			Metadata: LogMetadata{ObservedAt: event.ObservedAt.UTC(), Source: string(event.Source), Severity: string(event.Severity), EventCode: event.EventCode},
+			Body:     LogBody{State: "OMITTED"},
+		})
+	}
+	current.Sections.Logs = LogSection{
+		ListStatus: ListStatus{SectionStatus: status, TotalCount: snapshot.TotalCount, ReturnedCount: returned, Truncated: returned < snapshot.TotalCount},
+		Items:      items,
+	}
+	return current
+}
+
+func projectLogStatus(snapshot logobs.Snapshot) SectionStatus {
+	status := snapshot.Status
+	projected := SectionStatus{
+		SupportState: string(status.SupportState), CollectionState: string(status.CollectionState), Freshness: string(status.Freshness),
+		ObservedAt: cloneProjectionTime(status.ObservedAt), ReasonCode: cloneProjectionReason(status.ReasonCode),
+	}
+	// A later not-run result can truthfully retain the last useful ring, but the
+	// observation time then describes those records rather than the failed attempt.
+	if len(snapshot.Events) > 0 && (projected.ObservedAt == nil || projected.Freshness == "UNKNOWN") {
+		at := snapshot.Events[0].ObservedAt.UTC()
+		projected.ObservedAt = &at
+		projected.Freshness = "STALE"
+	}
+	return projected
+}
+
+func cloneProjectionTime(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	copy := value.UTC()
+	return &copy
+}
+
+func cloneProjectionReason(value *logobs.ReasonCode) *string {
+	if value == nil {
+		return nil
+	}
+	copy := string(*value)
+	return &copy
 }
 
 func WithObserverSignals(current CurrentSnapshot, observedAt time.Time, signals []ObserverSignal, degradedReason string) CurrentSnapshot {

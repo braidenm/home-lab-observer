@@ -285,6 +285,39 @@ describe("LocalHttpObserverDataSource", () => {
     const invalidRedactionCount = cloneFixture(logOptInSnapshot);
     invalidRedactionCount.sections.logs.items[0].body.redaction_count = -1;
     expect(() => mapCurrentSnapshot(invalidRedactionCount)).toThrow(/integer/);
+
+    const retainedAfterPermissionFailure = cloneFixture(linuxSnapshot);
+    retainedAfterPermissionFailure.sections.logs.support_state = "PERMISSION_DENIED";
+    retainedAfterPermissionFailure.sections.logs.collection_state = "NOT_RUN";
+    retainedAfterPermissionFailure.sections.logs.freshness = "STALE";
+    retainedAfterPermissionFailure.sections.logs.reason_code = "PERMISSION_DENIED";
+    expect(mapCurrentSnapshot(retainedAfterPermissionFailure).sections.logs).toMatchObject({ supportState: "PERMISSION_DENIED", freshness: "STALE", returnedCount: 1 });
+
+    const unknownWithRetainedData = cloneFixture(retainedAfterPermissionFailure);
+    unknownWithRetainedData.sections.logs.freshness = "UNKNOWN";
+    unknownWithRetainedData.sections.logs.observed_at = null;
+    expect(() => mapCurrentSnapshot(unknownWithRetainedData)).toThrow(/non-supported log section/);
+
+    const falselyHealthyRetainedData = cloneFixture(retainedAfterPermissionFailure);
+    falselyHealthyRetainedData.sections.logs.collection_state = "OK";
+    expect(() => mapCurrentSnapshot(falselyHealthyRetainedData)).toThrow(/non-supported log section/);
+
+    const firstUnavailableFailure = cloneFixture(linuxSnapshot);
+    firstUnavailableFailure.sections.logs = { support_state: "UNAVAILABLE", collection_state: "FAILED", freshness: "UNKNOWN", observed_at: null, reason_code: "READER_FAILED", total_count: 0, returned_count: 0, truncated: false, items: [] };
+    expect(mapCurrentSnapshot(firstUnavailableFailure).sections.logs).toMatchObject({ supportState: "UNAVAILABLE", collectionState: "FAILED", freshness: "UNKNOWN", items: [] });
+
+    const staleUnavailableAfterEmpty = cloneFixture(firstUnavailableFailure);
+    staleUnavailableAfterEmpty.sections.logs.freshness = "STALE";
+    staleUnavailableAfterEmpty.sections.logs.observed_at = "2026-09-09T11:59:00Z";
+    expect(mapCurrentSnapshot(staleUnavailableAfterEmpty).sections.logs).toMatchObject({ supportState: "UNAVAILABLE", collectionState: "FAILED", freshness: "STALE", totalCount: 0 });
+
+    const falseTruncation = cloneFixture(linuxSnapshot);
+    falseTruncation.sections.logs.truncated = true;
+    expect(() => mapCurrentSnapshot(falseTruncation)).toThrow(/log list section counts/);
+
+    const retainedWithUnsafeField = cloneFixture(retainedAfterPermissionFailure);
+    retainedWithUnsafeField.sections.logs.items[0].checkpoint = "opaque-secret";
+    expect(() => mapCurrentSnapshot(retainedWithUnsafeField)).toThrow(/contract field/);
   });
 
   it("parses bounded Problem Details into a typed safe error", async () => {
