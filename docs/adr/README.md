@@ -12,5 +12,6 @@
 | [008](008-local-background-convenience-profile.md) | Accepted | Explicit user-session background lifecycle and bounded self-diagnostics |
 | [009](009-native-log-metadata.md) | Accepted | Opt-in fixed-source metadata with bounded history and honest coverage |
 | [010](010-optional-linux-journal-helper.md) | Accepted | Optional bundled Linux journal helper preserves core portability |
+| [011](011-windows-log-continuation-proof.md) | Accepted | Windows continuation uses selected identity with an explicit non-forensic collision limitation |
 
 Accepted ADRs are immutable except for status and supersession links. Material changes require a new ADR.
