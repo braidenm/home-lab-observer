@@ -102,8 +102,8 @@ func TestLogCoverageRejectsBadTransitions(t *testing.T) {
 		{"same time", logobs.Checkpoint{Revision: 1, PreviousAttemptAt: &q}, func(b *logobs.Batch) { b.ExpectedRevision = 1 }},
 		{"rollback", logobs.Checkpoint{Revision: 1, PreviousAttemptAt: timePtr(q.Add(time.Second))}, func(b *logobs.Batch) { b.ExpectedRevision = 1 }},
 		{"pending normal", logobs.Checkpoint{Revision: 1, ResetPending: true, PreviousAttemptAt: timePtr(q.Add(-time.Minute))}, func(b *logobs.Batch) { b.ExpectedRevision = 1 }},
-		{"unrepresentable derived time", logobs.Checkpoint{}, func(b *logobs.Batch) {
-			b.QueryStartedAt = time.Date(1, 1, 1, 0, 1, 0, 0, time.UTC)
+		{"unrepresentable query time", logobs.Checkpoint{}, func(b *logobs.Batch) {
+			b.QueryStartedAt = time.Date(0, 1, 1, 0, 1, 0, 0, time.UTC)
 			b.StartedAt = b.QueryStartedAt
 			b.FinishedAt = b.QueryStartedAt
 		}},

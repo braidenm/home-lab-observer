@@ -417,8 +417,9 @@ cases. This is conservative precision reduction, not evidence that collection wa
 
 Store independently rejects event/discard timestamps later than `q+2s`, the fixed native acquisition horizon. Native
 readers classify such timestamps as invalid and attribute their known discard to `q`; valid old backlog retains event
-time and is pruned by ordinary retention. Reject a derived attempt interval outside the non-zero RFC 3339 year range
-before changing state; never cast overflowing dates into Unix nanoseconds or unsigned native time.
+time and is pruned by ordinary retention. Clamp derived lower bounds to the earliest non-zero RFC 3339 instant when
+subtracting retention/initial windows near year 1; an empty clipped interval proves no coverage. Reject malformed
+explicit interval input; never cast overflowing dates into Unix nanoseconds or unsigned native time.
 
 ## Collector and cache ownership
 

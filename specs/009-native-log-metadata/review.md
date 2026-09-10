@@ -94,3 +94,20 @@ response is validated by the closed JSON schema and shared semantic validator, i
 non-null partial reasons, large safe counters and nanosecond timestamps. Root independently ran all 12 emitted
 handler scenarios, focused API/domain tests, vet and repository policy successfully. Native wiring, current-event
 projection and UI remain pending; this endpoint slice does not claim those are enabled.
+## SQLite transaction and shared-maintenance review
+
+The optional log Store implementation received independent review of CAS atomicity, rollback, schema isolation,
+timestamp representation, privacy, safe counters and fixed-grid projection. Review found an early year-1 subtraction
+edge; derived floors now clamp without wrapping. Full history tests passed twenty repetitions and vet before the
+maintenance integration. No message body, event code or arbitrary native field is stored in minute history.
+
+Shared maintenance was separately implemented and reviewed by root. All historical row deletions/coverage trims share
+the configured work budget across host and log data, with actual chronological ordering and no host-first starvation.
+Review exposed a future-skew eviction case that could later reconstruct a false full zero. Two bounded durable
+eviction frontiers now prevent that reconstruction, and injected failures prove count/proof/frontier writes roll back
+together. The reviewer independently inspected the root frontier/pressure fixes and reported no blocker.
+
+Combined tests cover a one-row maintenance budget, 5,000 host plus 5,000 log records under pressure, actual combined
+allocation reclamation, fixed-width dates through year 9999, malformed/incompatible optional schema fallback,
+checkpoint preservation, concurrent CAS contenders and cancellation. Root full Go tests, vet, repository policy and
+diff checks pass. This is storage-library evidence; production/native wiring and release proof remain separate gates.
