@@ -63,7 +63,7 @@ Kubernetes action requires its own specification and separately reviewed credent
   `.status.containerStatuses`, `.status.initContainerStatuses` and `.status.ephemeralContainerStatuses`. Each child is
   limited to bounded name, role (`REGULAR`, `INIT` or `EPHEMERAL`), state (`RUNNING`, `WAITING`, `TERMINATED` or
   `UNKNOWN`), nullable ready, bounded nonnegative restart count, nullable start/finish UTC times and nullable
-  nonnegative int32 exit code. Controller output is limited to kind, opaque alias, namespace, bounded name, deletion
+  signed int32 exit code (an exit status is not an observation counter). Controller output is limited to kind, opaque alias, namespace, bounded name, deletion
   state, the selected desired replica value from `.spec.replicas` where that kind defines it, and allowlisted
   current/ready/available/updated status counters. DaemonSet desired count comes from its status. No other spec field
   survives projection.
