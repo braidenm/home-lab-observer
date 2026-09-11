@@ -43,6 +43,6 @@ sudo env HLO_LEDGER_PRESSURE=1 "$fixture_dir/uploadledger.test" \
   -test.run='^TestStoragePressureFixture$' -test.count=3
 ```
 
-The binary remains in the displayed temporary directory for inspection/removal; mounted synthetic data is cleaned
+The binary remains in the chosen temporary directory for inspection/removal; mounted synthetic data is cleaned
 up by the fixture. Initial execution on 2026-09-11 passed three times under Ubuntu WSL. This is allocation-failure
 evidence only, not persistent-disk or power-loss certification.
