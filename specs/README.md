@@ -13,5 +13,6 @@
 | [009 Native log metadata](009-native-log-metadata/spec.md) | Released in preview 3 | Opt-in native metadata, optional Linux helper, compact rollups and honest coverage |
 | [010 Kubernetes inventory](010-kubernetes-inventory/spec.md) | Deferred by owner | Bounded read-only Pods, container status and controller views |
 | [011 Docker container actions](011-container-actions/spec.md) | Proposed; action scope approved, architecture pending | Separately granted start, stop and restart with explicit broker authority and audit |
+| [012 Connected observation](012-connected-observation/spec.md) | Slice A implementation | Explicit numeric-host projection before isolated authenticated delivery |
 
 Each specification owns its requirements, implementation plan, tasks, acceptance evidence, and follow-up decisions. Work that changes behavior must update the relevant specification before implementation.

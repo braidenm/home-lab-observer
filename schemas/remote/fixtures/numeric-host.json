@@ -1,0 +1,48 @@
+{
+  "schema_version": "home-lab-server-snapshot/v1",
+  "projection_profile": "numeric-host/v1",
+  "source_id": "srv_0123456789abcdef0123456789abcdef",
+  "collector_version": "0.1.0-preview.3",
+  "collected_at": "2026-09-10T12:00:00Z",
+  "duration_ms": 125,
+  "sections": {
+    "overview": {
+      "available": true,
+      "operating_system": "Linux",
+      "kernel": "not collected",
+      "uptime_seconds": 86400,
+      "logical_cpu_count": 8,
+      "cpu_usage_percent": 12.5,
+      "load_1": null,
+      "load_5": null,
+      "load_15": null,
+      "memory_total_bytes": 8192,
+      "memory_used_bytes": 4096,
+      "swap_total_bytes": 1024,
+      "swap_used_bytes": 128,
+      "filesystems": [
+        {
+          "key": "filesystem-01",
+          "title": "Filesystem 1",
+          "total_bytes": 10000,
+          "used_bytes": 5000
+        }
+      ]
+    },
+    "containers": {
+      "available": false,
+      "reason_code": "NOT_UPLOAD_ELIGIBLE",
+      "items": []
+    },
+    "processes": {
+      "available": false,
+      "reason_code": "NOT_UPLOAD_ELIGIBLE",
+      "items": []
+    },
+    "services": {
+      "available": false,
+      "reason_code": "NOT_UPLOAD_ELIGIBLE",
+      "items": []
+    }
+  }
+}

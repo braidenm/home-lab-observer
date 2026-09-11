@@ -67,6 +67,10 @@ explains the established patterns informing installation, connectivity, monitori
 These are planned capabilities, not features available in the current preview. Monitoring access will not implicitly
 grant management access.
 
+[Connected observation](specs/012-connected-observation/spec.md) begins with a tested numeric-host egress projection,
+separate from rich local snapshots. This foundation sends nothing by itself: isolated enrollment/upload and hosted
+installation remain upcoming. Local process, container and log details do not automatically become upload-eligible.
+
 ### Native log metadata and history
 
 [Preview 3](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-preview.3) implements
