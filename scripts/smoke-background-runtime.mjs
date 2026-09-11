@@ -70,7 +70,7 @@ try {
 
   console.log("Native background runtime passed nonce stop, history reopen, and diagnostics contract checks.");
 } finally {
-  await rm(temporary, { recursive: true, force: true });
+  await rm(temporary, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
 
 async function startObserver(state, managed) {
@@ -84,14 +84,25 @@ async function startObserver(state, managed) {
   for (const stream of [processHandle.stdout, processHandle.stderr]) {
     stream.on("data", (chunk) => { output = (output + chunk).slice(-16_384); });
   }
-  await until(async () => {
-    if (spawnError) throw spawnError;
-    const response = await fetch(`http://127.0.0.1:${port}/health/live`, { signal: AbortSignal.timeout(2_000) });
-    return response.status === 200;
-  }, processHandle, 45_000);
-  const token = (await readFile(path.join(state, "local-api.token"), "utf8")).trim();
-  assert(/^[A-Za-z0-9_-]{43}$/u.test(token), "runtime did not create a strong local token");
-  return { process: processHandle, origin: `http://127.0.0.1:${port}`, token, output: () => output };
+  try {
+    await until(async () => {
+      if (spawnError) throw spawnError;
+      const response = await fetch(`http://127.0.0.1:${port}/health/live`, { signal: AbortSignal.timeout(2_000) });
+      return response.status === 200;
+    }, processHandle, 45_000);
+    const token = (await readFile(path.join(state, "local-api.token"), "utf8")).trim();
+    assert(/^[A-Za-z0-9_-]{43}$/u.test(token), "runtime did not create a strong local token");
+    return { process: processHandle, origin: `http://127.0.0.1:${port}`, token, output: () => output };
+  } catch (error) {
+    // The caller cannot join a child that startObserver never returned. Release
+    // its SQLite handles before outer cleanup, preserving the startup failure.
+    try {
+      await terminateAndWait(processHandle);
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], "observer startup and child cleanup failed");
+    }
+    throw error;
+  }
 }
 
 async function readDiagnostics(child, validator) {
