@@ -2,8 +2,9 @@ package collector
 
 import (
 	"context"
-	"github.com/braidenm/home-lab-observer/internal/numerichost"
 	"time"
+
+	"github.com/braidenm/home-lab-observer/internal/numerichost"
 )
 
 var ErrNoData = numerichost.ErrNoData

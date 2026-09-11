@@ -184,12 +184,18 @@ func TestProductionDependencyClosure(t *testing.T) {
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skip("crosscompiled test runner: dependency proof runs with Go in CI")
 	}
-	output, err := exec.Command("go", "list", "-deps", "github.com/braidenm/home-lab-observer/internal/numerichost").Output()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, "go", "list", "-deps", "github.com/braidenm/home-lab-observer/internal/numerichost").Output()
 	if err != nil {
 		t.Fatal("dependency graph unavailable")
 	}
 	for _, dependency := range strings.Fields(string(output)) {
-		for _, forbidden := range []string{"/gopsutil/v4/process", "/gopsutil/v4/net", "/internal/collector", "/internal/containerobs", "/internal/logobs", "/internal/uploadstate", "/internal/uploadledger", "net/http"} {
+		const internalPrefix = "github.com/braidenm/home-lab-observer/internal/"
+		if strings.HasPrefix(dependency, internalPrefix) && dependency != internalPrefix+"numerichost" && dependency != internalPrefix+"observation" {
+			t.Fatal("numeric collection gained an unapproved internal dependency", dependency)
+		}
+		for _, forbidden := range []string{"/gopsutil/v4/process", "/gopsutil/v4/net", "net/http"} {
 			if strings.HasSuffix(dependency, forbidden) {
 				t.Fatal("numeric collection gained excluded dependency", dependency)
 			}
