@@ -185,10 +185,12 @@ func (s *Store) openFile(name string, flags int, maxBytes int64) (*os.File, erro
 	}
 	if !after.Mode().IsRegular() ||
 		info.Size() < 0 || info.Size() > maxBytes || privateHandle(f, false) != nil {
-		f.Close()
 		// Replacement can also occur during handle privacy validation, leaving
 		// the formerly valid file unlinked. Reject without misclassifying that race.
+		// Keep the old inode alive until this check finishes: closing it first can
+		// permit inode reuse and make a subsequent replacement appear identical.
 		current, currentErr := s.root.Lstat(name)
+		f.Close()
 		if errors.Is(currentErr, os.ErrNotExist) || (currentErr == nil && !os.SameFile(info, current)) {
 			return nil, ErrUnavailable
 		}

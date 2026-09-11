@@ -32,6 +32,8 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: go test ./...
+      - name: Stress bounded handoff publication races
+        run: go test ./internal/handoff -run TestConcurrentReaderNeverReturnsPartialDocument -count=100
       - name: Run race detector
         if: runner.os == 'Linux'
         run: go test -race ./...
