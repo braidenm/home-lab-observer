@@ -4,6 +4,7 @@ package handoff
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -45,7 +46,7 @@ func TestExtendedACLNativeOwnedFixtures(t *testing.T) {
 				grant = "everyone allow list,search"
 			}
 			fixtureChmod(t, "+a", grant, path)
-			if noExtendedACL(file) != ErrUnsafe {
+			if !errors.Is(noExtendedACL(file), ErrUnsafe) {
 				t.Fatal("extended grant accepted")
 			}
 			fixtureChmod(t, "-N", path)
@@ -55,12 +56,12 @@ func TestExtendedACLNativeOwnedFixtures(t *testing.T) {
 			if file.Close() != nil {
 				t.Fatal("fixture close failed")
 			}
-			if noExtendedACL(file) != ErrUnsafe {
+			if !errors.Is(noExtendedACL(file), ErrUnsafe) {
 				t.Fatal("closed handle accepted")
 			}
 		})
 	}
-	if noExtendedACL(nil) != ErrUnsafe {
+	if !errors.Is(noExtendedACL(nil), ErrUnsafe) {
 		t.Fatal("nil handle accepted")
 	}
 }
@@ -134,12 +135,12 @@ func TestExtendedACLPolicyFailuresAndReleases(t *testing.T) {
 				},
 			}
 			err := checkExtendedACL(7, calls)
-			if (err == nil) != tc.wantOK || (err != nil && err != ErrUnsafe) || len(freed) != tc.wantFreed {
+			if (err == nil) != tc.wantOK || (err != nil && !errors.Is(err, ErrUnsafe)) || len(freed) != tc.wantFreed {
 				t.Fatal("ACL policy or resource lifetime mismatch")
 			}
 		})
 	}
-	if checkExtendedACL(7, aclCalls{errno: func() *int32 { return nil }}) != ErrUnsafe {
+	if !errors.Is(checkExtendedACL(7, aclCalls{errno: func() *int32 { return nil }}), ErrUnsafe) {
 		t.Fatal("missing errno accepted")
 	}
 }
