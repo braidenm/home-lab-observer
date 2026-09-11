@@ -1,6 +1,7 @@
 # ADR 014: Isolated Linux connected-observation canary
 
-Status: Proposed; not approved for installation, credentials or network activation.
+Status: Accepted for C1 pure uploader state-machine contracts only. Installed profile remains Proposed and gated;
+no credentials, installation or network activation in C1.
 Date: 2026-09-11.
 
 ## Decision proposed
@@ -74,5 +75,6 @@ admission, lost-response, expiry, revocation and rollback tests using the real r
 Installation success requires an accepted upload, not process liveness. Keep explicit stop/status/revoke/uninstall and
 immutable side-by-side version rollback. Never downgrade a durable ledger into disposable handoff state.
 
-No owner product decision is required to review this proposal. Privileged installation/canary execution still requires
-explicit scoped authorization. General availability and Windows/macOS remote claims remain gated separately.
+No additional owner product approval is needed for C1. The owner has authorized an eventual own-server canary; execute it
+only after the installation/security gates pass and its exact host/resource scope is verified. General availability and
+Windows/macOS remote claims remain gated separately.

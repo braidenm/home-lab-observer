@@ -1,12 +1,13 @@
 # Proposed slices C–G: uploader and isolated Linux canary
 
-Status: Proposed for independent review and freeze; no implementation or installation authorized by this document alone.
+Status: C1 pure state-machine implementation accepted; installed worker/profile slices remain Proposed and gated.
 Decision: [ADR 014](../../docs/adr/014-linux-connected-canary-workers.md). Keep slice A/B APIs and all local behavior intact.
 
 ## C: portable admission and upload state machine
 
-Dependencies are narrow interfaces: SnapshotSource.Read(expectedServerID), CredentialProvider, Clock, bounded Transport
-and transactional Ledger. The state machine never imports collectors, Docker, process/log readers or filesystem walkers.
+Dependencies are narrow interfaces: SnapshotSource.Read(expectedServerID), Clock, bounded Transport
+and transactional Ledger. The future Transport adapter owns its CredentialProvider; the state machine never receives
+credential bytes. The state machine never imports collectors, Docker, process/log readers or filesystem walkers.
 Test it with in-memory fakes before implementing disk or HTTP adapters. Production worker has no configurable arbitrary
 command, upload path, proxy or collector endpoint.
 
@@ -24,7 +25,7 @@ command, upload path, proxy or collector endpoint.
   collection age before its sequence check. Control/action retries remain entirely separate.
 - Transport result classes: acknowledged, transient/ambiguous, credential rejected, invalid/conflicting request. Terminal
   auth rejection stops uploads until explicit re-enrollment. Invalid/conflicting responses stop for operator diagnosis;
-  do not reset sequence automatically. Final HTTP status/body mappings require actual receiver contract fixtures in C1.
+  do not reset sequence automatically. Frozen receiver facts and conservative mappings are in [receiver-contract.md](receiver-contract.md).
 - Initial proposed timings: collect/poll every 15 seconds, request deadline five seconds; exponential jittered retry
   bounded to 1–60 seconds. Only one request at a time; cancellation joins the worker. No unbounded retries inside a call.
 - Persist at most one pending body and fixed bookkeeping. Bound ledger including temporary files to 1 MiB; no history
@@ -36,13 +37,14 @@ command, upload path, proxy or collector endpoint.
 
 ## D: disk/HTTPS/enrollment adapters, still uninstalled
 
-Use one canonical bounded `observer-upload-ledger/v1` JSON record (maximum 64 KiB), one same-directory exclusive staging
-record and one empty OS writer lock. The record contains binding, allocation watermark, last acknowledged body hash and
-optional pending sequence/body/hash/collection time. Encode sequences as decimal strings with strict positive signed-64-bit
-validation; store the exact pending bytes as canonical base64. Sync staging, rename, then sync the directory before send.
-On uncertain disk commit, stop the operation and reopen/reconcile the durable record before sending; never assume rollback.
-Use a separate library from disposable handoff; no SQLite or WAL is needed for this one-record transaction. Freeze exact
-required-key and migration tests before code. The ledger never contains the credential. Distinguish initial enrollment
+Before freezing D1, compare reuse of existing `modernc.org/sqlite v1.58.0` (already used by history, no new dependency)
+against a new atomic-record adapter. A separate bounded one-row SQLite database with synchronous FULL and rollback journal
+is the leading candidate; prove locking, total database/journal bounds, full sequence precision, corrupt-state refusal,
+cross-platform crash recovery and transaction uncertainty before selecting it. Do not put upload state into the host history
+database or treat disposable handoff durability as sufficient. The logical record contains binding, allocation watermark,
+last acknowledged body hash, optional pending sequence/body/hash/collection time, and terminal outcome. On uncertain commit,
+stop the operation and reopen/reconcile before sending; never assume rollback. Freeze adapter format and migration tests
+in D1, independently of C1's pure Ledger interface. The ledger never contains the credential. Distinguish initial enrollment
 from lost initialized state using root-provisioned install metadata and credential presence; do not infer from missing files.
 
 HTTP adapter fixes the documented connector routes beneath one reviewed HTTPS origin. Verify certificates, reject redirects,
@@ -99,7 +101,8 @@ run public PR code on private infrastructure. Missing enforcement is a failed pr
 
 ## G: explicit owner canary and operation
 
-After review and all acceptance gates, obtain scoped owner authorization, create a separate canary registration and install
+After review and all acceptance gates, verify the exact target/resource scope under the owner's existing canary authorization,
+create a separate canary registration and install
 alongside the unchanged legacy connector. Do not retire or overwrite it. Verify hosted identity/freshness and sustained
 bounded storage; publish install support only after evidence. Print fixed status/stop/restart/revoke/uninstall commands.
 Uninstall stops/joins both workers before owned resource cleanup; credential/ledger removal is explicit and recoverability
