@@ -25,6 +25,9 @@ open owner preference. Metrics, Events, Jobs and node-management extensions rema
 
 ## 2. Connect installed observers to the hosted home-lab dashboard: next
 
+[Spec 012](../specs/012-connected-observation/spec.md) starts with the explicit numeric-host projection and receiver
+compatibility proof. Subsequent isolation, transport, catalog and installation gates remain visible in its task list.
+
 Audit Platform Demo enrollment, owner/delegation permissions, installer catalog and legacy upload compatibility.
 Deliver OS-aware downloads, one-use enrollment, scoped renewable credentials, bounded authenticated outbound delivery,
 revocation and visible connection health. Preserve existing agents during migration. Reuse the observer's

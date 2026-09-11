@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:home-lab-observer:schema:remote-numeric-host:v1",
+  "title": "Restricted numeric-host producer profile for legacy server snapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "projection_profile",
+    "source_id",
+    "collector_version",
+    "collected_at",
+    "duration_ms",
+    "sections"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "home-lab-server-snapshot/v1"
+    },
+    "projection_profile": {
+      "const": "numeric-host/v1"
+    },
+    "source_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+    },
+    "collector_version": {
+      "type": "string",
+      "maxLength": 40,
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[A-Za-z0-9.-]+)?$"
+    },
+    "collected_at": {
+      "type": "string",
+      "format": "date-time",
+      "maxLength": 30,
+      "pattern": "Z$"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10000
+    },
+    "sections": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "overview",
+        "containers",
+        "processes",
+        "services"
+      ],
+      "properties": {
+        "overview": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "available",
+                "operating_system",
+                "kernel",
+                "uptime_seconds",
+                "logical_cpu_count",
+                "cpu_usage_percent",
+                "load_1",
+                "load_5",
+                "load_15",
+                "memory_total_bytes",
+                "memory_used_bytes",
+                "swap_total_bytes",
+                "swap_used_bytes",
+                "filesystems"
+              ],
+              "properties": {
+                "available": {
+                  "const": true
+                },
+                "operating_system": {
+                  "enum": [
+                    "Linux",
+                    "Windows",
+                    "macOS"
+                  ]
+                },
+                "kernel": {
+                  "const": "not collected"
+                },
+                "uptime_seconds": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "logical_cpu_count": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4096
+                },
+                "cpu_usage_percent": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                "load_1": {
+                  "type": "null"
+                },
+                "load_5": {
+                  "type": "null"
+                },
+                "load_15": {
+                  "type": "null"
+                },
+                "memory_total_bytes": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "memory_used_bytes": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "swap_total_bytes": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "swap_used_bytes": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "filesystems": {
+                  "type": "array",
+                  "maxItems": 16,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "key",
+                      "title",
+                      "total_bytes",
+                      "used_bytes"
+                    ],
+                    "properties": {
+                      "key": {
+                        "type": "string",
+                        "pattern": "^filesystem-(0[1-9]|1[0-6])$"
+                      },
+                      "title": {
+                        "type": "string",
+                        "pattern": "^Filesystem ([1-9]|1[0-6])$"
+                      },
+                      "total_bytes": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "used_bytes": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "available",
+                "reason_code"
+              ],
+              "properties": {
+                "available": {
+                  "const": false
+                },
+                "reason_code": {
+                  "const": "HOST_DATA_UNAVAILABLE"
+                }
+              }
+            }
+          ]
+        },
+        "containers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "available",
+            "reason_code",
+            "items"
+          ],
+          "properties": {
+            "available": {
+              "const": false
+            },
+            "reason_code": {
+              "const": "NOT_UPLOAD_ELIGIBLE"
+            },
+            "items": {
+              "type": "array",
+              "maxItems": 0
+            }
+          }
+        },
+        "processes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "available",
+            "reason_code",
+            "items"
+          ],
+          "properties": {
+            "available": {
+              "const": false
+            },
+            "reason_code": {
+              "const": "NOT_UPLOAD_ELIGIBLE"
+            },
+            "items": {
+              "type": "array",
+              "maxItems": 0
+            }
+          }
+        },
+        "services": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "available",
+            "reason_code",
+            "items"
+          ],
+          "properties": {
+            "available": {
+              "const": false
+            },
+            "reason_code": {
+              "const": "NOT_UPLOAD_ELIGIBLE"
+            },
+            "items": {
+              "type": "array",
+              "maxItems": 0
+            }
+          }
+        }
+      }
+    }
+  }
+}

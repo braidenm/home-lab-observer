@@ -5,7 +5,7 @@ This policy defines first-release defaults. The effective local configuration an
 The source preview has no uploader and sends no observations to Platform Demo. It implements host/process current
 reads, six aggregate numeric host history metrics, and explicitly enabled local Docker inventory/resource readings.
 Process and container observations are local-sensitive, current-memory-only and not upload-eligible in this preview.
-Service and log collection below remain planned capabilities. The table describes first-release targets; future history
+Service collection remains planned; opt-in native log metadata is released in preview 3. The table describes first-release targets; future history
 or upload projections need their own reviewed specifications before becoming active.
 
 | Data class | Collected by default | Kept locally | Eligible for remote upload | Notes |
@@ -30,10 +30,18 @@ Redaction is defense in depth, not a guarantee that arbitrary text is anonymous.
 
 ## Spec 009 implementation boundary
 
-Native metadata is in development, not enabled in preview 2. The accepted slice never acquires message bodies, even
+Native metadata is released in preview 3. The accepted slice never acquires message bodies, even
 when a current-snapshot caller requests them. Current codes/timestamps stay in one 200-record session ring; persisted
 data contains only low-cardinality counts, coverage, latest attempt state and a private continuation checkpoint.
 The checkpoint never reaches API/UI/diagnostics and travels to fixed native helpers through bounded private pipes.
 Windows System/Application and the caller-accessible Linux system-journal view require explicit local configuration.
 Linux inaccessible files may be omitted by the OS; coverage is not a claim about all machine events. No native log
 metadata is upload-eligible. Raw-body, service-specific, macOS and remote-log behavior require later specifications.
+
+## Spec 012 projection boundary
+
+The unused `numeric-host/v1` producer profile constructs only CPU, memory/swap, uptime and generated filesystem-capacity
+aliases for the existing hosted snapshot shape. No source filesystem text, processes, containers, services or logs enter
+that document. Incomplete host overview is unavailable, not zero. This package alone neither enables upload nor obtains
+consent; the current CLI/API remains local-only. Enrollment, private handoff, isolated uploader and richer remote views
+must pass the remaining [Spec 012 gates](../../specs/012-connected-observation/spec.md) before activation.
