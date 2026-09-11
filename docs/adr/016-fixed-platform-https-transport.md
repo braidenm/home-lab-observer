@@ -14,7 +14,8 @@ the reviewed destination, credential and redirect boundaries.
 ## Decision
 
 Use a separate snapshot transport package with a narrow constructor: one trusted installer-selected canonical HTTPS origin
-and one credential provider. Derive the upload path from the validated server binding. Production owns its HTTP transport,
+and one credential provider. The origin is installation authority, not an untrusted user-entered or server-supplied URL.
+Derive the upload path from the validated server binding. Production owns its HTTP transport,
 uses normal CA verification, ignores environment proxies, disables compression, refuses every redirect and applies fixed
 five-second, 16 KiB body and bounded-header limits. There is no exported arbitrary client, proxy, TLS override or request
 path. Tests may privately add an owned TLS root and nothing else.
@@ -25,7 +26,10 @@ never enter `uploadstate.Request`, the durable ledger, diagnostics or ordinary e
 
 Decode a successful acknowledgement defensively while preserving additive compatibility: require and strictly validate the
 two known fields and their correlation, reject duplicate/trailing/oversized framing, ignore unknown bounded fields, and do
-not retain the decoded document. HTTP statuses are mapped exactly as frozen in the receiver contract. A 429 becomes a new
+not retain the decoded document. HTTP statuses are mapped exactly as frozen in the receiver contract. Once a syntactically
+valid status and bounded headers arrive, a non-200 body is ignored and cannot weaken or override that classification, even
+if the ignored body is malformed or exceeds the bounded read. A framing/header failure that prevents receipt of a valid
+status remains an ambiguous retry. A 429 becomes a new
 non-terminal `RATE_LIMITED` machine outcome; the future scheduler, not the adapter, waits at least 60 seconds.
 
 Enrollment is a separate operation and state boundary. Snapshot retry safety comes from the durably immutable pending
@@ -50,3 +54,21 @@ servers or custom certificate authorities in production. Enterprise proxy/custom
 reviewed destination policy rather than environment inheritance. Tests use only owned synthetic TLS servers and can prove
 wire behavior, not receiver deployment compatibility. Actual raw receiver JSON tests, credential persistence, enrollment
 recovery, installed isolation and disposable canary acceptance remain mandatory before activation.
+
+## Evidence
+
+Primary references and receiver code were inspected on 2026-09-11 against the repository's Go 1.27.1 baseline.
+
+- [Go 1.27.1 `net/http`](https://pkg.go.dev/net/http@go1.27.1) documents `Client.CheckRedirect` and
+  `ErrUseLastResponse`, `Client.Timeout`, proxy selection on `Transport.Proxy`, response-header limits, and that
+  `CloseIdleConnections` closes only pooled idle connections without interrupting active requests. The adapter fixes these
+  policies instead of inheriting the default transport or claiming an idle-close joins work.
+- [RFC 9110 section 10.2.3](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.3) defines `Retry-After` as either a
+  date or delay-seconds and says it indicates how long a client ought to wait. The current receiver emits fixed
+  `Retry-After: 60`; D2a preserves that minimum as a code-owned outcome/scheduler contract rather than sleeping in HTTP.
+- Platform Demo baseline `3a9f54c58073e35339db84cb32625395b15f4a8b` was checked in
+  `services/app/.../HomeLabEnrollmentEndpoint.kt`,
+  `services/observability/.../HomeLabEnrolledSnapshotStore.kt`, and
+  `services/app/.../HomeLabEnrollmentApiTest.kt`. Those sources establish the fixed route/headers, one-time exchange,
+  status mapping, correlated acknowledgement, age-before-sequence check and equal-sequence behavior used here. D2a does not
+  treat source inspection as the later raw-wire or disposable HTTPS acceptance proof.

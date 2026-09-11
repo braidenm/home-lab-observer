@@ -256,7 +256,8 @@ func parseOrigin(raw string) (*url.URL, bool) {
 		return nil, false
 	}
 	host := parsed.Hostname()
-	if host == "" || strings.Contains(host, "%") || !validHost(host) {
+	if host == "" || strings.Contains(host, "%") || strings.HasSuffix(parsed.Host, ":") ||
+		(strings.HasPrefix(parsed.Host, "[") && net.ParseIP(host) == nil) || !validHost(host) {
 		return nil, false
 	}
 	if port := parsed.Port(); port != "" {

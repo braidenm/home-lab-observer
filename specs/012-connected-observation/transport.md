@@ -6,7 +6,8 @@ credential persistence, worker scheduling, installation and network activation r
 ## Boundary
 
 Implement one `internal/platformtransport` adapter for the existing `uploadstate.Transport` port. The constructor accepts
-one installer-selected canonical HTTPS origin and a credential provider. It derives only the fixed receiver path
+one installer-selected canonical HTTPS origin and a credential provider. This origin is trusted installation configuration,
+not a URL accepted from an untrusted user or remote response. The adapter derives only the fixed receiver path
 `/v1/connectors/home-lab/servers/{server_id}/snapshot`; callers cannot provide paths, clients, proxies, transports, TLS
 settings or redirect behavior. Production uses the normal platform CA roots. A package-private test seam may add only the
 certificate pool for an owned `httptest` TLS server.
@@ -29,9 +30,11 @@ D2a does not implement that storage or enrollment.
   and positive `sequence` fields matching the pending request. Reject a BOM, trailing JSON, duplicate keys (including an
   escaped spelling of the same key), missing/wrong known fields, unsafe numbers and oversized bodies. Bounded additive
   unknown fields are ignored and never retained, logged or reflected.
-- Map 400 and 413 to `REJECTED`, 401 to `CREDENTIAL_REJECTED`, 409 to `CONFLICT`, and 429 to `RATE_LIMITED`. Map malformed
-  or mismatched 200, 408, redirects, other unexpected statuses, 5xx, TLS/network/deadline failures and invalid response
-  framing to retry. Response bodies cannot override status classes.
+- Map 400 and 413 to `REJECTED`, 401 to `CREDENTIAL_REJECTED`, 409 to `CONFLICT`, and 429 to `RATE_LIMITED`. Once a valid
+  HTTP response status and bounded headers have been received, classify a non-200 response from that status alone; its body
+  is ignored even when malformed or larger than the read cap. Map malformed or mismatched 200, 408, redirects, other
+  unexpected statuses, 5xx, TLS/network/deadline failures and framing failures that prevent receipt of a valid status to
+  retry. Response bodies cannot override status classes.
 - Return fixed errors only. Never expose raw network/parser errors, response bodies, URLs, headers or credentials.
 
 `RATE_LIMITED` is non-terminal. The machine retains the exact pending body and performs no acknowledgement or terminal

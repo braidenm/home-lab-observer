@@ -256,7 +256,8 @@ func TestOriginCredentialTLSProxyRedirectAndHeaderPolicies(t *testing.T) {
 	for _, origin := range []string{
 		"", "http://platform.example.com", "https://platform.example.com/", "https://PLATFORM.example.com",
 		"https://user@platform.example.com", "https://platform.example.com?x=1", "https://platform.example.com#x",
-		"https://platform.example.com:0", "https://platform.example.com:65536", "https://bad_host.example.com",
+		"https://platform.example.com:", "https://platform.example.com:0", "https://platform.example.com:65536",
+		"https://bad_host.example.com", "https://[platform.example.com]",
 	} {
 		if _, err := New(origin, provider); err != ErrConfig {
 			t.Fatalf("origin %q returned %v", origin, err)
