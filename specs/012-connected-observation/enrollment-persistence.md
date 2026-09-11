@@ -71,7 +71,8 @@ The no-hostile-same-UID/root threat model is explicit; flock is cooperative excl
   not claim actual multi-UID refusal evidence. The distinct-principal E1 fixture is separate.
 - [ ] Real ENOSPC/EIO/close error and VM power-loss injection; boundary hooks are not
   equivalent evidence. Every returned syscall error is nevertheless handled fail-closed.
-- [ ] Independent review before integration.
+- [x] Independent production/test review found no blockers; native Linux suite was
+  independently rerun five times on 2026-09-11, including cross-process lease contention.
 
 VM power-loss/disk-full, root-owned installed metadata, LoadCredential promotion,
 service principal isolation and owner canary remain separate. This adapter is not a
