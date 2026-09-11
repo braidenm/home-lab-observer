@@ -80,6 +80,8 @@ external prerequisites. No runtime import may pull collector, credential/filesys
   acknowledgement must not undo or misrepresent C1's committed result. No real network or secret fixtures.
 - [x] Stats snapshots are detached and mutex-protected; malicious dependency errors never reach results or diagnostics.
 - [x] Full Windows Go tests/vet and focused C2/C1 tests repeated ten times; existing rich scheduler behavior unchanged.
+- [x] Independent review corrected stale-success and normal-cancellation diagnostics;
+  final full Windows tests/vet and focused C2/C1 tests were independently rerun on 2026-09-11.
 - [ ] Hosted race detector and native Linux/macOS tests (existing runtime CI; pending PR).
 
 Local evidence (2026-09-11): `go test -p 1 ./...`, `go vet -p 1 ./...`, and
