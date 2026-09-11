@@ -61,6 +61,11 @@ Re-enrollment replaces credentials/registration only by explicit operation, neve
 root-owned protection, service restart and revocation require tests; no custom crypto. Existing v1 bearer replay-until-revoked
 limitations must remain visible. Stronger credential protocols are a separate migration.
 
+The unused D2d owner-private adapter is specified in
+[enrollment-persistence.md](enrollment-persistence.md) and ADR019. Its fixed private
+layout is not root-owned installation metadata or systemd credential promotion;
+those installed steps remain explicitly separate from this library.
+
 ## E: cross-principal handoff and credential-free worker
 
 Implement a separate installed-handoff API with provisioned collector UID/group and reader UID. Do not relax owner-private
