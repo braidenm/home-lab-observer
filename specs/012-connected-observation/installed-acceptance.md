@@ -10,6 +10,7 @@ origin limits normal application behavior; it does not isolate a compromised upl
 and prove enforcement that permits required DNS/HTTPS while denying the local observer API and unauthorized
 fixture sinks. Do not select a networking framework in this slice. Resolve DNS reachability in that design:
 a host loopback resolver cannot simply be assumed reachable from another network namespace.
+Actual destination discovery, allowlist refresh and the real-host enforcement gate remain unresolved.
 
 **Collector filesystem coverage:** pinned gopsutil first reads `/proc/1/mountinfo`, then falls back to
 `/proc/self/mountinfo`; usage calls operate in the caller's namespace. Successful collection alone cannot prove
@@ -53,11 +54,20 @@ verified; no owner checkbox substitutes for that proof. Otherwise retain unavail
 | Read-only Ubuntu WSL preflight | systemd 255.4 is PID 1, running; cgroup-v2 controllers available. Not enforcement proof. |
 | D1 synthetic Linux ledger tests | Executed, including process death/hot-journal fixtures. No power-loss claim. |
 | Namespace-isolated 1 MiB tmpfs pressure fixture | Executed separately; actual ENOSPC behavior only, not persistent-device sync. |
+| WSL 255 cgroup IPv4/IPv6 filtering | Owned transient-unit probes passed: baseline connection, deny-all timeout, then precise loopback exception restoring connection. Not full destination policy. |
 | Exact installed unit UID/mount/credential/network/TLS probes | Not executed. WSL is a feasible first test environment only when each capability is exercised. |
 | Physical-host mount coverage, supported ARM64 platform, reboot and VM power loss | Not executed; separate installed-release gates remain open. |
 
 WSL observations describe its Linux guest, not the Windows host. All future fixtures must use synthetic data,
 explicitly owned resources, bounded cleanup and fixed result output; no raw credentials or host observations.
+
+The filtering probes used the same owned listener for each protocol: baseline connection succeeded;
+`DynamicUser` plus `IPAddressDeny=any` denied connection with a two-second timeout; the precise
+`127.0.0.1/32` or `::1/128` allow exception restored connection. Transient units used `--collect`, and
+listeners were closed afterward. No host application was contacted. This demonstrates working cgroup IP
+filtering on the tested WSL systemd 255 environment despite its `-BPF_FRAMEWORK` build label; that label alone
+must not be treated as evidence that IP filtering is unavailable. These probes do not establish TLS, DNS,
+installed-worker isolation, public-destination policy or enforcement on a different host.
 
 ## Primary sources and code evidence
 
