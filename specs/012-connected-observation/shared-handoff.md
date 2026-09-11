@@ -26,7 +26,9 @@ Policy comes from future trusted root-provisioned configuration, not an untruste
 UIDs/GID must be nonzero, collector and uploader distinct, server ID the canonical exchanged identity. Writer requires
 effective UID=collector and effective primary GID=shared. Reader requires effective UID=uploader and shared group
 membership (primary or supplementary). Both roles require real/effective/saved UIDs to equal their policy UID and
-real/effective/saved GIDs to match one nonzero primary GID; no latent saved identity or Linux capability is accepted.
+real/effective/saved GIDs to match one nonzero primary GID. capget requires empty effective, permitted and inheritable
+capability sets; it does not check or empty the capability bounding set. Installed CapabilityBoundingSet and
+NoNewPrivileges restrictions remain mandatory and separately tested. No latent saved UID/GID is accepted.
 These are separate types, not a mode switch that grants Reader a publish API. Nil read context fails fixed unavailable.
 The Reader structurally satisfies uploadstate.Source without depending on uploader credentials or runtime.
 
@@ -66,8 +68,9 @@ unsafe, missing, unavailable, invalid document and writer busy, without path/OS/
 
 ## Acceptance and privileged fixture proposal
 
-Ordinary tests cover validation, unknown names, bounds, partial writes/sync/rename failures, wrong binding, owner/mode/ACL
-checks through narrow synthetic seams, concurrent replacement and cleanup. Linux static builds remain dependency-free
+Ordinary tests cover policy validation, saved-group consistency, owned-handle mode/link/ACL checks, output bounds and
+unsupported stubs. The explicitly opted-in privileged fixture covers unknown names, size bounds, partial writes,
+sync/rename failures, wrong binding, distinct-principal denial, concurrent replacement and cleanup. Linux static builds remain dependency-free
 beyond existing x/sys and projection packages; no networking, service install or root operations in production.
 
 After explicit review of setup, a bounded root test orchestrator may create an owned native `/tmp` fixture:
@@ -76,7 +79,8 @@ After explicit review of setup, a bounded root test orchestrator may create an o
 2. Create only fixture handoff/resources, assign numeric synthetic collector/uploader/third identities to child processes
    using setgroups/setgid/setuid at exec; never modify host account/group databases or create services.
 3. Collector child publishes; uploader child reads exactly the canonical document but direct OS write/create/remove/rename
-   attempts fail. Unrelated third child fails direct read/traversal. All children have empty capability sets after exec.
+   attempts fail. Unrelated third child fails direct read/traversal. Children prove empty effective, permitted and
+   inheritable capability sets after exec, not an empty bounding set or the complete installed service policy.
 4. Add named-user ACL and default-ACL fixtures inside the owned tree; policy rejects them even when mode bits still match.
 5. Wrong UID/GID and second writer fail; writer can replace while reader never returns partial/unvalidated bytes.
 6. Bound subprocess deadlines/output; reap every child before deleting exact owned temporary fixtures. Output only fixed
@@ -94,14 +98,16 @@ The installed service namespace/credential restrictions and real host deployment
 - [x] Synthetic boundaries, fresh staging publication, race and fixed-error tests.
 - [x] Actual distinct-identity read/write denial and ACL fixtures in isolated owned environment.
 - [x] Full Go tests/vet and Linux focused repetition.
-- [ ] Independent final code/security review and ordinary CI integration.
+- [x] Independent final code/security review (root and native reviewer; no blockers).
+- [x] Add path-filtered/manual GitHub-hosted Ubuntu privileged fixture workflow.
+- [ ] Observe successful hosted fixture execution before claiming CI acceptance.
 - [x] Keep no network/worker/install activation, and owner-private regression behavior unchanged.
 
 ## Local execution evidence
 
 On 2026-09-11 the static Linux amd64 test executable ran under Ubuntu WSL in the explicitly approved root-orchestrated
 fixture. Ten repeated complete runs passed, including distinct-UID collector/uploader/third-user kernel denial assertions,
-named-user and default ACL rejection, wrong primary/supplementary group rejection, zero retained capabilities, and
+named-user and default ACL rejection, wrong primary/supplementary group rejection, empty effective/permitted/inheritable capability sets, and
 250 writer publications concurrent with 1000 reader attempts per run. Only complete canonical reads or unavailable were
 accepted during publication. Fixed output is `SHARED_HANDOFF_DAC_ACL_PASS` in verbose mode; child output is capped and
 discarded, not copied into user-visible diagnostics. No host user/group, service, network or native log operation occurred.
@@ -114,3 +120,8 @@ Linux arm64 compiled successfully but has not executed locally. Windows full tes
 
 These results prove scoped DAC/ACL behavior, not installed systemd isolation, remote upload, root provisioning correctness,
 global group membership exclusivity, durability across power loss or full canary acceptance.
+
+The `Shared handoff acceptance` workflow compiles the static fixture on a GitHub-hosted Ubuntu runner and explicitly
+enables the privileged test three times with a five-minute job limit. It runs for relevant implementation/dependency/policy
+changes and manual dispatch. No private runner or secret is used. This exercises the opted-in failure/concurrency tests;
+the ordinary runtime suite alone skips them. Hosted execution evidence is pending until the workflow runs successfully.
