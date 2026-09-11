@@ -38,8 +38,8 @@ command, upload path, proxy or collector endpoint.
 
 ## D: disk/HTTPS/enrollment adapters, still uninstalled
 
-The separate [C2 portable upload-loop proposal](upload-loop.md) defines pacing and cancellation without activation.
-Its startup cooldown/restart policy remains pending review; it does not alter the accepted C1 machine.
+The separate [C2 portable upload loop](upload-loop.md) defines approved pacing and cancellation without activation.
+Every run waits 60 seconds before its first step; it does not alter the accepted C1 machine or add durable pacing state.
 
 The [D1 contract](durable-ledger.md) and [ADR 015](../../docs/adr/015-durable-upload-ledger.md) select existing
 `modernc.org/sqlite v1.58.0` (no new dependency), a separate bounded one-row database with synchronous EXTRA and DELETE

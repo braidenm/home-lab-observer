@@ -1,11 +1,11 @@
-# C2: portable upload loop proposal
+# C2: portable upload loop
 
-Status: Proposed, 2026-09-11. Documentation only; implementation requires review. No CLI, service, filesystem,
+Status: Approved for the unused portable loop, 2026-09-11. No CLI, service, filesystem,
 network adapter, enrollment, collector or worker activation. C1 retains every admission/sequence decision.
 
 ## Minimal interface
 
-Proposed `internal/uploadloop` API:
+Approved `internal/uploadloop` API:
 
 ```go
 type Stepper interface { Step(context.Context) (uploadstate.Outcome, error) }
@@ -25,7 +25,7 @@ import `internal/scheduler`: it owns host history/projection/store closing, whic
 Use standard-library timers and `math/rand/v2`; jitter is scheduling, not cryptographic identity. Keep timer and
 jitter injection package-private for deterministic tests; avoid exposing production pacing overrides.
 
-## Pacing policy proposed for review
+## Approved pacing policy
 
 All delays begin after the completed Step result, use monotonic timers and are interruptible. There is no ticker
 backlog or catch-up burst. Saturate retry state before multiplication; the failure counter cannot overflow.
@@ -45,11 +45,11 @@ backlog or catch-up burst. Saturate retry state before multiplication; the failu
 Cancellation takes precedence over scheduling another call. Do not classify a send interrupted by cancellation
 as acknowledged: C1 owns acknowledgement and leaves the durable pending record authoritative.
 
-**Restart-rate-limit question:** memory-only pacing cannot remember a prior process's 429. The minimal proposed
-solution is a mandatory 60-second startup wait on every Run, also canceled/joined normally. This avoids adding a
+**Approved restart-rate-limit policy:** memory-only pacing cannot remember a prior process's 429. Use a
+mandatory 60-second startup wait on every Run, also canceled/joined normally. This avoids adding a
 cooldown journal or changing D1 and prevents rapid restart from bypassing the normal cooldown. It delays the first
-fresh enrollment upload by up to one minute. Approve that latency or separately specify durable cooldown before
-implementation; do not quietly promise cross-restart pacing while starting immediately. It is not proof against
+fresh enrollment upload by about one minute, plus collection/network time. No durable pacing store is added.
+It is not proof against
 arbitrarily delayed remote processing or independently duplicated worker installations.
 
 ## Diagnostics and ownership
@@ -59,22 +59,34 @@ counters, running/stopped state and the next delay. No source/server/connector I
 URL, raw exception, unbounded history or callback receives data. Stats is a detached concurrency-safe value, not a
 log sink. The later worker maps these fixed fields into existing bounded diagnostics and avoids logging each idle poll.
 
+The latest Step error clears the prior successful outcome and exposes only a closed issue code (invalid snapshot,
+recovery required or dependency failed). A subsequent valid outcome clears that issue. Cumulative ACK counts remain
+accurate even if cancellation races with an already durable successful Step.
+An ordinary C1 canceled error with a canceled parent clears the last issue; the canceled Run result describes shutdown.
+
 The loop borrows Stepper. It never closes ledger, HTTP transport or handoff. Caller shutdown order is cancel, join Run,
 then close borrowed resources; `CloseIdleConnections` alone is not a join. READY validation and one installed owner remain
 external prerequisites. No runtime import may pull collector, credential/filesystem adapters, HTTP or service packages.
 
 ## Acceptance before implementation completion
 
-- [ ] Approve startup cooldown versus separately durable pacing; freeze public Result/Stats enums without duplicating C1 state.
-- [ ] Deterministic fake timer/jitter tests prove all bounds, saturation, resets and exact 60-second rate-limit floor.
-- [ ] Blocked Step proves one in-flight call and cancellation waits for it; canceled waits never call Step again.
-- [ ] Single-use/concurrent Run, canceled-before-start, nil context and unknown/error results fail with fixed values.
-- [ ] Invalid observations poll without sending or modifying state; terminal/recovery results never retry.
-- [ ] Compose with real C1 and synthetic source/ledger/transport to prove identical pending bytes/sequence across retries,
+- [x] Approve mandatory startup cooldown without adding a durable pacing store.
+- [x] Deterministic fake timer/jitter tests prove all bounds, saturation, resets and exact 60-second rate-limit floor.
+- [x] Blocked Step proves one in-flight call and cancellation waits for it; canceled waits never call Step again.
+- [x] Single-use/concurrent Run, canceled-before-start, nil context and unknown/error results fail with fixed values.
+- [x] Invalid observations poll without sending or modifying state; terminal/recovery results never retry.
+- [x] Compose with real C1 and synthetic source/ledger/transport to prove identical pending bytes/sequence across retries,
   no calls during cooldown, and no new Step after cancellation is observed. Cancellation racing an already durable
   acknowledgement must not undo or misrepresent C1's committed result. No real network or secret fixtures.
-- [ ] Stats snapshots are detached and race-safe; malicious dependency errors never reach results or diagnostics.
-- [ ] Full tests/vet/race and supported-target builds; existing rich scheduler behavior unchanged.
+- [x] Stats snapshots are detached and mutex-protected; malicious dependency errors never reach results or diagnostics.
+- [x] Full Windows Go tests/vet and focused C2/C1 tests repeated ten times; existing rich scheduler behavior unchanged.
+- [ ] Hosted race detector and native Linux/macOS tests (existing runtime CI; pending PR).
+
+Local evidence (2026-09-11): `go test -p 1 ./...`, `go vet -p 1 ./...`, and
+`go test -p 1 ./internal/uploadloop ./internal/uploadstate -count=10` pass. Focused loop statement coverage is 99.2%.
+All loop timing tests use synthetic waits; the cancellation test uses bounded test deadlines and releases its blocked
+dependency on failure. These do not exercise installed services, physical power loss or actual HTTP traffic.
+The unused package also builds with CGO disabled for Linux, macOS and Windows on amd64 and arm64.
 
 Code inspected: `internal/uploadstate/machine.go` and `internal/scheduler/scheduler.go` at main `66bbaa4`.
-This is a small scheduling policy proposal, not installed isolation or production readiness evidence.
+This is a small unused scheduling policy slice, not installed isolation or production readiness evidence.
