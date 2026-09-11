@@ -29,3 +29,9 @@ Follow [the handoff acceptance criteria](handoff.md) and
 This adds an unused persistence library, not a collector/uploader worker or remote connection. It contains no
 credential and no durable HTTP sequence. The next worker slice must separately satisfy ADR 044 isolation and
 credential lifecycle requirements before installation or owner canary activation.
+
+## Proposed next slices
+
+Review [ADR 014](../../docs/adr/014-linux-connected-canary-workers.md), the [worker plan](worker-plan.md) and
+[pending worker tasks](worker-tasks.md) before implementing connected workers. These proposed slices do not activate
+upload or change the owner-private handoff policy.
