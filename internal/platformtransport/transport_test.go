@@ -33,12 +33,16 @@ type fakeCredentials struct {
 	calls      int
 	binding    uploadstate.Binding
 	deadline   time.Time
+	hook       func()
 }
 
 func (p *fakeCredentials) Credential(ctx context.Context, binding uploadstate.Binding) (string, error) {
 	p.calls++
 	p.binding = binding
 	p.deadline, _ = ctx.Deadline()
+	if p.hook != nil {
+		p.hook()
+	}
 	return p.credential, p.err
 }
 
@@ -139,6 +143,31 @@ func TestSendRejectsInvalidRequestBeforeCredentialOrNetwork(t *testing.T) {
 	}
 }
 
+func TestSendDetachesValidatedBodyBeforeCredentialLookup(t *testing.T) {
+	body := validTransportBody(t)
+	expected := bytes.Clone(body)
+	provider := &fakeCredentials{credential: transportCredential}
+	provider.hook = func() {
+		for index := range body {
+			body[index] = 'x'
+		}
+	}
+	server := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		got, err := io.ReadAll(request.Body)
+		if err != nil || !bytes.Equal(got, expected) {
+			t.Error("caller mutation changed admitted request bytes")
+		}
+		response.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(response, `{"server_id":%q,"sequence":1}`, transportBinding.ServerID)
+	}))
+	defer server.Close()
+	transport := newOwnedTransport(t, server, provider)
+	result, err := transport.Send(context.Background(), uploadstate.Request{Binding: transportBinding, Sequence: 1, Body: body})
+	if err != nil || result.Outcome != uploadstate.Acknowledged {
+		t.Fatalf("got %#v error %v", result, err)
+	}
+}
+
 func TestStatusMapping(t *testing.T) {
 	cases := []struct {
 		status int
@@ -183,6 +212,8 @@ func TestAcknowledgementDecoderRejectsHostileKnownFields(t *testing.T) {
 		{"wrong-content-type", valid, []string{"text/plain"}, ""},
 		{"extra-content-type", valid, []string{"application/json", "application/json"}, ""},
 		{"wrong-charset", valid, []string{"application/json; charset=iso-8859-1"}, ""},
+		{"unknown-content-type-parameter", valid, []string{"application/json; boundary=something"}, ""},
+		{"charset-and-unknown-parameter", valid, []string{"application/json; charset=utf-8; boundary=something"}, ""},
 		{"encoded", valid, []string{"application/json"}, "gzip"},
 		{"array", `[]`, []string{"application/json"}, ""},
 		{"missing-server", `{"sequence":3}`, []string{"application/json"}, ""},

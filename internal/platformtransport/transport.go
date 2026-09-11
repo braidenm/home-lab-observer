@@ -99,7 +99,11 @@ func newTransport(origin string, credentials CredentialProvider, roots *x509.Cer
 }
 
 func (t *Transport) Send(ctx context.Context, request uploadstate.Request) (uploadstate.Response, error) {
-	if ctx == nil || !validRequest(request) {
+	if ctx == nil || !validRequestEnvelope(request) {
+		return uploadstate.Response{}, ErrRequest
+	}
+	request.Body = bytes.Clone(request.Body)
+	if remoteprojection.Validate(request.Body, request.Binding.ServerID) != nil {
 		return uploadstate.Response{}, ErrRequest
 	}
 	requestContext, cancel := context.WithTimeout(ctx, SendTimeout)
@@ -142,11 +146,18 @@ func (t *Transport) Send(ctx context.Context, request uploadstate.Request) (uplo
 	return uploadstate.Response{Outcome: uploadstate.Acknowledged, ServerID: serverID, Sequence: sequence}, nil
 }
 
-func validRequest(request uploadstate.Request) bool {
+// CloseIdleConnections releases pooled idle connections. It does not cancel
+// or wait for an active Send call.
+func (t *Transport) CloseIdleConnections() {
+	if t != nil && t.client != nil {
+		t.client.CloseIdleConnections()
+	}
+}
+
+func validRequestEnvelope(request uploadstate.Request) bool {
 	return serverPattern.MatchString(request.Binding.ServerID) &&
 		connectorPattern.MatchString(request.Binding.ConnectorID) &&
-		request.Sequence > 0 && len(request.Body) > 0 && len(request.Body) <= remoteprojection.MaxBytes &&
-		remoteprojection.Validate(request.Body, request.Binding.ServerID) == nil
+		request.Sequence > 0 && len(request.Body) > 0 && len(request.Body) <= remoteprojection.MaxBytes
 }
 
 func statusOutcome(status int) uploadstate.Outcome {
@@ -177,11 +188,17 @@ func jsonContentType(header http.Header) bool {
 		return false
 	}
 	mediaType, parameters, err := mime.ParseMediaType(values[0])
-	if err != nil || mediaType != "application/json" || len(parameters) > 1 {
+	if err != nil || mediaType != "application/json" {
+		return false
+	}
+	if len(parameters) == 0 {
+		return true
+	}
+	if len(parameters) != 1 {
 		return false
 	}
 	charset, present := parameters["charset"]
-	return !present || strings.EqualFold(charset, "utf-8")
+	return present && strings.EqualFold(charset, "utf-8")
 }
 
 func decodeAcknowledgement(body []byte) (string, int64, bool) {
