@@ -1,8 +1,8 @@
 # F1: first installable Linux connected worker
 
-Status: proposed for review, 2026-09-11. This is an end-to-end implementation plan, not activation approval or
+Status: accepted for implementation after independent review, 2026-09-11. This is an end-to-end implementation plan, not activation approval or
 evidence of installed isolation. Complements ADR 014 and the existing installed-acceptance research; does not
-replace its negative tests. Requires reviewed D2d persistence and C2 pacing to land before implementation.
+replace its negative tests. Requires reviewed D2d persistence and C2 pacing to land before integration.
 
 ## Deliverable and supported scope
 
@@ -13,8 +13,9 @@ all distributions merely because their manager version is newer. ARM64 support r
 Existing local Observer and legacy Compose installations stay untouched. Windows/macOS remote installation,
 Docker/process/log export, container actions and Kubernetes are not enabled by this slice.
 
-No product question is needed to implement the conservative defaults below. Security review must approve the
-network residual and installed-state transition before implementation; a failed proof blocks that profile, not
+No product question is needed to implement the conservative defaults below. Independent review accepted the
+bounded canary network residual and installed-state transition with the effective-policy and IPC prerequisites below;
+a failed proof blocks that profile, not
 a request to the owner to disable safeguards. Broader distribution/endpoint support is a later release decision.
 
 ## Executable composition, not a mode of the rich observer
