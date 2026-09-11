@@ -29,8 +29,12 @@ jobs:
   bounded-filesystem-full:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    env:
+      CGO_ENABLED: '0'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -40,4 +44,4 @@ jobs:
         run: go test -c -o "$RUNNER_TEMP/uploadledger.test" ./internal/uploadledger
       - name: Exercise actual ENOSPC only inside a private bounded mount
         shell: bash
-        run: sudo env HLO_LEDGER_PRESSURE=1 "$RUNNER_TEMP/uploadledger.test" -test.run='^TestStoragePressureFixture$' -test.count=3
+        run: sudo env -i PATH=/usr/bin:/bin TMPDIR=/tmp HLO_LEDGER_PRESSURE=1 "$RUNNER_TEMP/uploadledger.test" -test.run='^TestStoragePressureFixture$' -test.count=3
