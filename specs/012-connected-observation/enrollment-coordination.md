@@ -60,6 +60,30 @@ An interrupted setup without a fully validated READY marker is not resumed, even
 present. This trades convenience for a small auditable first release: preserve the evidence, do not re-exchange or repair,
 and require explicit owner recovery.
 
+## Fixed HTTPS exchange adapter
+
+The unused `platformtransport.EnrollmentTransport` implements the coordinator's `Exchanger` port without adding a second
+destination policy. It accepts only the trusted installer-selected canonical HTTPS origin and reuses the snapshot
+transport's production-owned TLS, proxy, redirect, compression, connection, header and five-second deadline policy. Tests
+may supply only an owned TLS root through a package-private constructor. There is no exported client, proxy, certificate,
+path or retry override.
+
+Each `Exchange` validates the exact server, connector and enrollment-secret lengths and syntax before allocating the
+bounded JSON body or opening a connection. It issues one logical POST to the fixed
+`/v1/connectors/home-lab/enrollments:exchange` path with only JSON accept/content headers; the one-use grant is never placed
+in a URL, authorization header, cookie, referer, user agent or error. The request body is non-rewindable and `GetBody` is
+nil, and the adapter performs no application retry. Standard TLS/TCP/HTTP protocol recovery below the logical request is
+not described as a second enrollment attempt or as durable receiver proof.
+
+A successful response is at most 16 KiB and must be JSON with exactly one known `server_id` and `connector_secret` of the
+fixed lengths and syntax. Duplicate known or unknown keys, trailing data, BOM, compression and malformed known fields are
+rejected; bounded additive unknown fields are ignored and discarded. The adapter checks exact expected-server correlation
+before returning the secret, and the coordinator checks it again before persistence. A 429 is `RATE_LIMITED` only with one
+exact `Retry-After: 60` header; 400 is `REJECTED`; 401, 5xx, other statuses, malformed success, invalid framing, redirect,
+TLS/network/deadline failure and any unexpected condition are ambiguous. Non-200 response bodies are not decoded and cannot
+change status classification. Exact length checks precede secret cloning. Byte-slice clearing is best-effort memory hygiene,
+not a guarantee that transport, TLS, compiler or runtime copies have been erased.
+
 ## Owner recovery and credential lifecycle
 
 The current receiver exposes no connector-side exchange-status, credential retrieval or reissue route. For an ambiguous or

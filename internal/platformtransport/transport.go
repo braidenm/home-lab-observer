@@ -1,6 +1,7 @@
-// Package platformtransport sends the bounded remote projection to the fixed
-// Platform Demo snapshot receiver. It owns HTTP policy and credential use; it
-// does not own enrollment, persistence, scheduling, or retries.
+// Package platformtransport sends bounded snapshots and performs one-shot
+// enrollment exchange against the fixed Platform Demo origin. It owns HTTP
+// policy and wire credentials; it does not own persistence, scheduling,
+// application retries, or activation.
 package platformtransport
 
 import (
@@ -66,6 +67,14 @@ func newTransport(origin string, credentials CredentialProvider, roots *x509.Cer
 	if !ok || credentials == nil {
 		return nil, ErrConfig
 	}
+	return &Transport{
+		origin:      *parsed,
+		credentials: credentials,
+		client:      newHTTPClient(roots),
+	}, nil
+}
+
+func newHTTPClient(roots *x509.CertPool) *http.Client {
 	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
 	if roots != nil {
 		tlsConfig.RootCAs = roots
@@ -85,17 +94,13 @@ func newTransport(origin string, credentials CredentialProvider, roots *x509.Cer
 		DisableCompression:     true,
 		TLSClientConfig:        tlsConfig,
 	}
-	return &Transport{
-		origin:      *parsed,
-		credentials: credentials,
-		client: &http.Client{
-			Transport: httpTransport,
-			Timeout:   SendTimeout,
-			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
+	return &http.Client{
+		Transport: httpTransport,
+		Timeout:   SendTimeout,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
 		},
-	}, nil
+	}
 }
 
 func (t *Transport) Send(ctx context.Context, request uploadstate.Request) (uploadstate.Response, error) {
@@ -136,7 +141,7 @@ func (t *Transport) Send(ctx context.Context, request uploadstate.Request) (uplo
 	if response.StatusCode != http.StatusOK {
 		return uploadstate.Response{Outcome: outcome}, nil
 	}
-	if !bounded || response.ContentLength > MaxResponseBytes || response.Header.Get("Content-Encoding") != "" || !jsonContentType(response.Header) {
+	if !bounded || response.ContentLength > MaxResponseBytes || !noContentEncoding(response.Header) || !jsonContentType(response.Header) {
 		return uploadstate.Response{Outcome: uploadstate.Retry}, nil
 	}
 	serverID, sequence, ok := decodeAcknowledgement(body)
@@ -199,6 +204,10 @@ func jsonContentType(header http.Header) bool {
 	}
 	charset, present := parameters["charset"]
 	return present && strings.EqualFold(charset, "utf-8")
+}
+
+func noContentEncoding(header http.Header) bool {
+	return len(header.Values("Content-Encoding")) == 0
 }
 
 func decodeAcknowledgement(body []byte) (string, int64, bool) {
