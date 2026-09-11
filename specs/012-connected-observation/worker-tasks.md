@@ -1,7 +1,7 @@
 # Proposed worker delivery tasks
 
-C1 contracts/implementation have received independent code review; ordinary CI/merge remains pending. All later slices remain
-proposed. Implement one bounded slice per PR; do not infer installation approval from library completion.
+C1 is merged; the uninstalled Linux D1 adapter has passed independent review. Normal CI gates remain below.
+Later installed slices remain proposed. Implement one bounded slice per PR; do not infer installation approval from library completion.
 
 ## C1 — actual receiver contracts and pure state machine
 
@@ -12,16 +12,18 @@ proposed. Implement one bounded slice per PR; do not infer installation approval
   revocation, clock skew, cancellation and signed-64-bit exhaustion. Prove no collector imports/network activation.
 - [x] Independently review privacy and ambiguity; source failures remain distinguishable from idle, record validation is
   shared with adapters, and mutable buffers are detached. Full local Go tests/vet passed on 2026-09-11.
-- [ ] Pass relevant checks in ordinary CI and record merged C1 evidence.
+- [x] Ordinary CI passed; C1 merged in PR 37 at `fc1cea02b8ee6756ec13f62bf55c58a148612b2e`.
 
 ## D1 — durable admission ledger
 
-- [ ] Compare existing SQLite one-row FULL/rollback-journal adapter with a new atomic-record adapter; freeze selected
-  representation and bounded recovery policy before implementation. C1 does not select a disk format.
-- [ ] Implement one pending body, monotonic allocation/ack/retirement and single writer; exclude credentials.
-- [ ] Test crash at every commit boundary, corrupt/missing initialized state, sync failure, disk-full, total 1 MiB bound
-  including temporary files, and incompatible downgrade. Never rebuild pending data from latest handoff. Document
-  mandatory revoke/re-enroll after external ledger backup restore; do not claim detection of every valid old record.
+- [x] Compare SQLite and atomic files; freeze [ADR 015](../../docs/adr/015-durable-upload-ledger.md) and
+  [the D1 contract](durable-ledger.md) before implementation (DELETE/EXTRA; Linux only).
+- [x] Implement one pending body, monotonic allocation safety and single writer; exclude credentials.
+- [x] Test process death around commits, hot-journal recovery, corrupt/missing initialized state, fixed commit uncertainty,
+  bounded files, and incompatible downgrade. Never rebuild pending bytes; document revoke/re-enroll after backup restore.
+- [x] Independent adapter review passed on 2026-09-11; reviewer repeated the full Linux suite three times under WSL.
+- [ ] Normal CI; do not claim VM power-loss or actual disk-full proof from synthetic errors.
+- [ ] Installed acceptance: actual disk-full, sync/storage failure and VM power-loss tests before canary support.
 
 ## D2 — restricted transport and enrollment adapters
 

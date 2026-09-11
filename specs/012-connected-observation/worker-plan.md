@@ -37,10 +37,11 @@ command, upload path, proxy or collector endpoint.
 
 ## D: disk/HTTPS/enrollment adapters, still uninstalled
 
-Before freezing D1, compare reuse of existing `modernc.org/sqlite v1.58.0` (already used by history, no new dependency)
-against a new atomic-record adapter. A separate bounded one-row SQLite database with synchronous FULL and rollback journal
-is the leading candidate; prove locking, total database/journal bounds, full sequence precision, corrupt-state refusal,
-cross-platform crash recovery and transaction uncertainty before selecting it. Do not put upload state into the host history
+The [D1 contract](durable-ledger.md) and [ADR 015](../../docs/adr/015-durable-upload-ledger.md) select existing
+`modernc.org/sqlite v1.58.0` (no new dependency), a separate bounded one-row database with synchronous EXTRA and DELETE
+rollback journal. This uninstalled adapter is Linux-only; Windows/macOS support remains explicitly unavailable pending
+filesystem/durability proof. Prove locking, total database/journal bounds, full sequence precision, corrupt-state refusal,
+crash recovery and transaction uncertainty. Do not put upload state into the host history
 database or treat disposable handoff durability as sufficient. The logical record contains binding, allocation watermark,
 last acknowledged body hash, optional pending sequence/body/hash/collection time, and terminal outcome. On uncertain commit,
 stop the operation and reopen/reconcile before sending; never assume rollback. Freeze adapter format and migration tests
