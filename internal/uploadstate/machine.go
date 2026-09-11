@@ -36,6 +36,7 @@ const (
 	Idle               Outcome = "IDLE"
 	SourceUnavailable  Outcome = "SOURCE_UNAVAILABLE"
 	Retry              Outcome = "RETRY"
+	RateLimited        Outcome = "RATE_LIMITED"
 	Acknowledged       Outcome = "ACKNOWLEDGED"
 	Expired            Outcome = "EXPIRED_DELIVERY_UNKNOWN"
 	ClockSkew          Outcome = "CLOCK_SKEW"
@@ -231,6 +232,8 @@ func (m *Machine) Step(ctx context.Context) (Outcome, error) {
 		return Acknowledged, nil
 	case CredentialRejected, Conflict, Rejected:
 		return m.stop(ctx, response.Outcome)
+	case RateLimited:
+		return RateLimited, nil
 	default:
 		return Retry, nil
 	}

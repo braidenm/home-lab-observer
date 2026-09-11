@@ -6,6 +6,6 @@
   {"name":"invalid-or-receiver-expired","http_status":400,"outcome":"REJECTED","ack_matches":false,"terminal":true},
   {"name":"oversized","http_status":413,"outcome":"REJECTED","ack_matches":false,"terminal":true},
   {"name":"revoked-or-invalid-credential","http_status":401,"outcome":"CREDENTIAL_REJECTED","ack_matches":false,"terminal":true},
-  {"name":"rate-limited","http_status":429,"outcome":"RETRY","ack_matches":false,"terminal":false},
+  {"name":"rate-limited","http_status":429,"outcome":"RATE_LIMITED","ack_matches":false,"terminal":false},
   {"name":"server-failure","http_status":503,"outcome":"RETRY","ack_matches":false,"terminal":false}
 ]

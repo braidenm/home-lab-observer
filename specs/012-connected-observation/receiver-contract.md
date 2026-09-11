@@ -12,7 +12,7 @@ Accepted for C1. Inspected Platform Demo baseline `3a9f54c58073e35339db84cb32625
 | Lower sequence returns 409 | Persist terminal CONFLICT; no automatic sequence reset |
 | Invalid snapshot/sequence or collection age greater than 300 seconds returns 400; age checked before duplicate lookup | Persist terminal REJECTED; proactively retire locally expired observations without sequence reuse |
 | Invalid/revoked/cross-server credential returns 401 | Persist terminal CREDENTIAL_REJECTED |
-| Rate limit returns 429 with Retry-After 60 | RETRY; later scheduler/HTTP adapter owns delay |
+| Rate limit returns 429 with Retry-After 60 | RATE_LIMITED; retain exact pending state and require the later worker to wait at least 60 seconds |
 | Oversized request returns 413 (receiver limit 1 MiB) | REJECTED; C1 already caps profile at 16 KiB |
 | Transport error, unexpected response, 5xx or uncertain delivery | RETRY with identical pending state |
 
@@ -41,3 +41,7 @@ and worker must impose bounded I/O/step deadlines. Adapters must honor cancellat
 forcibly join a malicious/blocking adapter. Pending
 expiry preserves the allocation watermark and unknown-delivery semantics. Restoring old external backups still requires
 explicit re-enrollment, because this receiver cannot authenticate historical body equality for reused sequence numbers.
+
+D2a freezes the unused snapshot adapter in [transport.md](transport.md). The transport and state machine never sleep or
+retry internally. `RATE_LIMITED` is a distinct non-terminal outcome so a later worker cannot accidentally use the ordinary
+1-second retry floor after the receiver explicitly requires 60 seconds.
