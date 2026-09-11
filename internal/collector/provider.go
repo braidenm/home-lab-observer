@@ -2,27 +2,22 @@ package collector
 
 import (
 	"context"
-	"errors"
 	"time"
+
+	"github.com/braidenm/home-lab-observer/internal/numerichost"
 )
 
-var ErrNoData = errors.New("collector returned no data")
+var ErrNoData = numerichost.ErrNoData
 
 type Clock interface{ Now() time.Time }
 type RealClock struct{}
 
 func (RealClock) Now() time.Time { return time.Now().UTC() }
 
-type MemoryStat struct {
-	Total, Used, Available uint64
-	UsedPercent            float64
-}
-type SwapStat struct{ Total, Used uint64 }
-type Partition struct{ Mountpoint, Type string }
-type UsageStat struct {
-	Total, Used, Free uint64
-	UsedPercent       float64
-}
+type MemoryStat = numerichost.MemoryStat
+type SwapStat = numerichost.SwapStat
+type Partition = numerichost.Partition
+type UsageStat = numerichost.UsageStat
 type NetStat struct{ BytesSent, BytesRecv, PacketsSent, PacketsRecv, ErrorsIn, ErrorsOut, DropsIn, DropsOut uint64 }
 type ProcessStat struct {
 	PID          int32

@@ -34,14 +34,14 @@ func (GopsutilProvider) Memory(ctx context.Context) (MemoryStat, error) {
 	if e != nil {
 		return MemoryStat{}, e
 	}
-	return MemoryStat{v.Total, v.Used, v.Available, v.UsedPercent}, nil
+	return MemoryStat{Total: v.Total, Used: v.Used, Available: v.Available, UsedPercent: v.UsedPercent}, nil
 }
 func (GopsutilProvider) Swap(ctx context.Context) (SwapStat, error) {
 	v, e := mem.SwapMemoryWithContext(ctx)
 	if e != nil {
 		return SwapStat{}, e
 	}
-	return SwapStat{v.Total, v.Used}, nil
+	return SwapStat{Total: v.Total, Used: v.Used}, nil
 }
 func (GopsutilProvider) Partitions(ctx context.Context) ([]Partition, error) {
 	v, e := disk.PartitionsWithContext(ctx, false)
@@ -59,7 +59,7 @@ func (GopsutilProvider) Usage(ctx context.Context, p string) (UsageStat, error) 
 	if e != nil {
 		return UsageStat{}, e
 	}
-	return UsageStat{v.Total, v.Used, v.Free, v.UsedPercent}, nil
+	return UsageStat{Total: v.Total, Used: v.Used, Free: v.Free, UsedPercent: v.UsedPercent}, nil
 }
 func (GopsutilProvider) Network(ctx context.Context) (NetStat, error) {
 	v, e := netio.IOCountersWithContext(ctx, false)
