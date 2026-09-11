@@ -1,6 +1,6 @@
 # Proposed worker delivery tasks
 
-C1 contracts/implementation are accepted for bounded work; independent review remains pending. All later slices remain
+C1 contracts/implementation have received independent code review; ordinary CI/merge remains pending. All later slices remain
 proposed. Implement one bounded slice per PR; do not infer installation approval from library completion.
 
 ## C1 — actual receiver contracts and pure state machine
@@ -10,7 +10,9 @@ proposed. Implement one bounded slice per PR; do not infer installation approval
 - [x] Add typed Source/Clock/Transport/Ledger interfaces; credential provider remains transport-owned, never in state.
 - [x] Test admit-before-send, exact-body retry, duplicate latest, lost response, expiry retirement without sequence reuse,
   revocation, clock skew, cancellation and signed-64-bit exhaustion. Prove no collector imports/network activation.
-- [ ] Independently review privacy and ambiguity; Go tests/vet plus relevant contract tests in ordinary CI.
+- [x] Independently review privacy and ambiguity; source failures remain distinguishable from idle, record validation is
+  shared with adapters, and mutable buffers are detached. Full local Go tests/vet passed on 2026-09-11.
+- [ ] Pass relevant checks in ordinary CI and record merged C1 evidence.
 
 ## D1 — durable admission ledger
 
