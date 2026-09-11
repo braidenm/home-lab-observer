@@ -8,6 +8,8 @@ import (
 	"testing"
 )
 
+func setFixtureDirectoryOwner(*testing.T, string) {}
+
 func TestUnsafeExistingPermissionsAreNotRepaired(t *testing.T) {
 	dir := privateDirectory(t)
 	if err := os.Chmod(dir, 0o755); err != nil {

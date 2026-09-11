@@ -14,6 +14,9 @@ The future uploader reads only that projection. This library stores no credentia
 - B3: Publish accepts the local observation plus enrollment identity, invokes the explicit projection, creates staging
   exclusively, validates its handle, writes at most 16 KiB, syncs and closes before replacement. Existing
   staging is removed only after bounded regular-file/owner/link validation while holding the writer lock.
+  Prove new-file creation with O_EXCL before initializing its owner. Elevated Windows tokens may otherwise assign
+  Administrators as default owner; initialize only the newly created empty handle to the current user, then validate
+  it before writing. Opening an existing lock after EEXIST never changes its owner or ACL. No process token mutation.
 - B4: All reads use the pinned root, check opened handles (regular, single link, private ownership/permissions, size),
   read at most 16 KiB plus one sentinel byte and revalidate the canonical producer profile and expected server ID.
   Reject links/reparse points and unsafe existing files. Never return raw filesystem errors or snapshot contents in logs.

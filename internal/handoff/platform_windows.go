@@ -90,6 +90,38 @@ func privateACLBytes(data []byte, owner *windows.SID) error {
 
 func safeOpenFlags() int { return 0 }
 
+var reopenCreatedFile = windows.NewLazySystemDLL("kernel32.dll").NewProc("ReOpenFile")
+
+// The caller proves exclusive creation. Go's original handle lacks WRITE_OWNER;
+// ReOpenFile requests it for the same file object without resolving a pathname.
+func prepareCreatedFile(file *os.File) error {
+	user, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil || reopenCreatedFile.Find() != nil {
+		return ErrUnsafe
+	}
+	raw, err := file.SyscallConn()
+	if err != nil {
+		return ErrUnsafe
+	}
+	result := ErrUnsafe
+	if raw.Control(func(fd uintptr) {
+		h, _, _ := reopenCreatedFile.Call(fd, windows.WRITE_OWNER|windows.READ_CONTROL,
+			windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE, 0)
+		if h == uintptr(windows.InvalidHandle) || h == 0 {
+			return
+		}
+		err := windows.SetSecurityInfo(windows.Handle(h), windows.SE_FILE_OBJECT,
+			windows.OWNER_SECURITY_INFORMATION, user.User.Sid, nil, nil, nil)
+		closeErr := windows.CloseHandle(windows.Handle(h))
+		if err == nil && closeErr == nil {
+			result = nil
+		}
+	}) != nil {
+		return ErrUnsafe
+	}
+	return result
+}
+
 // Windows does not offer the same directory-fsync guarantee as Unix here.
 // The slot is disposable; no durable upload or action identity is stored in it.
 func syncDirectory(*os.File) error { return nil }

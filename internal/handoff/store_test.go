@@ -22,6 +22,7 @@ func privateDirectory(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+	setFixtureDirectoryOwner(t, dir)
 	if err := ownerfs.RestrictDirectory(dir); err != nil {
 		t.Fatal(err)
 	}

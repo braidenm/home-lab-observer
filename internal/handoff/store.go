@@ -148,12 +148,28 @@ func (s *Store) openFile(name string, flags int, maxBytes int64) (*os.File, erro
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, ErrUnsafe
 	}
-	f, err := s.root.OpenFile(name, flags|safeOpenFlags(), 0o600)
+	var f *os.File
+	created := false
+	if flags&os.O_CREATE != 0 {
+		f, err = s.root.OpenFile(name, flags|os.O_EXCL|safeOpenFlags(), 0o600)
+		created = err == nil
+		if errors.Is(err, os.ErrExist) && flags&os.O_EXCL == 0 {
+			f, err = s.root.OpenFile(name, flags&^os.O_CREATE|safeOpenFlags(), 0o600)
+		}
+	} else {
+		f, err = s.root.OpenFile(name, flags|safeOpenFlags(), 0o600)
+	}
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, ErrMissing
 	}
 	if err != nil {
 		return nil, ErrUnavailable
+	}
+	// Only proven exclusive creation permits owner initialization, before any
+	// payload is written. Existing files are never repaired or taken over.
+	if created && prepareCreatedFile(f) != nil {
+		f.Close()
+		return nil, ErrUnsafe
 	}
 	info, err := f.Stat()
 	after, pathErr := s.root.Lstat(name)

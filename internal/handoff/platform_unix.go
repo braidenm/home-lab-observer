@@ -30,6 +30,7 @@ func privateHandle(file *os.File, directory bool) error {
 }
 
 func safeOpenFlags() int                { return unix.O_NOFOLLOW | unix.O_NONBLOCK }
+func prepareCreatedFile(*os.File) error { return nil }
 func syncDirectory(file *os.File) error { return file.Sync() }
 func lockWriter(file *os.File) error {
 	err := unix.Flock(int(file.Fd()), unix.LOCK_EX|unix.LOCK_NB)

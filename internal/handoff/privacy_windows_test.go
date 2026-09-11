@@ -13,6 +13,73 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// Only called for the new t.TempDir fixture, never existing owner paths. Hosted
+// elevated runners may default newly created objects to the Administrators SID.
+func setFixtureDirectoryOwner(t *testing.T, path string) {
+	t.Helper()
+	user, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		t.Fatal("fixture user lookup failed")
+	}
+	if windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION,
+		user.User.Sid, nil, nil, nil) != nil {
+		t.Fatal("fixture owner setup failed")
+	}
+}
+
+func TestCreatedWindowsFilesHaveExactCurrentOwner(t *testing.T) {
+	dir := privateDirectory(t)
+	s := openStore(t, dir, true)
+	raw, id := sample()
+	if s.Publish(raw, id) != nil {
+		t.Fatal("new-file initialization or publish failed")
+	}
+	user, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		t.Fatal("fixture user lookup failed")
+	}
+	for _, name := range []string{lockName, latestName} {
+		sd, err := windows.GetNamedSecurityInfo(filepath.Join(dir, name), windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION)
+		if err != nil {
+			t.Fatal("created owner query failed")
+		}
+		owner, _, err := sd.Owner()
+		if err != nil || owner == nil || !owner.Equals(user.User.Sid) {
+			t.Fatal("new file retained token group ownership")
+		}
+	}
+}
+
+func TestExistingDefaultGroupOwnedFileIsNotRepaired(t *testing.T) {
+	dir := privateDirectory(t)
+	path := filepath.Join(dir, lockName)
+	if os.WriteFile(path, nil, 0o600) != nil {
+		t.Fatal("fixture creation failed")
+	}
+	before, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
+	if err != nil {
+		t.Fatal("fixture descriptor query failed")
+	}
+	owner, _, err := before.Owner()
+	user, userErr := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil || userErr != nil || owner == nil {
+		t.Fatal("fixture owner query failed")
+	}
+	if owner.Equals(user.User.Sid) {
+		t.Skip("token defaults to current user; elevated group-owner fixture not present")
+	}
+	if s, err := Open(dir, true); err != ErrUnsafe {
+		if s != nil {
+			s.Close()
+		}
+		t.Fatal("existing group-owned lock accepted")
+	}
+	after, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
+	if err != nil || before.String() != after.String() {
+		t.Fatal("existing group-owned file was modified")
+	}
+}
+
 func TestPrivateACLBytesBounds(t *testing.T) {
 	owner, err := windows.StringToSid("S-1-5-21-100-200-300-1000")
 	if err != nil {

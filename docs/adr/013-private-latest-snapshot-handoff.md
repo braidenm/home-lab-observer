@@ -52,3 +52,14 @@ Future distinct service accounts need a separate explicitly provisioned shared r
 No new dependency, listener, secret, domain event or schema migration. Native temp-fixture tests and fault injection must
 pass; never test against a user's server directories. Rollback removes an unused library; installed slot cleanup later
 must target only its owned fixed files. Preserve existing standalone and legacy Compose installations unchanged.
+
+## Implementation clarification: newly created Windows ownership
+
+Windows assigns new objects the creating token's default owner, which can be Administrators for an elevated token rather
+than its user SID. Preserve the exact-current-user rule by proving exclusive creation before initializing an empty file's
+owner. Use ReOpenFile on that same handle to request WRITE_OWNER, then SetSecurityInfo; validate the original handle before
+payload writes. Existing objects are never repaired. The ordinary Go read/write handle does not itself request WRITE_OWNER.
+This initializes new storage rather than accepting a broader principal or mutating the process token. Tests also set the
+owner of their newly created temp directory explicitly; no existing owner directory or machine policy is changed.
+Sources: [Windows object ownership](https://learn.microsoft.com/en-us/windows/win32/secauthz/owner-of-a-new-object) and
+[ReOpenFile](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-reopenfile), accessed 2026-09-11.
