@@ -38,6 +38,9 @@ command, upload path, proxy or collector endpoint.
 
 ## D: disk/HTTPS/enrollment adapters, still uninstalled
 
+The separate [C2 portable upload-loop proposal](upload-loop.md) defines pacing and cancellation without activation.
+Its startup cooldown/restart policy remains pending review; it does not alter the accepted C1 machine.
+
 The [D1 contract](durable-ledger.md) and [ADR 015](../../docs/adr/015-durable-upload-ledger.md) select existing
 `modernc.org/sqlite v1.58.0` (no new dependency), a separate bounded one-row database with synchronous EXTRA and DELETE
 rollback journal. This uninstalled adapter is Linux-only; Windows/macOS support remains explicitly unavailable pending
