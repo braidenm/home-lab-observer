@@ -175,10 +175,16 @@ untested allowlist. Use Type=exec initially: process startup is deliberately not
 auth/conflict/recovery results exit with distinct fixed non-restart codes; transient HTTP failures remain in C2.
 Any configured crash restart retains C2's full 60-second startup cooldown and bounded manager restart burst.
 
-Filesystem completeness defaults false. A sandboxed namespace often cannot represent every host mount; CPU/memory/
-swap/uptime can be usable while disk overview is unavailable. Keep that honest initial behavior. Enable complete disk
+Filesystem completeness defaults false. A sandboxed namespace often cannot represent every host mount. CPU/memory/
+swap/uptime may remain locally measurable, but the existing numeric-host/v1 `projectOverview` makes the **entire hosted
+overview HOST_DATA_UNAVAILABLE** when filesystem input is unavailable or incomplete. The first no-coverage-proof
+canary therefore proves identity, freshness and delivery only; it does not provide hosted CPU/memory charts with
+only disk omitted. Do not set coverage true just to make charts appear. Enable the existing complete hosted numeric
 overview only after independent eligible-mount/capacity reference comparisons for the actual namespace profile,
 including hidden mounts and drift invalidation. Never expose a user checkbox that bypasses this proof.
+Alternatively, a subsequent separately specified quality-aware per-field remote profile, receiver/backend projection
+and frontend view can support partial numeric data. That end-to-end contract change is not implemented or implied
+by this installed composition slice.
 
 ## Readiness, operator experience and rollback
 
@@ -190,7 +196,8 @@ bounded records are not new durable delivery authority. Print remote acknowledge
 liveness. The first successful connection can take at least one minute plus collection/network time.
 
 Platform Demo's logged-in owner server page should show received freshness, the numeric-only profile and unavailable
-disk coverage honestly, plus exact install/status/stop/restart/refresh/revoke/uninstall instructions. An offline worker
+**whole numeric overview** when coverage is unproven, plus exact install/status/stop/restart/refresh/revoke/uninstall
+instructions. Do not describe this initial canary as a usable partial hosted system dashboard. An offline worker
 cannot send its current local failure status; do not invent remote live diagnostics from an old snapshot. Existing
 server authorization stays unchanged. No new rich-data or management entitlement is implied by this installation.
 

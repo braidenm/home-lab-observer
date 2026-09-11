@@ -35,7 +35,10 @@ the tested ownership/lifetime boundary. Reprovisioning a migrated ledger can reu
 access weakens local-host isolation. A dedicated routed namespace/firewall adds privileged link/rule lifecycle and
 still does not provide TLS-origin identity; reserve it for a demonstrated enforcement need.
 
-The proposed native canary is numeric-only, with unproven filesystem coverage reported unavailable, explicit
+The proposed native canary is numeric-only. With unproven filesystem coverage, numeric-host/v1 reports the entire
+hosted overview HOST_DATA_UNAVAILABLE: initial evidence is identity/freshness/delivery, not partial CPU/memory charts.
+Do not enable coverage without genuine namespace/drift proof. Partial hosted data requires a subsequent quality-aware
+per-field profile plus receiver/backend/frontend slice. The canary retains explicit
 credential/endpoint recovery, and immutable compatible code rollback. It leaves the legacy connector unchanged.
 Its manual refresh, shared-IP residual, architecture/native target limitations and unexecuted installed proof must
 remain visible. This proposed ADR does not supersede ADR 014, D1/D2d durability contracts or their acceptance gates.
