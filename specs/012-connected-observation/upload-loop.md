@@ -71,7 +71,8 @@ external prerequisites. No runtime import may pull collector, credential/filesys
 - [ ] Single-use/concurrent Run, canceled-before-start, nil context and unknown/error results fail with fixed values.
 - [ ] Invalid observations poll without sending or modifying state; terminal/recovery results never retry.
 - [ ] Compose with real C1 and synthetic source/ledger/transport to prove identical pending bytes/sequence across retries,
-  no calls during cooldown, and no post-cancellation acknowledgement. No real network or secret fixtures.
+  no calls during cooldown, and no new Step after cancellation is observed. Cancellation racing an already durable
+  acknowledgement must not undo or misrepresent C1's committed result. No real network or secret fixtures.
 - [ ] Stats snapshots are detached and race-safe; malicious dependency errors never reach results or diagnostics.
 - [ ] Full tests/vet/race and supported-target builds; existing rich scheduler behavior unchanged.
 
