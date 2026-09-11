@@ -27,9 +27,11 @@ func (f fakeProvider) CPUPercent(context.Context, time.Duration) (float64, error
 	return 12.5, f.cpuErr
 }
 func (f fakeProvider) Memory(context.Context) (MemoryStat, error) {
-	return MemoryStat{100, 40, 60, 40}, f.memoryErr
+	return MemoryStat{Total: 100, Used: 40, Available: 60, UsedPercent: 40}, f.memoryErr
 }
-func (f fakeProvider) Swap(context.Context) (SwapStat, error) { return SwapStat{10, 2}, f.swapErr }
+func (f fakeProvider) Swap(context.Context) (SwapStat, error) {
+	return SwapStat{Total: 10, Used: 2}, f.swapErr
+}
 func (f fakeProvider) Partitions(context.Context) ([]Partition, error) {
 	return []Partition{{Mountpoint: `C:\Users\secret`, Type: "ntfs"}, {Mountpoint: `D:\private`, Type: "ntfs"}}, f.partitionErr
 }
@@ -37,7 +39,7 @@ func (f fakeProvider) Usage(_ context.Context, p string) (UsageStat, error) {
 	if e := f.usageErr[p]; e != nil {
 		return UsageStat{}, e
 	}
-	return UsageStat{100, 50, 50, 50}, nil
+	return UsageStat{Total: 100, Used: 50, Free: 50, UsedPercent: 50}, nil
 }
 func (f fakeProvider) Network(context.Context) (NetStat, error) {
 	return NetStat{1, 2, 3, 4, 5, 6, 7, 8}, f.networkErr
