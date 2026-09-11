@@ -28,6 +28,13 @@ machine creation loads/validates the authoritative ledger; it never initializes 
 also latches recovery. Persist terminal outcomes. Ledger records and request/source bytes are cloned at interface boundaries.
 Cancellation leaves any durably admitted request pending; a canceled/failed acknowledgement commit requires recovery.
 
+A failed source read reports fixed `SOURCE_UNAVAILABLE`, never `IDLE` or the underlying error. If the same step
+already retired an expired pending request, `EXPIRED_DELIVERY_UNKNOWN` takes precedence; the next step can report
+source unavailability. `IDLE` means an already acknowledged latest digest, not a failed handoff read.
+Storage adapters share `ValidateRecord(record, expectedBinding)`, which checks the expected binding and complete
+logical record invariants and returns only `ErrRecovery` on failure. `CloneRecord` detaches the pending body;
+it does not validate or authenticate state. Adapters must bound their input and validate before cloning untrusted records.
+
 C1 includes no credential acquisition, HTTP parsing, disk format, scheduler sleeps/jitter, worker or automatic recovery.
 Send receives a child deadline capped at five seconds. Source/ledger receive the caller's context; their eventual adapters
 and worker must impose bounded I/O/step deadlines. Adapters must honor cancellation; the synchronous primitive cannot

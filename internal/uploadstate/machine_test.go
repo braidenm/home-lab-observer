@@ -284,7 +284,10 @@ func TestSourceAndClockBounds(t *testing.T) {
 	}
 	h := newHarness(t)
 	h.s.err = privateError
-	step(t, h, Idle, nil)
+	step(t, h, SourceUnavailable, nil)
+	if h.l.commits != 0 || len(h.tr.requests) != 0 {
+		t.Fatal("unavailable source admitted")
+	}
 	h = newHarness(t)
 	h.c.at = time.Time{}
 	step(t, h, ClockSkew, nil)

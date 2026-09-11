@@ -34,6 +34,7 @@ type Outcome string
 
 const (
 	Idle               Outcome = "IDLE"
+	SourceUnavailable  Outcome = "SOURCE_UNAVAILABLE"
 	Retry              Outcome = "RETRY"
 	Acknowledged       Outcome = "ACKNOWLEDGED"
 	Expired            Outcome = "EXPIRED_DELIVERY_UNKNOWN"
@@ -120,7 +121,7 @@ func (m *Machine) Step(ctx context.Context) (Outcome, error) {
 	}
 	if m.record == nil {
 		r, err := m.ledger.Load(ctx)
-		if err != nil || !validRecord(r, m.binding) {
+		if err != nil || ValidateRecord(r, m.binding) != nil {
 			m.recovery = true
 			return "", ErrRecovery
 		}
@@ -160,7 +161,7 @@ func (m *Machine) Step(ctx context.Context) (Outcome, error) {
 			if retired {
 				return Expired, nil
 			}
-			return Idle, nil
+			return SourceUnavailable, nil
 		}
 		if len(body) > remoteprojection.MaxBytes {
 			return "", ErrSnapshot
@@ -271,6 +272,20 @@ func collectionTime(body []byte, server string) (time.Time, bool) {
 	at, err := time.Parse(time.RFC3339Nano, doc.CollectedAt)
 	return at, err == nil
 }
+
+// ValidateRecord checks the complete logical ledger invariants against a trusted
+// expected binding. It does not authenticate state or detect restored backups.
+func ValidateRecord(r Record, expected Binding) error {
+	if !validBinding(expected) || !validRecord(r, expected) {
+		return ErrRecovery
+	}
+	return nil
+}
+
+// CloneRecord detaches the pending body without validating it. Bound and validate
+// untrusted records before copying them.
+func CloneRecord(r Record) Record { return clone(r) }
+
 func validRecord(r Record, b Binding) bool {
 	if r.Binding != b || r.Watermark < 0 || (!r.HasAck && r.LastAck != [32]byte{}) || (r.HasAck && r.Watermark == 0) {
 		return false
