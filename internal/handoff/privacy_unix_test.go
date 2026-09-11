@@ -10,6 +10,21 @@ import (
 
 func setFixtureDirectoryOwner(*testing.T, string) {}
 
+func TestUnlinkedPrivateHandleIsUnavailable(t *testing.T) {
+	path := filepath.Join(privateDirectory(t), "owned-unlinked-fixture")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := privateHandle(f, false); err != ErrUnavailable {
+		t.Fatal("unlinked open handle must remain unreadable and unavailable")
+	}
+}
+
 func TestUnsafeExistingPermissionsAreNotRepaired(t *testing.T) {
 	dir := privateDirectory(t)
 	if err := os.Chmod(dir, 0o755); err != nil {

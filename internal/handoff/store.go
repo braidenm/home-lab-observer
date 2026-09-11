@@ -35,6 +35,7 @@ type Store struct {
 	writeFile func(*os.File, []byte) (int, error)
 	syncDir   func(*os.File) error
 	replace   func(string, string) error
+	checkFile func(*os.File) error
 }
 
 // Open validates an existing private directory without creating or repairing it.
@@ -58,6 +59,7 @@ func Open(path string, writable bool) (*Store, error) {
 		return nil, ErrUnsafe
 	}
 	s := &Store{root: root, directory: dir, syncFile: (*os.File).Sync, writeFile: (*os.File).Write, syncDir: syncDirectory, replace: root.Rename}
+	s.checkFile = func(f *os.File) error { return privateHandle(f, false) }
 	if writable {
 		lock, err := s.openFile(lockName, os.O_RDWR|os.O_CREATE, 0)
 		if err != nil {
@@ -183,8 +185,15 @@ func (s *Store) openFile(name string, flags int, maxBytes int64) (*os.File, erro
 		f.Close()
 		return nil, ErrUnavailable
 	}
-	if !after.Mode().IsRegular() ||
-		info.Size() < 0 || info.Size() > maxBytes || privateHandle(f, false) != nil {
+	privateErr := ErrUnsafe
+	if after.Mode().IsRegular() && info.Size() >= 0 && info.Size() <= maxBytes {
+		privateErr = s.checkFile(f)
+	}
+	if privateErr != nil {
+		if errors.Is(privateErr, ErrUnavailable) {
+			f.Close()
+			return nil, ErrUnavailable
+		}
 		// Replacement can also occur during handle privacy validation, leaving
 		// the formerly valid file unlinked. Reject without misclassifying that race.
 		// Keep the old inode alive until this check finishes: closing it first can

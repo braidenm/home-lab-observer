@@ -182,12 +182,20 @@ func TestConcurrentReaderNeverReturnsPartialDocument(t *testing.T) {
 	dir := privateDirectory(t)
 	w := openStore(t, dir, true)
 	r := openStore(t, dir, false)
+	r.checkFile = func(f *os.File) error {
+		err := privateHandle(f, false)
+		if err != nil {
+			t.Log("synthetic handle validation:", err)
+		}
+		return err
+	}
 	raw, identity := sample()
 	if err := w.Publish(raw, identity); err != nil {
 		t.Fatal(err)
 	}
 	var wg sync.WaitGroup
 	wg.Add(1)
+	defer wg.Wait()
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 50; i++ {
@@ -210,6 +218,39 @@ func TestConcurrentReaderNeverReturnsPartialDocument(t *testing.T) {
 	wg.Wait()
 	if data, err := r.Read(serverID); err != nil || remoteprojection.Validate(data, serverID) != nil {
 		t.Fatal("no valid document after concurrent publication")
+	}
+}
+
+func TestReplacementDuringHandleValidationIsUnavailable(t *testing.T) {
+	dir := privateDirectory(t)
+	w := openStore(t, dir, true)
+	r := openStore(t, dir, false)
+	raw, id := sample()
+	if err := w.Publish(raw, id); err != nil {
+		t.Fatal(err)
+	}
+	r.checkFile = func(f *os.File) error {
+		raw.ObservedAt = raw.ObservedAt.Add(time.Second)
+		if err := w.Publish(raw, id); err != nil {
+			t.Fatal(err)
+		}
+		// Force the privacy-failure path after the opened target was replaced.
+		return ErrUnsafe
+	}
+	if data, err := r.Read(serverID); data != nil || err != ErrUnavailable {
+		t.Fatal("replacement during validation was not classified as unavailable")
+	}
+}
+
+func TestUnavailableHandleNeverReturnsBytes(t *testing.T) {
+	s := openStore(t, privateDirectory(t), true)
+	raw, id := sample()
+	if err := s.Publish(raw, id); err != nil {
+		t.Fatal(err)
+	}
+	s.checkFile = func(*os.File) error { return ErrUnavailable }
+	if data, err := s.Read(serverID); data != nil || err != ErrUnavailable {
+		t.Fatal("unavailable handle became readable or a permission error")
 	}
 }
 
