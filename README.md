@@ -61,6 +61,12 @@ telemetry must not automatically grant control. Docker, operating-system service
 their own adapters and permission models; none will be exposed through a generic shell-command endpoint.
 See the [threat model](docs/security/threat-model.md) for the separation between observation and future control.
 
+The [delivery roadmap](docs/delivery-plan.md) prioritizes hosted connection, then separately permissioned Docker
+start, stop and restart. Kubernetes is deferred. Our [open-source comparison](docs/architecture-research/007-open-source-alignment.md)
+explains the established patterns informing installation, connectivity, monitoring and management boundaries.
+These are planned capabilities, not features available in the current preview. Monitoring access will not implicitly
+grant management access.
+
 ### Native log metadata and history
 
 [Preview 3](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-preview.3) implements

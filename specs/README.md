@@ -10,6 +10,8 @@
 | [006 Container observations](006-container-observations/spec.md) | Accepted | Opt-in local Docker reader, dedicated nullable inventory API, and Workloads dashboard |
 | [007 Native preview delivery](007-native-delivery/spec.md) | Accepted | Verified archives, per-user install/rollback helpers and independent release publication |
 | [008 Background lifecycle](008-background-lifecycle/spec.md) | Released in preview 2 | Explicit user-session startup, safe lifecycle management and bounded self-diagnostics |
-| [009 Native log metadata](009-native-log-metadata/spec.md) | Contract implementation | Opt-in native metadata, optional Linux helper, compact rollups and honest coverage |
+| [009 Native log metadata](009-native-log-metadata/spec.md) | Released in preview 3 | Opt-in native metadata, optional Linux helper, compact rollups and honest coverage |
+| [010 Kubernetes inventory](010-kubernetes-inventory/spec.md) | Deferred by owner | Bounded read-only Pods, container status and controller views |
+| [011 Docker container actions](011-container-actions/spec.md) | Proposed; action scope approved, architecture pending | Separately granted start, stop and restart with explicit broker authority and audit |
 
 Each specification owns its requirements, implementation plan, tasks, acceptance evidence, and follow-up decisions. Work that changes behavior must update the relevant specification before implementation.
