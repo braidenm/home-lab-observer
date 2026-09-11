@@ -10,6 +10,9 @@ One verified Linux release bundle and one explicit elevated installer provision 
 publish numeric observations, and produce a receiver-acknowledged status. No further disconnected helper phase.
 Start with the exact Ubuntu 24.04/systemd 255 amd64 disposable-VM image proven by acceptance; do not advertise
 all distributions merely because their manager version is newer. ARM64 support requires equivalent native evidence.
+Define a separately versioned connected-bundle manifest/profile naming exactly these executables and unit/config
+templates, checksums and build identities. Do not add optional files to or relax the existing exact-content native-v2
+manifest validator. Verification rejects missing, extra or mismatched connected artifacts before privileged mutation.
 Existing local Observer and legacy Compose installations stay untouched. Windows/macOS remote installation,
 Docker/process/log export, container actions and Kubernetes are not enabled by this slice.
 
@@ -43,7 +46,11 @@ Use dedicated static collector and uploader service accounts with no login, no e
 dedicated shared-read GID. Refuse preexisting unknown users, groups, unit names and paths. Numeric identity is
 recorded in root-owned metadata and verified on every start; names alone do not confer trust. Root remains trusted.
 
-1. Preflight is read-only. The explicit elevated install verifies the release, baseline and exact target paths, then
+1. Preflight is read-only. Before the first installation mutation, acquire an installation-wide root-owned exclusive
+   lease at a fixed validated coordination location; creating that validated lease is the only bootstrap operation.
+   Never unlink/recreate its inode to bypass contention. Keep it through provisioning, promotion and service start;
+   refresh, rollback, recovery and uninstall acquire the same lease before any mutation and hold it through completion.
+   The explicit elevated install verifies the release, baseline and exact target paths, then
    exclusively provisions a root-owned installation directory in PREPARING state, disabled units and private subtrees.
    This record is not D2d READY and never permits worker startup. No automatic sudo or repair of unknown resources.
 2. Run the one-shot enrollment executable as the eventual uploader UID in an owner-private 0700 staging directory.
@@ -53,7 +60,7 @@ recorded in root-owned metadata and verified on every start; names alone do not 
 3. Join the enrollment process. A fixed validation operation under that same UID calls D2d OpenReady, validates the
    exact expected binding and pristine ledger, and returns only bounded canonical enrollment data through a private
    pipe to its root parent. No machine uploads before promotion. A non-pristine ledger or uncertain/partial enrollment
-   is recovery-required; do not reconstruct sequence one. Take and keep the installation-level exclusive lease.
+   is recovery-required; do not reconstruct sequence one. The installation-wide lease remains held.
 4. After all child handles are closed, root removes service-UID traversal to the staging parent and validates pinned
    source objects. This freezes the cooperative store; the threat model does not claim to revoke already-open handles
    held by a hostile same UID/root. Only the installed tools may run as these dedicated principals. Root promotes the
@@ -91,6 +98,11 @@ Use a fixed hosts-first pure-Go resolver setup; no functional external or host-l
 Prove resolution makes no DNS calls and a missing hosts entry fails closed under the final root and packet filter.
 
 Apply `IPAddressDeny=any` plus those precise allows to the service, with no inherited socket activation/descriptors.
+Before activation and refresh, inspect the effective unit, drop-ins and every ancestor slice's IP allow/deny policy.
+An inherited allow can override deny-all: refuse any effective allow broader than the reviewed exact destination set,
+including a broader CIDR, symbolic allow or unrelated exact address. Refuse unrecognized policy composition instead
+of assuming the generated unit controls the entire effective policy. Inspect exact resolved properties, not only the
+packaged unit file; test hostile ancestor/drop-in allows. Never modify a global slice to make this profile pass.
 Actual IPv4 and IPv6 deny/allow probes are mandatory on the final supported kernel. Do not change a global slice or
 the host firewall. This reuses systemd cgroup filtering rather than adding a privileged network daemon or proxy.
 The existing WSL dual-stack probe demonstrates feasibility only; it does not certify this installed policy.
@@ -135,6 +147,19 @@ CA updates use the stopped validated installation-update path, never an uploader
 host home/root directories, procfs/sysfs, Docker socket, journal socket or local API socket. Verify final mounts, not
 just unit directives: some systemd hardening options implicitly create API filesystems. Do not add procfs to silence
 optional Go runtime cgroup-discovery failures. Standard output/error are discarded; core dumps are disabled.
+Restrict uploader socket creation to AF_INET and AF_INET6 only. Do not allow AF_UNIX for logging or notification;
+test both filesystem and abstract AF_UNIX denial, because an abstract socket is not hidden by RootDirectory.
+Apply `SystemCallArchitectures=native` and explicitly deny `socketpair` for uploader and enrollment execution:
+RestrictAddressFamilies filters socket() only, and a UNIX datagram pair can otherwise reach an abstract peer.
+The abstract-socket fixture must exercise both socket() and socketpair()-based paths. Deny `io_uring_setup`,
+`io_uring_enter` and `io_uring_register` on both workers/enrollment when unused by the pinned static Go/SQLite
+runtime, and prove that normal epoll/futex-based collection, TLS and durable ledger operations still work. This
+closes an alternate kernel socket-operation path rather than assuming syscall family filtering covers io_uring.
+Do not claim these restrictions are compatible/enforced until the exact packaged profile passes its positive and
+negative tests; if a dependency actually requires one, revisit the boundary instead of silently allowing it.
+Both workers use PrivateIPC plus explicit denial of unnecessary System V/POSIX IPC syscalls under the tested syscall
+policy. Do not treat chroot, PrivateIPC or socket-family filtering alone as complete IPC isolation. Prove denial
+against owned IPC fixtures and inspect inherited descriptors; the workers receive no inherited IPC/network sockets.
 
 Collector has PrivateNetwork plus denied IPv4/IPv6 socket creation, no inherited network descriptors, empty capability
 sets, NoNewPrivileges, read-only host view apart from handoff and bounded diagnostics, and protection against access
@@ -187,8 +212,11 @@ instructions and synthetic fixtures, split into reviewable commits. Do not decla
 1. PR tests: dependency allowlists, typed config and grant handling, promotion crash boundaries/foreign principal/
    collision/partial-state refusal, same-inode ledger preservation, bounded diagnostics, serial cancellation and fixed
    terminal exits. Existing C1/D1/D2c/D2d/E1/E2/C2 tests remain green; race and native CI stay below 15 minutes.
+   Include installation-wide lease contention before mutation across install/refresh/uninstall, connected-manifest
+   extra/missing-file refusal without native-v2 policy changes, and inherited broad IP allow rejection.
 2. Bounded manual disposable-VM test: install exact verified bundle with synthetic receiver; real separate principals,
    final mount view, no inherited sockets, denied host/local-network/unauthorized-sink access, allowed TLS upload,
+   abstract AF_UNIX and cross-principal IPC denial, hostile ancestor/drop-in IP allow rejection,
    wrong CA/hostname, missing host mapping, endpoint-policy refresh, collector coverage failure, drift refusal,
    kill/restart, response loss, ENOSPC, revoke and exact rollback. No public PR code runs on private infrastructure.
 3. VM reboot/power-loss and exact filesystem durability evidence; native target coverage. WSL syscall/namespace probes
@@ -203,4 +231,8 @@ Read 2026-09-11: current upstream [systemd execution reference source](https://g
 and pinned [v255 execution controls](https://github.com/systemd/systemd/blob/v255/man/systemd.exec.xml), plus
 [v255 IP filtering](https://github.com/systemd/systemd/blob/v255/man/systemd.resource-control.xml).
 These support credential/root integration and address-based filtering semantics, not our installation proof.
+The v255 execution reference explicitly excludes socketpair and inherited sockets from address-family filtering,
+recommends native syscall architectures, and distinguishes IPC namespaces from AF_UNIX/POSIX shared memory.
+The v255 resource-control reference combines ancestor policies with allow precedence; generated-unit text alone
+therefore cannot establish a deny boundary. These caveats are acceptance requirements, not evidence of enforcement.
 The v255 baseline, fixed-hosts policy, promotion transaction and budgets above are this project's proposed design.
