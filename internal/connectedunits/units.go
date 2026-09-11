@@ -45,6 +45,7 @@ type EnrollmentCommand struct {
 type renderData struct {
 	CollectorUID, UploaderUID, UploaderGID, SharedGID                                    uint32
 	ArtifactSHA256, AddressRules, AddressFamilies, PrivateNetwork, StateBind, StateWrite string
+	SocketDeny                                                                           string
 }
 
 // Resources returns detached reviewed bytes, keyed by exact bundle filename.
@@ -127,7 +128,8 @@ func RenderEnrollmentProperties(c EnrollmentInput, mode EnrollmentMode) (Enrollm
 	d := renderData{UploaderUID: c.UploaderUID, UploaderGID: c.UploaderGID, SharedGID: c.SharedGID, ArtifactSHA256: c.ArtifactSHA256, AddressRules: addresses, AddressFamilies: "AF_INET AF_INET6", PrivateNetwork: "no", StateBind: "/var/lib/home-lab-observer-connected/enrollment:/state/enrollment", StateWrite: "/state/enrollment"}
 	if mode != Enroll {
 		d.AddressRules = ""
-		d.AddressFamilies = "none"
+		d.AddressFamilies = ""
+		d.SocketDeny = " socket"
 		d.PrivateNetwork = "yes"
 	}
 	if mode == ValidateLedger {

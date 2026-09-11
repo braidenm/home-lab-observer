@@ -37,7 +37,8 @@ avoids duplicate/case/unknown-key ambiguity. Existing native-v2 rollback is unto
 
 The sole linker variable is `main.releaseIdentity`. `connectedidentity.Resolve`
 requires a canonical bounded record matching the expected role and actual supported
-runtime; empty/development identity fails closed. Encode/Parse and bounded Scan are
+runtime; empty/development identity fails closed. Versions are capped at 40 bytes,
+matching the numeric-host projection's collector-version limit. Encode/Parse and bounded Scan are
 used by release tooling without executing cross-target inputs. Malformed, duplicate,
 dangling and chunk-spanning marker cases have deterministic synthetic tests. Identity
 is package consistency evidence; authenticated release provenance is separate.
@@ -55,6 +56,13 @@ its private primary GID and the shared group only as supplementary. Exit codes
 and retains the separate C2 startup cooldown. Unit directives implement the accepted
 profile, but effective inherited policy and actual namespace/syscall probes remain
 mandatory before activation; template tests alone do not prove installed isolation.
+
+Actual systemd255 testing rejected the transient property
+`RestrictAddressFamilies=none`. Collector and offline validation profiles omit that
+property and deny the native `socket` syscall in addition to `socketpair` instead,
+with private networking as defense in depth. Online enrollment/uploader retain
+the AF_INET/AF_INET6 restriction and do not deny `socket`. The manual primitive
+fixture separately checks the collector's deny-all socket behavior.
 
 Enrollment uses a separately reviewed private-pipe manager invocation, never a
 secret in unit text, arguments or environment. `RenderEnrollmentProperties` accepts

@@ -8,7 +8,7 @@ Ubuntu 24.04/systemd255 amd64 VM:
 sudo env -i PATH=/usr/bin:/bin bash scripts/fixtures/connected-primitives/run.sh
 ```
 
-This creates only three uniquely named transient services and a guarded owned `/tmp`
+This creates only four uniquely named transient services and a guarded owned `/tmp`
 fixture. It uses the existing nobody/nogroup identity, not new accounts. Both syscall
 invocations have fresh IPC namespaces; synthetic shared memory is removed immediately
 and namespace destruction is a cleanup backstop. No socket binds/connects/sends,
@@ -21,6 +21,13 @@ global policy. The hardened invocation denies AF_UNIX, socketpair, shmget and
 io_uring_setup while preserving AF_INET/AF_INET6 socket creation. It does not prove
 packet filtering, abstract-peer connections, every alternate syscall, final worker
 mounts, Go/SQLite compatibility, enrollment, reboot or power-loss behavior.
+
+The collector invocation adds native `socket` syscall denial and private networking,
+requiring AF_INET, AF_INET6 and AF_UNIX creation all to fail while the probe process
+itself runs successfully. It also retains socketpair/IPC/io_uring denial. No
+`RestrictAddressFamilies=none` property is used: an actual systemd255 transient
+property probe rejected that spelling. The online uploader still permits only
+AF_INET/AF_INET6 socket creation.
 
 The empty LoadCredential fixture checks root ownership, exact mode and named-worker
 ACL/readability inside RootDirectory. Its Python-only public runtime mounts are

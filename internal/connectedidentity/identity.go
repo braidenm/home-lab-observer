@@ -25,7 +25,7 @@ func prefix() string { return strings.ReplaceAll("HLO-CONNECTED-!IDENTITY-V1[", 
 func suffix() string { return strings.ReplaceAll("END-HLO-CONNECTED-!IDENTITY", "!", "") }
 
 func (i Identity) Validate() error {
-	if (i.Role != "collector" && i.Role != "uploader" && i.Role != "install") || i.OS != "linux" || i.Arch != "amd64" || len(i.Version) > 64 || !versionPattern.MatchString(i.Version) || !commitPattern.MatchString(i.Commit) {
+	if (i.Role != "collector" && i.Role != "uploader" && i.Role != "install") || i.OS != "linux" || i.Arch != "amd64" || len(i.Version) > 40 || !versionPattern.MatchString(i.Version) || !commitPattern.MatchString(i.Commit) {
 		return ErrInvalid
 	}
 	for _, part := range strings.Split(strings.SplitN(i.Version, "-", 2)[1], ".") {

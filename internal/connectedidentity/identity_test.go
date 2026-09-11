@@ -74,3 +74,15 @@ func TestBoundedScan(t *testing.T) {
 		t.Fatal("oversize")
 	}
 }
+
+func TestVersionFitsNumericProjection(t *testing.T) {
+	i := fixture()
+	i.Version = "0.1.0-" + strings.Repeat("a", 34)
+	if len(i.Version) != 40 || i.Validate() != nil {
+		t.Fatal("maximum wire-compatible version refused")
+	}
+	i.Version += "a"
+	if i.Validate() != ErrInvalid {
+		t.Fatal("version exceeds numeric projection limit")
+	}
+}

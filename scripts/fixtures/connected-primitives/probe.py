@@ -84,16 +84,16 @@ def credential():
 
 
 def main():
-    if len(sys.argv) != 2 or sys.argv[1] not in ("baseline", "denied", "credential"):
+    if len(sys.argv) != 2 or sys.argv[1] not in ("baseline", "denied", "collector", "credential"):
         raise AssertionError("invalid fixture mode")
     mode = sys.argv[1]
     if mode == "credential":
         credential()
         print("CONNECTED_CREDENTIAL_PRIMITIVE_OK", flush=True)
         return
-    denied = mode == "denied"
-    checked(lambda: network_socket(socket.AF_INET), False)
-    checked(lambda: network_socket(socket.AF_INET6), False)
+    denied = mode in ("denied", "collector")
+    checked(lambda: network_socket(socket.AF_INET), mode == "collector")
+    checked(lambda: network_socket(socket.AF_INET6), mode == "collector")
     checked(lambda: network_socket(socket.AF_UNIX), denied)
     checked(unix_pair, denied)
     checked(shared_memory, denied)

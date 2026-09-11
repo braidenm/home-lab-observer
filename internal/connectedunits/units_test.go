@@ -29,10 +29,13 @@ func TestReviewedProfiles(t *testing.T) {
 		}
 	}
 	collector := string(u.Collector)
-	for _, required := range []string{"PrivateNetwork=yes\n", "RestrictAddressFamilies=none\n", "ProtectProc=invisible\n", "User=61001\n", "Group=61011\n"} {
+	for _, required := range []string{"PrivateNetwork=yes\n", " socket socketpair ", "ProtectProc=invisible\n", "User=61001\n", "Group=61011\n"} {
 		if !strings.Contains(collector, required) {
 			t.Fatal("collector policy")
 		}
+	}
+	if strings.Contains(collector, "RestrictAddressFamilies=") {
+		t.Fatal("collector must use native socket syscall denial")
 	}
 	uploader := string(u.Uploader)
 	for _, required := range []string{"RootDirectory=/var/lib/home-lab-observer-connected/uploader-root\n", "MountAPIVFS=no\n", "RestrictAddressFamilies=AF_INET AF_INET6\n", "IPAddressDeny=any\n", "IPAddressAllow=1.1.1.1/32\n", "IPAddressAllow=2606:4700:4700::1111/128\n", "LoadCredential=connector.json:/etc/home-lab-observer-connected/credentials/connector.json\n", "Group=61012\n", "SupplementaryGroups=61011\n"} {
@@ -55,6 +58,18 @@ func TestReviewedProfiles(t *testing.T) {
 			t.Fatal("command contract")
 		}
 		text := strings.Join(command.Properties, "\n")
+		for _, property := range command.Properties {
+			if property == "" {
+				t.Fatal("empty transient property")
+			}
+		}
+		if mode == Enroll {
+			if !strings.Contains(text, "RestrictAddressFamilies=AF_INET AF_INET6") || strings.Contains(text, " socket ") {
+				t.Fatal("online socket policy")
+			}
+		} else if strings.Contains(text, "RestrictAddressFamilies=") || !strings.Contains(text, " socket socketpair ") {
+			t.Fatal("offline socket denial")
+		}
 		for _, forbidden := range []string{"LoadCredential=", "/state/ledger", "/handoff", "StandardInputText=", "StandardOutput=journal", "INSTALLED_READY"} {
 			if strings.Contains(text, forbidden) {
 				t.Fatal("enrollment authority")
@@ -69,7 +84,7 @@ func TestReviewedProfiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := strings.Join(ledger.Properties, "\n")
-	if !strings.Contains(text, "PrivateNetwork=yes") || !strings.Contains(text, "RestrictAddressFamilies=none") || !strings.Contains(text, "/state/ledger") || strings.Contains(text, "/state/enrollment") || strings.Contains(text, "IPAddressAllow=") {
+	if !strings.Contains(text, "PrivateNetwork=yes") || !strings.Contains(text, " socket socketpair ") || strings.Contains(text, "RestrictAddressFamilies=") || !strings.Contains(text, "/state/ledger") || strings.Contains(text, "/state/enrollment") || strings.Contains(text, "IPAddressAllow=") {
 		t.Fatal("ledger validation profile")
 	}
 }

@@ -20,7 +20,7 @@ cleanup() {
   rm -r -- "$probe_root"
 }
 trap cleanup EXIT
-for mode in baseline denied credential; do
+for mode in baseline denied collector credential; do
   [[ $(systemctl show --property=LoadState --value "$unit-$mode.service") == not-found ]] || fail
 done
 chmod 0711 "$probe_root"
@@ -40,6 +40,7 @@ run_mode() {
 }
 run_mode baseline CONNECTED_BASELINE_PRIMITIVE_OK /usr/bin/python3 "$probe_root/probe.py" baseline
 run_mode denied CONNECTED_DENIED_PRIMITIVE_OK -p 'RestrictAddressFamilies=AF_INET AF_INET6' -p SystemCallArchitectures=native -p "SystemCallFilter=$filter" -p SystemCallErrorNumber=EPERM /usr/bin/python3 "$probe_root/probe.py" denied
+run_mode collector CONNECTED_COLLECTOR_PRIMITIVE_OK -p PrivateNetwork=yes -p SystemCallArchitectures=native -p "SystemCallFilter=$filter socket" -p SystemCallErrorNumber=EPERM /usr/bin/python3 "$probe_root/probe.py" collector
 # This credential-only primitive deliberately binds Python's public runtime;
 # it is NOT the final uploader filesystem profile or host-confidentiality proof.
 run_mode credential CONNECTED_CREDENTIAL_PRIMITIVE_OK -p "RootDirectory=$probe_root/root" -p "BindReadOnlyPaths=/usr /bin /lib /lib64 $probe_root/probe.py:/probe.py" -p "LoadCredential=connector.json:$probe_root/synthetic" /usr/bin/python3 /probe.py credential
