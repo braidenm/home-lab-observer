@@ -1,6 +1,6 @@
 # ADR 020: First installed Linux connected-worker composition
 
-Status: Proposed; no implementation or installation approval.
+Status: Accepted for implementation; installation and release remain gated on actual acceptance.
 Date: 2026-09-11.
 
 ## Context and proposed decision
