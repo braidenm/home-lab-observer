@@ -13,7 +13,7 @@ import (
 // ReadRootFile traverses only root-owned, non-writable real directories. No
 // worker-controlled pathname or symbolic link becomes an installed authority.
 func ReadRootFile(path string, limit int64) ([]byte, error) {
-	if !strings.HasPrefix(path, "/") || limit <= 0 || limit > MaxConfigBytes {
+	if !strings.HasPrefix(path, "/") || limit <= 0 || limit > 1024*1024 {
 		return nil, ErrUnsafe
 	}
 	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
