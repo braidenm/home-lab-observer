@@ -41,6 +41,11 @@ Primary sources consulted 2026-09-11:
   documented `ENOENT` absence or an ACL whose validated size equals a freshly allocated empty ACL. Reject all
   nonempty ACLs and other failures; never interpret arbitrary ACL enumeration errors as absence. Linux POSIX ACL
   named-user/group effective access is constrained by the already-zero group-class mode mask.
+- [purego v0.10.0 Darwin native-call trampoline](https://github.com/ebitengine/purego/blob/v0.10.0/sys_arm64.s) and
+  [its errno test](https://github.com/ebitengine/purego/blob/v0.10.0/syscall_test.go): capture ACL result and errno
+  together through SyscallN before returning to Go. A later read of libc's thread-local errno is not reliable merely
+  because LockOSThread is held: runtime work between the C return and Go read can change it. The 1,000-repeat native
+  concurrency test reproduced the previous delayed-read failure. Permission acceptance remains unchanged.
 
 ## Threat model, operation and rollback
 

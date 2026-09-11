@@ -100,16 +100,13 @@ func TestExtendedACLPolicyFailuresAndReleases(t *testing.T) {
 		{"empty free failure", 200, 100, 0, 44, 44, 100, false, 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			errno := int32(unix.ENOENT) // Must be cleared, not accidentally reused.
 			freed := map[uintptr]bool{}
 			calls := aclCalls{
-				errno: func() *int32 { return &errno },
-				getFD: func(fd int32) uintptr {
-					if fd != 7 || errno != 0 {
-						t.Fatal("fd or errno boundary incorrect")
+				getFD: func(fd int32) (uintptr, int32) {
+					if fd != 7 {
+						t.Fatal("fd boundary incorrect")
 					}
-					errno = tc.errno
-					return tc.acl
+					return tc.acl, tc.errno
 				},
 				init: func(count int32) uintptr {
 					if count != 0 {
@@ -140,7 +137,7 @@ func TestExtendedACLPolicyFailuresAndReleases(t *testing.T) {
 			}
 		})
 	}
-	if !errors.Is(checkExtendedACL(7, aclCalls{errno: func() *int32 { return nil }}), ErrUnsafe) {
-		t.Fatal("missing errno accepted")
+	if !errors.Is(checkExtendedACL(7, aclCalls{}), ErrUnsafe) {
+		t.Fatal("missing query accepted")
 	}
 }

@@ -5,7 +5,6 @@ package handoff
 import (
 	"fmt"
 	"os"
-	"runtime"
 
 	"github.com/ebitengine/purego"
 	"golang.org/x/sys/unix"
@@ -23,11 +22,10 @@ func aclFailure(reason string) error { return fmt.Errorf("%s: %w", reason, ErrUn
 // /blob/main/{posix1e/acl_file.c,sys/statx_np.c,gen/filesec.c,
 // posix1e/acl_translate.c,include/sys/acl.h}.
 type aclCalls struct {
-	getFD func(int32) uintptr
+	getFD func(int32) (uintptr, int32)
 	init  func(int32) uintptr
 	size  func(uintptr) int64
 	free  func(uintptr) int32
-	errno func() *int32
 }
 
 func noExtendedACL(file *os.File) (result error) {
@@ -53,8 +51,6 @@ func noExtendedACL(file *os.File) (result error) {
 		if fd > 1<<31-1 {
 			return
 		}
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
 		result = checkExtendedACL(int32(fd), calls)
 	}) != nil {
 		return aclFailure("acl_control")
@@ -62,16 +58,14 @@ func noExtendedACL(file *os.File) (result error) {
 	return result
 }
 
-// Caller pins the OS thread: errno belongs to that thread, not the goroutine.
+// The native-call boundary must capture errno before returning to the Go runtime.
+// LockOSThread alone cannot prevent runtime work from overwriting libc errno.
 func checkExtendedACL(fd int32, calls aclCalls) (result error) {
-	result = aclFailure("acl_errno_missing")
-	errno := calls.errno()
-	if errno == nil {
+	result = aclFailure("acl_query_missing")
+	if calls.getFD == nil {
 		return result
 	}
-	*errno = 0
-	acl := calls.getFD(fd)
-	getErrno := *errno
+	acl, getErrno := calls.getFD(fd)
 	if acl == 0 {
 		if getErrno == int32(unix.ENOENT) {
 			return nil
@@ -123,11 +117,21 @@ func loadACLCalls() (calls aclCalls, closeLibrary func() error, err error) {
 		return aclCalls{}, nil, ErrUnsafe
 	}
 	closeLibrary = func() error { return purego.Dlclose(library) }
+	getFD, lookupErr := purego.Dlsym(library, "acl_get_fd")
+	if lookupErr != nil || getFD == 0 {
+		_ = closeLibrary()
+		return aclCalls{}, nil, ErrUnsafe
+	}
+	// purego's Darwin SyscallN trampoline saves errno immediately after the C
+	// call, before runtime_cgocall returns or its pooled arguments are released.
+	calls.getFD = func(fd int32) (uintptr, int32) {
+		value, _, callErrno := purego.SyscallN(getFD, uintptr(fd))
+		return value, int32(callErrno)
+	}
 	bindings := []struct {
 		name   string
 		target any
-	}{{"acl_get_fd", &calls.getFD}, {"acl_init", &calls.init}, {"acl_size", &calls.size},
-		{"acl_free", &calls.free}, {"__error", &calls.errno}}
+	}{{"acl_init", &calls.init}, {"acl_size", &calls.size}, {"acl_free", &calls.free}}
 	// Recover only registration failures, never native-call faults or caller code.
 	defer func() {
 		if recover() != nil {
