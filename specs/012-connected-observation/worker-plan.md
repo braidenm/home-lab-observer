@@ -69,6 +69,9 @@ uploader cannot create/replace/remove children. Use pinned roots, fixed names, w
 maximum latest+staging 32 KiB, and the existing safe atomic replacement pattern. Tests must use genuinely distinct principals.
 Unexpected filesystem/identity policy is refused without repair. Reader never receives a write handle or cleanup authority.
 
+The bounded uninstalled library and explicit owned DAC/ACL fixture are defined in [E1's contract](shared-handoff.md)
+and [ADR 018](../../docs/adr/018-shared-read-handoff.md). This does not implement root provisioning or worker activation.
+
 The new collector worker samples only required CPU/memory/swap/uptime/filesystem sections; no default broad collector run
 followed merely by redaction. It writes the handoff, exposes no HTTP endpoint and never accesses credentials. Mount namespace
 and permissions may hide filesystems: report unavailable/incomplete instead of quietly publishing a complete host inventory.
