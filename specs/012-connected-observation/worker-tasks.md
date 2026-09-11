@@ -46,6 +46,13 @@ Later installed slices remain proposed. Implement one bounded slice per PR; do n
 
 ## F1 — Linux service package and acceptance
 
+CI reliability evidence (2026-09-11): the C2 Windows check exposed a smoke
+startup-cleanup gap: a child whose readiness/token check failed was not returned
+to its caller for joining, and SQLite cleanup could mask the original error.
+The smoke now joins that child before rethrowing and uses bounded filesystem
+cleanup retries after joins. Independent static review and the Windows managed
+restart/foreground smoke passed; normal CI remains required.
+
 - [ ] Add explicit root provisioning/preflight, two accounts, reader group, minimal root, immutable selection and units.
 - [ ] Validate LoadCredential and CA/DNS behavior inside actual uploader root; do not put secrets into unit text.
 - [ ] Add disposable-VM negative probes for real egress/credential/host-access denial and cross-user handoff rights.
