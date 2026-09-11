@@ -259,6 +259,21 @@ func TestWrongAckCorrelationAlwaysRetries(t *testing.T) {
 	}
 }
 
+func TestRateLimitedRetainsPendingWithoutTerminalCommit(t *testing.T) {
+	h := newHarness(t)
+	h.tr.response = Response{Outcome: RateLimited}
+	step(t, h, RateLimited, nil)
+	if h.l.commits != 1 || h.l.record.Pending == nil || h.l.record.Stopped != "" || h.l.record.HasAck {
+		t.Fatal("rate limit changed pending or terminal state")
+	}
+	original := clone(h.l.record).Pending
+	h.m, _ = New(testBinding, h.s, h.c, h.tr, h.l)
+	step(t, h, RateLimited, nil)
+	if h.l.commits != 1 || h.l.record.Pending == nil || !reflect.DeepEqual(h.l.record.Pending, original) {
+		t.Fatal("rate-limited restart changed durable pending state")
+	}
+}
+
 func TestSourceAndClockBounds(t *testing.T) {
 	for _, tc := range []struct {
 		name   string

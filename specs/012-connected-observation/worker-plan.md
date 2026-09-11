@@ -23,11 +23,12 @@ command, upload path, proxy or collector endpoint.
   sequence, record a fixed expired/unknown-delivery outcome, then admit a fresh observation at a higher sequence. Never
   claim the expired request was not received. This prevents permanent blockage because the existing receiver validates
   collection age before its sequence check. Control/action retries remain entirely separate.
-- Transport result classes: acknowledged, transient/ambiguous, credential rejected, invalid/conflicting request. Terminal
+- Transport result classes: acknowledged, transient/ambiguous, rate limited, credential rejected, invalid/conflicting request. Terminal
   auth rejection stops uploads until explicit re-enrollment. Invalid/conflicting responses stop for operator diagnosis;
   do not reset sequence automatically. Frozen receiver facts and conservative mappings are in [receiver-contract.md](receiver-contract.md).
 - Initial proposed timings: collect/poll every 15 seconds, request deadline five seconds; exponential jittered retry
-  bounded to 1–60 seconds. Only one request at a time; cancellation joins the worker. No unbounded retries inside a call.
+  bounded to 1–60 seconds. A `RATE_LIMITED` result waits at least the receiver's fixed 60 seconds. Only one request at a
+  time; cancellation joins the worker. No unbounded retries or sleeps inside a transport call.
 - Persist at most one pending body and fixed bookkeeping. Bound ledger including temporary files to 1 MiB; no history
   queue. Corrupt or missing-after-enrollment ledger must not silently restart sequence at one. Require explicit
   re-enrollment/reconciliation. An externally restored older but valid ledger is not reliably detectable locally:
@@ -47,7 +48,7 @@ stop the operation and reopen/reconcile before sending; never assume rollback. F
 in D1, independently of C1's pure Ledger interface. The ledger never contains the credential. Distinguish initial enrollment
 from lost initialized state using root-provisioned install metadata and credential presence; do not infer from missing files.
 
-HTTP adapter fixes the documented connector routes beneath one reviewed HTTPS origin. Verify certificates, reject redirects,
+HTTP adapter behavior is frozen in [transport.md](transport.md): fix the documented connector routes beneath one reviewed HTTPS origin. Verify certificates, reject redirects,
 userinfo/fragments and unexpected origins, disable inherited proxy settings, cap response bytes at 16 KiB and use the shared
 deadline. Do not accept arbitrary remote URL configuration in the canary. Compile/test the actual receiver request headers,
 body and accepted/duplicate/expired/revoked/conflict response mappings; do not invent an acknowledgement schema.
