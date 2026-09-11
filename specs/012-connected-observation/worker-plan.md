@@ -79,6 +79,9 @@ Keep the existing rich local observer separate and unchanged; do not advertise t
 
 ## F: Linux packaging and negative isolation acceptance
 
+See [F1 installed-boundary findings and evidence matrix](installed-acceptance.md) before unit design;
+uploader network enforcement and collector namespace-coverage proof remain explicit unresolved gates.
+
 Baseline proposal: Linux amd64/arm64, system-level systemd >=255, required namespaces/seccomp available; test exact supported
 images/kernel behavior. Root provisions distinct static service users, dedicated reader group, immutable artifact selection,
 private state, minimal uploader root and LoadCredential configuration. No automatic sudo, package installation or fallback
