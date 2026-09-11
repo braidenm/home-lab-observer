@@ -22,11 +22,11 @@ const (
 var (
 	ErrEnvelope    = errors.New("remote_projection_invalid_envelope")
 	ErrHostData    = errors.New("remote_projection_invalid_host_data")
-	sourcePattern  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
+	sourcePattern  = regexp.MustCompile(`^srv_[a-f0-9]{32}$`)
 	versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$`)
 )
 
-// Identity contains enrollment-owned source identity and verified release metadata.
+// Identity contains the exchanged server_id (not connector_instance_id) and verified release metadata.
 // Syntax checks here do not authenticate an installation or grant upload consent.
 type Identity struct {
 	SourceID string
@@ -65,7 +65,7 @@ func projectOverview(raw observation.Snapshot, osName string) (overview, error) 
 		raw.Memory.State != observation.Available || raw.Memory.Data == nil ||
 		raw.Uptime.State != observation.Available || raw.Uptime.Data == nil ||
 		raw.Filesystems.State != observation.Available || raw.Filesystems.Data == nil ||
-		raw.Filesystems.Quality.Truncated || raw.Filesystems.Quality.Errors != 0 {
+		incomplete(raw.CPU.Quality) || incomplete(raw.Memory.Quality) || incomplete(raw.Uptime.Quality) || incomplete(raw.Filesystems.Quality) {
 		return overview{ReasonCode: "HOST_DATA_UNAVAILABLE"}, nil
 	}
 	cpu, memory, uptime := *raw.CPU.Data, *raw.Memory.Data, *raw.Uptime.Data
@@ -88,6 +88,10 @@ func projectOverview(raw observation.Snapshot, osName string) (overview, error) 
 		MemoryTotalBytes: memory.TotalBytes, MemoryUsedBytes: memory.UsedBytes,
 		SwapTotalBytes: memory.SwapTotalBytes, SwapUsedBytes: memory.SwapUsedBytes, Filesystems: items,
 	}}, nil
+}
+
+func incomplete(quality observation.SectionQuality) bool {
+	return quality.Truncated || quality.Errors != 0
 }
 
 type document struct {

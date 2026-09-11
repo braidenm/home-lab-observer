@@ -16,7 +16,8 @@ As the receiving application, I need a stable document compatible with the exist
 - R1: A pure `internal/remoteprojection` package encodes an explicit DTO into UTF-8 JSON. It has no network, credentials,
   filesystem operations, collector calls or runtime activation. Never serialize the local snapshot as an upload body.
 - R2: Use `home-lab-server-snapshot/v1` with `projection_profile: numeric-host/v1`. Include source ID supplied by the
-  enrollment layer, release version, UTC collection time, duration, and the four required legacy sections. This is a
+  enrollment exchange's `server_id` (`srv_` plus 32 lowercase hex digits, never the `agent_` connector instance), release
+  version, UTC collection time, duration, and the four required legacy sections. This is a
   restricted producer profile, not a replacement schema for all legacy agents. Source syntax validation is not auth.
 - R3: Only CPU, memory/swap, uptime and at most 16 filesystem capacities are eligible. OS is a fixed Linux/Windows/macOS
   value. Kernel is explicitly `not collected`; load averages remain null. Filesystem keys/titles are generated ordinal

@@ -1,7 +1,7 @@
 {
   "schema_version": "home-lab-server-snapshot/v1",
   "projection_profile": "numeric-host/v1",
-  "source_id": "agent_0123456789abcdef0123456789abcdef",
+  "source_id": "srv_0123456789abcdef0123456789abcdef",
   "collector_version": "0.1.0-preview.3",
   "collected_at": "2026-09-10T12:00:00Z",
   "duration_ms": 125,

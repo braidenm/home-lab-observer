@@ -38,6 +38,7 @@ const mutations = {
   "invalid CPU": v => { v.sections.overview.cpu_usage_percent = 101; },
   "unknown OS": v => { v.sections.overview.operating_system = "private"; },
   "source URL": v => { v.source_id = "https://example.invalid"; },
+  "connector instance instead of server": v => { v.source_id = "agent_0123456789abcdef0123456789abcdef"; },
   "source too long": v => { v.source_id = "a".repeat(65); },
   "duration too long": v => { v.duration_ms = 10001; },
   "raw version": v => { v.collector_version = "secret@example.invalid"; },

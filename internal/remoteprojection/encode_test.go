@@ -23,7 +23,7 @@ func fixture() (observation.Snapshot, Identity) {
 		Memory:      observation.Section[observation.Memory]{State: observation.Available, Data: &observation.Memory{TotalBytes: 8192, UsedBytes: 4096, SwapTotalBytes: 1024, SwapUsedBytes: 128}},
 		Uptime:      observation.Section[observation.Uptime]{State: observation.Available, Data: &observation.Uptime{Seconds: 86400}},
 		Filesystems: observation.Section[[]observation.Filesystem]{State: observation.Available, Data: &fs, Quality: observation.SectionQuality{Samples: 1, Total: 1}},
-	}, Identity{SourceID: "agent_0123456789abcdef0123456789abcdef", Version: "0.1.0-preview.3", OS: "linux"}
+	}, Identity{SourceID: "srv_0123456789abcdef0123456789abcdef", Version: "0.1.0-preview.3", OS: "linux"}
 }
 
 func TestFixtureMatchesIndependentSchemaFixture(t *testing.T) {
@@ -120,6 +120,12 @@ func TestIncompleteOverview(t *testing.T) {
 		"filesystems absent": func(s *observation.Snapshot) { s.Filesystems.Data = nil },
 		"truncated":          func(s *observation.Snapshot) { s.Filesystems.Quality.Truncated = true },
 		"collection errors":  func(s *observation.Snapshot) { s.Filesystems.Quality.Errors = 1 },
+		"cpu partial":        func(s *observation.Snapshot) { s.CPU.Quality.Errors = 1 },
+		"cpu truncated":      func(s *observation.Snapshot) { s.CPU.Quality.Truncated = true },
+		"memory partial":     func(s *observation.Snapshot) { s.Memory.Quality.Errors = 1 },
+		"memory truncated":   func(s *observation.Snapshot) { s.Memory.Quality.Truncated = true },
+		"uptime partial":     func(s *observation.Snapshot) { s.Uptime.Quality.Errors = 1 },
+		"uptime truncated":   func(s *observation.Snapshot) { s.Uptime.Quality.Truncated = true },
 	} {
 		t.Run(name, func(t *testing.T) { raw, identity := fixture(); mutate(&raw); assertUnavailable(t, raw, identity) })
 	}
@@ -159,9 +165,10 @@ func TestEnvelopeAndOS(t *testing.T) {
 	for _, id := range []Identity{
 		{SourceID: "../source", Version: "1.0.0", OS: "linux"},
 		{SourceID: strings.Repeat("a", 65), Version: "1.0.0", OS: "linux"},
-		{SourceID: "agent", Version: "1.0.0\nsecret", OS: "linux"},
-		{SourceID: "agent", Version: strings.Repeat("1", 41) + ".0.0", OS: "linux"},
-		{SourceID: "agent", Version: "1.0.0", OS: "private-os"},
+		{SourceID: "srv_0123456789abcdef0123456789abcdef", Version: "1.0.0\nsecret", OS: "linux"},
+		{SourceID: "srv_0123456789abcdef0123456789abcdef", Version: strings.Repeat("1", 41) + ".0.0", OS: "linux"},
+		{SourceID: "srv_0123456789abcdef0123456789abcdef", Version: "1.0.0", OS: "private-os"},
+		{SourceID: "agent_0123456789abcdef0123456789abcdef", Version: "1.0.0", OS: "linux"},
 		{},
 	} {
 		raw, _ := fixture()
@@ -199,9 +206,23 @@ func TestEnvelopeAndOS(t *testing.T) {
 	}
 }
 
+func TestExcludedFailuresDoNotSuppressHostAndEmptyFilesystemIsKnown(t *testing.T) {
+	raw, id := fixture()
+	raw.Quality.State = observation.Partial
+	raw.Processes.State = observation.PermissionDenied
+	raw.Network.State = observation.Unavailable
+	empty := []observation.Filesystem{}
+	raw.Filesystems.Data = &empty
+	raw.Filesystems.Quality = observation.SectionQuality{}
+	got, err := Encode(raw, id)
+	if err != nil || !bytes.Contains(got, []byte(`"overview":{"available":true`)) || !bytes.Contains(got, []byte(`"filesystems":[]`)) {
+		t.Fatal("excluded section failure or known empty inventory suppressed host data")
+	}
+}
+
 func TestMaximumBoundAndDeterminism(t *testing.T) {
 	raw, id := fixture()
-	id.SourceID = strings.Repeat("a", 64)
+	id.SourceID = "srv_" + strings.Repeat("a", 32)
 	id.Version = "1.0.0-" + strings.Repeat("a", 34)
 	raw.ObservedAt = time.Date(2026, 9, 10, 12, 0, 0, 123456789, time.FixedZone("synthetic", 3600))
 	raw.Quality.DurationMS = 10000

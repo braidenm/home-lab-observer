@@ -22,7 +22,7 @@
     },
     "source_id": {
       "type": "string",
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+      "pattern": "^srv_[a-f0-9]{32}$"
     },
     "collector_version": {
       "type": "string",
