@@ -16,6 +16,8 @@
 | [012](012-explicit-remote-host-projection.md) | Accepted for pure projection | Explicit numeric-host egress profile; no upload or credential activation |
 | [013](013-private-latest-snapshot-handoff.md) | Accepted for credential-free library | Private disposable handoff; installed sharing remains gated |
 | [014](014-linux-connected-canary-workers.md) | Accepted for pure state machine | Isolated Linux connected canary remains proposed and gated |
+| [015](015-durable-upload-ledger.md) | Accepted for unused Linux adapter | Separate bounded durable sequence ledger; never recreate lost state |
 | [016](016-fixed-platform-https-transport.md) | Accepted for unused snapshot adapter | Fixed HTTPS destination and separate enrollment ambiguity boundary |
+| [017](017-fail-closed-enrollment-coordination.md) | Accepted for unused coordination kernel | One-shot enrollment fails closed before credential, ledger, and READY activation |
 
 Accepted ADRs are immutable except for status and supersession links. Material changes require a new ADR.
