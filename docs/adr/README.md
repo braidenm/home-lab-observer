@@ -19,5 +19,6 @@
 | [015](015-durable-upload-ledger.md) | Accepted for unused Linux adapter | Separate bounded durable sequence ledger; never recreate lost state |
 | [016](016-fixed-platform-https-transport.md) | Accepted for unused snapshot adapter | Fixed HTTPS destination and separate enrollment ambiguity boundary |
 | [017](017-fail-closed-enrollment-coordination.md) | Accepted for unused coordination kernel | One-shot enrollment fails closed before credential, ledger, and READY activation |
+| [018](018-shared-read-handoff.md) | Accepted for uninstalled Linux library | Exact-principal shared-read handoff, separate from owner-private storage |
 
 Accepted ADRs are immutable except for status and supersession links. Material changes require a new ADR.
