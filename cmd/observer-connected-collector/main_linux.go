@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/braidenm/home-lab-observer/internal/connectedidentity"
+	"github.com/braidenm/home-lab-observer/internal/connectedprocess"
 	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
 	"github.com/braidenm/home-lab-observer/internal/connectedruntime"
 	"github.com/braidenm/home-lab-observer/internal/connectedstatus"
@@ -37,6 +38,9 @@ func run(ctx context.Context) (code int) {
 	}
 	c, err := connectedprofile.Load()
 	if err != nil || connectedprofile.CheckIdentity(c, true) != nil {
+		return 22
+	}
+	if _, err := connectedprocess.Audit(ctx, os.Getpid(), connectedprofile.ReleaseDirectory+"/"+c.ArtifactSHA256+"/observer-connected-collector"); err != nil {
 		return 22
 	}
 	if connectedruntime.CheckPrimitives(true) != nil || connectedruntime.CheckView(true) != nil {

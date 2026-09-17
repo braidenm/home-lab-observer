@@ -1,6 +1,6 @@
-// Package connectedprocess performs a root-side, read-only startup descriptor
-// audit. The caller holds the installation lease and keeps the reviewed worker
-// behind an absent-request barrier: no network, credentials or ledger access.
+// Package connectedprocess performs a read-only startup descriptor audit.
+// Root holds the installation lease and keeps an uploader behind its absent-
+// request barrier; the collector audits itself before opening host observations.
 // This is not a sandbox for hostile code or permission to activate a worker.
 package connectedprocess
 
