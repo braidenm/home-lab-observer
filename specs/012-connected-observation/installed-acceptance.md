@@ -3,7 +3,22 @@
 Status: research and acceptance checklist, 2026-09-11. No installed-profile approval, networking selection,
 installer or service activation. Complements [ADR 014](../../docs/adr/014-linux-connected-canary-workers.md).
 
-## Decisions still required
+## Implementation update (2026-09-17)
+
+The original findings below remain historical evidence, not the latest design status.
+The [endpoint policy](endpoint-policy.md), [installed composition](installed-composition.md)
+and [activation design](activation-design.md) now specify the selected Linux boundary.
+Stopped installation and worker implementation exist on the integration branch; internal
+root activation coordination and focused synthetic tests are implemented. Public lifecycle
+integration, complete fault-sequencing tests, independent review and exact packaged VM
+acceptance remain open. No connected release or live activation is approved by this update.
+
+The same four checked-in primitive probes also passed on the owner's Ubuntu 24.04/systemd
+255 host using isolated temporary resources and synthetic credentials. Existing workloads
+and the legacy connector were not changed. This does not establish final installed-profile,
+mount-coverage, enrollment, TLS, reboot or recovery acceptance.
+
+## Original decisions still required (2026-09-11)
 
 **Uploader networking:** RootDirectory removes filesystem paths, not host TCP loopback access. The fixed HTTP
 origin limits normal application behavior; it does not isolate a compromised uploader. Unit design must select
