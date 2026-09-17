@@ -137,7 +137,13 @@ Use fixed root-owned `transition.json` (at most 16 KiB) and
 operation (`refresh` or `code-select`), exact previous/next configurations,
 predecessor-completion SHA (or explicit initial), previous-code before/after,
 known compatibility-contract SHA and hashes of the exact affected CA/hosts/unit
-bytes. A receipt binds the canonical record digest. Retain one completed record,
+bytes. It also binds the pre-transition private logical-ledger fingerprint and
+ledger binding/identity evidence durably before any active-file replacement;
+resumed validation must match that witness, not a new in-memory baseline. Pin
+filesystem identity plus directory/database inode, not a transient mount ID or
+boot-dependent device number alone. The supported same-filesystem reboot mapping
+must be proven in the VM fixture; ambiguous/remounted/restored identities refuse.
+A receipt binds the canonical record digest. Retain one completed record,
 not an unbounded history. It is a recovery witness, never a worker startup permit.
 
 Every transition increments the existing policy generation, including code-only
@@ -164,6 +170,10 @@ change a resumed transition. Exact journal-owned staging is bounded to one pendi
 generation. A staging failure before journal publication is recovery-visible,
 not silently deleted or interpreted as committed. The implementation must freeze
 the staging name/metadata and replacement/sync ordering in tests before writes.
+The record's resource hashes are not sufficient to reconstruct bytes: retain the
+exact bounded old/new CA sources required for comparison/resume, or an equally
+strict immutable resource source, through durable completion. Never fetch a new
+CA bundle during interrupted recovery and treat it as the recorded target.
 
 ### Ordered transaction and recovery
 
