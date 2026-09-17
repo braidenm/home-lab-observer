@@ -26,5 +26,6 @@
 | ADR | Status | Decision |
 | --- | --- | --- |
 | [021](021-connected-activation-evidence.md) | Accepted for implementation | Actual-process activation evidence; no reusable success flag |
+| [022](022-compatible-connected-code-transitions.md) | Proposed | Explicit verified code selection, used-ledger compatibility and one transition journal |
 
 Accepted ADRs are immutable except for status and supersession links. Material changes require a new ADR.
