@@ -17,6 +17,8 @@
 - [ ] Implement private handoff, bounded uploader and connection health with failure tests.
 - [ ] Integrate catalog, enrollment, OS-aware installation and authorized hosted views.
 - [ ] Verify packaged platforms, migration/rollback and an explicitly authorized owner canary.
+  - [x] Implement and locally test the bounded [existing-ledger witness](used-ledger-witness.md); no activation or rollback authority.
+  - [ ] Integrate its separately named offline command and exact confinement policy, then prove cross-version packaged compatibility.
 - [ ] Review and implement [activation evidence](activation-design.md), including bounded same-process checks and the parent/worker enforcement rendezvous; no manual bypass.
   - [x] Implement bounded root request/response file helpers, closed manager-property parsing, dual-stack owned baseline fixtures, and internal transaction composition.
   - [x] Exercise malformed manager evidence, record metadata/size/link refusals, unexpected fixture traffic, cancellation, and uncertain-start identity capture in repeated Linux tests.

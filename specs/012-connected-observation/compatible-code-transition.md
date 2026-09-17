@@ -204,6 +204,41 @@ foreign manager identity remains stopped/recovery-required for explicit handling
 
 ### Implementation order and completion gates
 
+#### Independent review refinements (still proposed)
+
+Before implementing the codec or writes, freeze these additional recovery states:
+
+- **Preparing:** publish a bounded preparation witness before staging resources.
+  A crash before authoritative journal publication cannot reconstruct missing new
+  CA bytes. A narrowly scoped `abort-preparation` may remove only verified owned
+  preparation files while active resources still match the completed predecessor.
+  Unknown entries or changed active resources refuse cleanup. It does not undo a
+  published transition; after publication, recovery remains forward-only.
+- **Predecessor retention:** retain exact previous journal and completion bytes
+  in bounded staging before replacing `transition.json`. Their hashes alone do
+  not preserve the evidence needed to validate the predecessor after replacement.
+- **Completed, cleanup pending:** publish and synchronize completion last, then
+  verify and remove only fixed owned staging entries and synchronize that
+  directory. Residual staging blocks a new transition until this cleanup succeeds.
+  Never recursively discard an unrecognized directory to make the next run work.
+- **Durability:** synchronize staged files, staging directory and its parent;
+  synchronize the authoritative journal's parent after publication and each
+  active resource's parent after replacement. Atomic rename alone is not a
+  durable completion guarantee.
+
+The narrow reboot identity profile remains an implementation/review gate. A
+filesystem UUID plus directory/database inode and inode-generation witness is a
+candidate; availability, anchored-descriptor queries, replacement rejection and
+reboot stability need proof on the explicitly supported filesystem. Unsupported
+filesystems must refuse transitions. No local identity scheme here detects a
+restored/cloned filesystem preserving those identifiers: restore requires
+revocation and re-enrollment, not a claimed local anti-rollback guarantee.
+
+The [existing-ledger witness slice](used-ledger-witness.md) is only the logical
+comparison primitive. It does not implement any of these lifecycle states.
+
+#### Delivery sequence
+
 1. Review this ADR/plan; freeze exact compatibility bytes and journal codec with
    pure operation/migration/previous-code tests. Do not add a generic migration API.
 2. Add offline used-state mode and exact manager properties, with real D1 fixtures:
