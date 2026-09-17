@@ -18,6 +18,11 @@ Windows/macOS previews are explicitly not publisher-signed/notarized.
 log metadata, bounded local severity summaries and a digest-bound Linux journal helper. Background operation remains
 per-user and headless; remote sync remains a separate milestone.
 
+The Linux connected installer is in development. Its
+[activation evidence design](specs/012-connected-observation/activation-design.md)
+tracks the remaining packaged isolation checks; it is not a released install or
+an instruction to start unverified services.
+
 ## Try it without development tools
 
 1. [Choose a verified native preview](https://github.com/braidenm/home-lab-observer/releases)

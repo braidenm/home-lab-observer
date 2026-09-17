@@ -23,4 +23,8 @@
 
 | [019](019-private-enrollment-persistence.md) | Accepted for unused Linux adapter | Exclusive private enrollment commit witnesses; installed credential promotion remains separate |
 
+| ADR | Status | Decision |
+| --- | --- | --- |
+| [021](021-connected-activation-evidence.md) | Accepted for implementation | Actual-process activation evidence; no reusable success flag |
+
 Accepted ADRs are immutable except for status and supersession links. Material changes require a new ADR.
