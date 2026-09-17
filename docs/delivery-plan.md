@@ -1,5 +1,9 @@
 # Full-system dashboard delivery plan
 
+The [future extension backlog](future-extensions.md) records the standalone product,
+versioned provider and optional smart-device direction without expanding the current
+Linux connectivity and separately permissioned Docker delivery scope.
+
 Updated 2026-09-10 from the owner's expanded request. This is the sequence, not a completed-feature claim. Each phase
 requires its own accepted specification, executable contracts, independent review and verified release evidence.
 
