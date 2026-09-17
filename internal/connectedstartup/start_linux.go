@@ -40,11 +40,6 @@ func Run(parent context.Context, c connectedprofile.Config, status *connectedsta
 	if connectedruntime.CheckPrimitives(false) != nil || connectedruntime.CheckView(false) != nil {
 		return ErrUnsafe
 	}
-	configuration, err := connectedprofile.Encode(c)
-	if err != nil {
-		return ErrUnsafe
-	}
-	digest := sha256.Sum256(configuration)
 	fd, err := unix.Open("/activation", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return ErrUnsafe
@@ -54,8 +49,41 @@ func Run(parent context.Context, c connectedprofile.Config, status *connectedsta
 	if !rootDirectory(directory, c.UploaderGID) {
 		return ErrUnsafe
 	}
+	return rendezvous(ctx, c, startupPorts{
+		read: func(ctx context.Context, name string) ([]byte, error) {
+			return waitRecord(ctx, directory, name, c.UploaderGID)
+		},
+		prove: func(ctx context.Context, request connectedactivation.Request) error {
+			if !deniedLoopback(ctx, "tcp4", "127.0.0.1", request.IPv4Port) || !deniedLoopback(ctx, "tcp6", "::1", request.IPv6Port) || fixedTLS(ctx, c.Addresses) != nil {
+				return ErrUnsafe
+			}
+			return nil
+		}, publish: status.WriteActivationResponse, current: connectedprofile.Load, random: rand.Reader, invocation: os.Getenv("INVOCATION_ID"),
+	})
+}
+
+// Private sequencing seam: production ports above remain fixed and are not a
+// user-facing probe API. Tests substitute only synthetic records and outcomes.
+type startupPorts struct {
+	read       func(context.Context, string) ([]byte, error)
+	prove      func(context.Context, connectedactivation.Request) error
+	publish    func([]byte) error
+	current    func() (connectedprofile.Config, error)
+	random     io.Reader
+	invocation string
+}
+
+func rendezvous(ctx context.Context, c connectedprofile.Config, p startupPorts) error {
+	if ctx == nil || ctx.Err() != nil {
+		return ErrUnsafe
+	}
+	configuration, err := connectedprofile.Encode(c)
+	if err != nil {
+		return ErrUnsafe
+	}
+	digest := sha256.Sum256(configuration)
 	// Missing request NEVER authorizes probes, credentials or ordinary work.
-	requestBytes, err := waitRecord(ctx, directory, "request.json", c.UploaderGID)
+	requestBytes, err := p.read(ctx, "request.json")
 	if err != nil {
 		return ErrUnsafe
 	}
@@ -64,27 +92,27 @@ func Run(parent context.Context, c connectedprofile.Config, status *connectedsta
 		return ErrUnsafe
 	}
 	challenge := make([]byte, 32)
-	if _, err := rand.Read(challenge); err != nil {
+	if _, err := io.ReadFull(p.random, challenge); err != nil {
 		return ErrUnsafe
 	}
 	requestDigest, err := connectedactivation.RequestDigest(request)
 	if err != nil {
 		return ErrUnsafe
 	}
-	response := connectedactivation.Response{Version: connectedactivation.ResponseVersion, RequestSHA256: requestDigest, InvocationID: os.Getenv("INVOCATION_ID"), Challenge: hex.EncodeToString(challenge), Result: connectedactivation.Pass}
+	response := connectedactivation.Response{Version: connectedactivation.ResponseVersion, RequestSHA256: requestDigest, InvocationID: p.invocation, Challenge: hex.EncodeToString(challenge), Result: connectedactivation.Pass}
 	if _, err := connectedactivation.EncodeResponse(response); err != nil {
 		return ErrUnsafe
 	}
-	if !deniedLoopback(ctx, "tcp4", "127.0.0.1", request.IPv4Port) || !deniedLoopback(ctx, "tcp6", "::1", request.IPv6Port) || fixedTLS(ctx, c.Addresses) != nil {
+	if ctx.Err() != nil || p.prove(ctx, request) != nil || ctx.Err() != nil {
 		return ErrUnsafe
 	}
 	// All probe sockets have been closed before root sees PASS. Retain our own
 	// response/challenge in memory; never reload response authority from disk.
 	encoded, err := connectedactivation.EncodeResponse(response)
-	if err != nil || status.WriteActivationResponse(encoded) != nil {
+	if err != nil || p.publish(encoded) != nil {
 		return ErrUnsafe
 	}
-	commitBytes, err := waitRecord(ctx, directory, "commit.json", c.UploaderGID)
+	commitBytes, err := p.read(ctx, "commit.json")
 	if err != nil {
 		return ErrUnsafe
 	}
@@ -92,12 +120,12 @@ func Run(parent context.Context, c connectedprofile.Config, status *connectedsta
 	if err != nil || !connectedactivation.MatchCommit(request, response, commit) || ctx.Err() != nil {
 		return ErrUnsafe
 	}
-	current, err := connectedprofile.Load()
+	current, err := p.current()
 	if err != nil {
 		return ErrUnsafe
 	}
 	currentBytes, err := connectedprofile.Encode(current)
-	if err != nil || !bytes.Equal(currentBytes, configuration) {
+	if err != nil || !bytes.Equal(currentBytes, configuration) || ctx.Err() != nil {
 		return ErrUnsafe
 	}
 	return nil
