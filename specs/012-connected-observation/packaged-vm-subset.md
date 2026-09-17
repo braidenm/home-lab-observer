@@ -1,8 +1,8 @@
 # F1 packaged VM subset: synthetic stopped state and collector
 
-Status: bounded plan independently reviewed 2026-09-17; three fresh executions
-found fail-closed principal and transient-unit startup issues. Full subset
-completion remains pending; no steady uploader or production exchange occurred.
+Status: bounded plan independently reviewed 2026-09-17; the fourth fresh execution
+passed the complete reviewed synthetic subset after correcting principal and
+transient-unit startup issues. No steady uploader or production exchange occurred.
 This is partial acceptance, not a successful real enrollment/Install transaction,
 uploader activation, rollback, reboot recovery or completed F1.
 
@@ -136,3 +136,36 @@ until nonempty active/activating identity plus the existing policy/recheck gate.
 Deterministic tests cover pending-to-ready, replacement, malformed/foreign state,
 cancellation and timeout. All units were confirmed absent/inactive/PID zero
 after diagnostics and the VM powered off pending the fresh rerun.
+
+## Fourth execution: reviewed subset passed (2026-09-17)
+
+Source `5e90b5a` package archive SHA256:
+`a70d8342f8bc673e9cdb3ee061c9c54c7142b3decf0a57f86ae7e6d4c1450ec1`;
+manifest SHA256:
+`08c989805a0e013fa958774dfc01780c0e41f4ed7f0a02ab24e9e52388b13924`.
+The actual packaged fixture passed in 3.92 seconds, including deferred cleanup,
+not merely its pre-cleanup success log. Proven subset: exact bundle preflight,
+dedicated principals, synthetic owner-private seeding, unchanged packaged offline
+enrollment validator under the loaded manager gate, exact directory and database
+inode-preserving ledger promotion, unchanged packaged pristine-ledger validation,
+and packaged collector current-invocation COLLECTING plus shared handoff read
+under the uploader identity. Numeric overview remained explicitly
+`HOST_DATA_UNAVAILABLE` because no filesystem-coverage proof was asserted.
+
+Independent post-test manager reads confirmed both steady units inactive,
+disabled and PID zero; enrollment unit absent/inactive/PID zero; activation
+directory absent. No steady uploader start, HTTP exchange, real enrollment grant
+or production credentials were used. The temporary guest was shut down for
+removal after evidence capture. This **does not** complete F1: real enrollment and
+promotion transaction acceptance, complete uploader activation/FD/TLS rendezvous,
+compatible code transitions, crash/reboot/power-loss recovery and live canary
+remain separate unexecuted gates.
+
+Cleanup completed and independently verified: the exact owned domain, NAT
+network/filter and bridge, guest/base/seed/NVRAM images, staging directory and
+per-domain diagnostic log were removed; the ephemeral local private key was
+deleted. No failed overlays were retained. Existing host networks, runner
+resources and production workloads were not modified by these fixtures. The
+test VM is no longer running or defined. Only sanitized repository evidence and
+local non-secret build/test artifacts remain; the temporary guest state and key
+are intentionally not recoverable.
