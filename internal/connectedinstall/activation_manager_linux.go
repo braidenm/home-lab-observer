@@ -69,8 +69,12 @@ func parseWorker(b []byte) (workerInstance, error) {
 	}
 	instance := workerInstance{PID: pid, Invocation: values["InvocationID"], Active: values["ActiveState"]}
 	switch instance.Active {
-	case "active", "activating", "deactivating":
+	case "active":
 		if pid < 2 || !invocationPattern.MatchString(instance.Invocation) {
+			return workerInstance{}, ErrUnsafe
+		}
+	case "activating", "deactivating":
+		if pid == 1 || !invocationPattern.MatchString(instance.Invocation) {
 			return workerInstance{}, ErrUnsafe
 		}
 	case "inactive", "failed":

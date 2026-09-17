@@ -20,6 +20,12 @@ func TestActivationWorkerProperties(t *testing.T) {
 	if _, err := parseWorker([]byte(inactive)); err != nil {
 		t.Fatal("valid stopped refused")
 	}
+	for _, state := range []string{"activating", "deactivating"} {
+		transition := strings.ReplaceAll(strings.ReplaceAll(b, "ActiveState=active", "ActiveState="+state), "MainPID=123", "MainPID=0")
+		if got, err := parseWorker([]byte(transition)); err != nil || got.PID != 0 || got.Invocation == "" {
+			t.Fatal("transition lost invocation identity")
+		}
+	}
 	for name, bad := range map[string]string{
 		"restart":            strings.ReplaceAll(b, "Restart=no", "Restart=on-failure"),
 		"stdio":              strings.ReplaceAll(b, "StandardInput=null", "StandardInput=socket"),
