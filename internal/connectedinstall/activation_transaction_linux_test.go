@@ -71,3 +71,22 @@ func TestActivationWaitCanceled(t *testing.T) {
 		t.Fatal("canceled wait accepted")
 	}
 }
+
+func TestActivationStartCancellationDuringCapture(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	owned := map[string]workerInstance{}
+	want := workerInstance{PID: 123, Invocation: strings.Repeat("a", 32), Active: "active"}
+	err := startActivationWorkerWith(ctx, uploaderUnit, owned,
+		func(context.Context, string, string) error { return nil },
+		func(check context.Context, _ string) (workerInstance, error) {
+			cancel()
+			if check.Err() != nil {
+				t.Fatal("capture lost identity to concurrent cancellation")
+			}
+			return want, nil
+		})
+	if err != ErrRecovery || owned[uploaderUnit] != want {
+		t.Fatal("canceled start not retained for cleanup")
+	}
+}

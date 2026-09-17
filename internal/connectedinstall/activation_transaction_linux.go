@@ -203,12 +203,10 @@ func startActivationWorkerWith(ctx context.Context, unit string, owned map[strin
 	err := run(ctx, "start", unit)
 	// Even failed/timeout start may have launched the service. Capture the owned
 	// active invocation for bounded cleanup; never infer a PID from command output.
-	check := ctx
-	if ctx.Err() != nil {
-		var cancel context.CancelFunc
-		check, cancel = context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-	}
+	// Parent cancellation may race with inspection itself. Always detach this
+	// bounded identity capture, not just when cancellation is already visible.
+	check, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
 	state, e := inspect(check, unit)
 	if e == nil && state.Invocation != "" {
 		owned[unit] = state
