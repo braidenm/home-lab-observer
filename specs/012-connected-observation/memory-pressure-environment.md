@@ -9,9 +9,13 @@ does not accept `MEMORY_PRESSURE_WATCH` or `MEMORY_PRESSURE_WRITE`.
 The [systemd v255 resource-control contract](https://raw.githubusercontent.com/systemd/systemd/v255/man/systemd.resource-control.xml)
 distinguishes `skip`, which does not set either variable, from `off`, which still
 sets `MEMORY_PRESSURE_WATCH=/dev/null`. Defaults such as `auto` depend on manager
-memory accounting and are not a stable input contract. The disposable VM A/B
-diagnostic reported baseline uploader refusal before input, while `skip` reached
-the blocked-input state and passed the loaded offline policy check.
+memory accounting and are not a stable input contract. An initial disposable VM
+A/B diagnostic observed an early active state with `skip`, but did not establish
+a sustained blocked-input state. A subsequent rebuilt packaged VM run and
+empty-input diagnostic still exited before input. Therefore `skip` corrects the
+documented environment contract but is not established as the sole cause or a
+complete fix for the startup failure. Further isolated startup diagnosis remains
+required.
 
 Rendered profiles and loaded owned-service checks must require the exact value
 `skip`, rejecting missing, duplicate, unknown, `off`, `on` or `auto` values.
