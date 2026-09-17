@@ -84,8 +84,27 @@ both listeners through baseline/probe/baseline checks and counts connections;
 unexpected fixture traffic fails closed. Baseline connections have a separate
 phase and are not counted as worker-denial success.
 Drain the initial baseline connections before opening the denial-counting phase,
-then publish the request/start the worker. Finish worker attempts and close their
+then publish the request to the already paused, audited worker. Finish worker attempts and close their
 sockets before ending that phase and running the final baseline.
+
+Before worker start, stop/join both units under the installation lease and remove
+only validated owned old request/commit files. Verify the fixed directory is empty
+and pin that same directory inode for the worker bind and later root publication.
+The reviewed uploader performs local checks and waits for a request; absence never
+falls through into probes, credential access or ordinary work. Automatic restarts
+are disabled. This absent-request barrier avoids another protocol phase.
+
+While the actual worker is paused, root anchors its `/proc/<MainPID>/fd` directory
+and inspects every descriptor entry, bounding the number of entries rather than
+the largest descriptor number. Reject sockets, oversized enumeration, unreadable
+entries or any ambiguity. Recheck manager invocation ID, MainPID, process start
+identity and exact executable before and after. Check loaded stdio=null, no socket
+activation and no configured/current descriptor store. Root then publishes the
+fresh request into the same pinned activation directory, permitting probes.
+Nondumpability is never lowered to make inspection work; missing host permissions
+refuse activation. Lowering RLIMIT_NOFILE does not close inherited high descriptors
+and is not a substitute for this audit. Root records only closed results, never
+descriptor target strings. No host procfs is mounted into the uploader.
 
 Before credential or ledger access, the same uploader process performs its
 fixed local checks, denied loopback attempts and fixed-origin TLS handshake. It
@@ -125,6 +144,9 @@ results, but cannot itself authorize later activation or contain host observatio
   join fixture children/listeners before cleanup and never stop foreign units.
 - Require stale-commit replay, replaced worker, parent death at each phase,
   missing IPv6 baseline, disabled filtering and changed policy-generation tests.
+- Test absent-request waiting, same-directory replacement refusal, inherited
+  socket descriptors above a lowered file-descriptor limit, oversized descriptor
+  enumeration and denied root process inspection. No failed audit publishes a request.
 - Emit fixed actionable states: acceptance missing, policy drift, unsupported
   primitive, failed runtime check, or recovery required. No raw socket errors,
   addresses, paths, credentials or unbounded labels enter diagnostics.
