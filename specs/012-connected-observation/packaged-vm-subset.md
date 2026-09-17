@@ -76,3 +76,34 @@ membership, extra or duplicate groups. Regression tests cover both wrong primary
 GIDs and the actual supplementary output. Primary source:
 [glibc 2.39 getent initgroups implementation](https://raw.githubusercontent.com/bminor/glibc/glibc-2.39/nss/getent.c)
 (`getgrouplist` receives the sentinel primary GID and output filters it).
+
+## Second execution and bounded localization (2026-09-17)
+
+A fresh disposable overlay used source `6b36c39` with the corrected principal
+audit. Archive SHA256:
+`b4ff4ecf4c7c4ebdcf88593de5a483ab431079358d3a7fc2d16efa9720adde03`;
+manifest SHA256:
+`243d21119b5f5d500353708370320733a3ec436f8168551051ba9545300e3f88`.
+The full test failed after 2.03 seconds at `VM_FIXTURE_OFFLINE_ENROLLMENT_FAILED`.
+The corrected account audit, layout and synthetic seeding passed. No collector,
+steady uploader, production exchange or activation record was started/created.
+
+An independently reviewed empty-input diagnostic used the unchanged packaged
+offline validator with all original restrictions, discarded output and owned
+bounded cleanup. Baseline exited 22 before input. Adding only the fixed
+`MemoryPressureWatch=skip` property kept the process waiting for input and passed
+the loaded offline policy gate; closing the empty input then stopped it. This is
+diagnostic evidence, **not** successful enrollment or offline validation.
+Systemd 255's default memory-pressure protocol supplies environment keys outside
+the worker's closed environment policy. `skip` suppresses those keys; `off` does
+not. Preserve the closed environment validator and cgroup memory limits; pin and
+verify `skip` in all owned profiles. Primary source:
+[systemd v255 MemoryPressureWatch](https://raw.githubusercontent.com/systemd/systemd/v255/man/systemd.resource-control.xml).
+
+The first diagnostic also exposed a safe-but-spurious cleanup refusal when
+`--collect` removed an already exited unit between ownership reads. Accept exact
+manager `not-found` on the second read without issuing stop; still refuse any
+foreign invocation or read error. Synthetic sequencing tests cover this race.
+After diagnostics all three product units were independently confirmed absent,
+inactive and PID zero, with no activation directory. The VM was powered off
+while the profile correction was prepared.

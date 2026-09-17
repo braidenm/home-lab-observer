@@ -378,3 +378,70 @@ func TestConnectedVMChild(t *testing.T) {
 		t.Fatal("VM_FIXTURE_CHILD_MODE_REFUSED")
 	}
 }
+
+// Diagnostic rerun keeps stdin empty: no synthetic credential can be returned.
+func TestConnectedVMOfflineEmptyInput(t *testing.T) {
+	vmAdmission(t, true)
+	lock, err := acquireLease()
+	if err != nil {
+		t.Fatal("DIAGNOSTIC_LEASE_FAILED")
+	}
+	defer func() {
+		if lock.Close() != nil {
+			t.Error("DIAGNOSTIC_LEASE_CLOSE_FAILED")
+		}
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	data, err := connectedprofile.ReadRootFile(vmFixtureRoot+"/binding.json", 4096)
+	if err != nil {
+		t.Fatal("DIAGNOSTIC_BINDING_FAILED")
+	}
+	c, err := connectedprofile.Decode(data)
+	if err != nil {
+		t.Fatal("DIAGNOSTIC_BINDING_FAILED")
+	}
+	p := connectedunits.EnrollmentInput{UploaderUID: c.UploaderUID, UploaderGID: c.UploaderGID, SharedGID: c.SharedGID, ArtifactSHA256: c.ArtifactSHA256, Addresses: c.Addresses}
+	inv, err := connectedunits.RenderEnrollmentProperties(p, "validate-enrollment")
+	if err != nil {
+		t.Fatal("DIAGNOSTIC_RENDER_FAILED")
+	}
+	state, err := enrollmentState(ctx)
+	if err != nil || state["LoadState"] != "not-found" {
+		t.Fatal("DIAGNOSTIC_EXISTING_REFUSED")
+	}
+	marker := "observer-connected-enrollment-fixture-empty-input"
+	args := []string{"--quiet", "--collect", "--pipe", "--wait", "--service-type=exec", "--unit=" + enrollmentUnit, "--description=" + marker}
+	for _, property := range inv.Properties {
+		args = append(args, "--property="+property)
+	}
+	args = append(args, "--", inv.Executable, "validate-enrollment")
+	child := exec.CommandContext(ctx, "/usr/bin/systemd-run", args...)
+	child.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C", "LC_ALL=C"}
+	child.WaitDelay = time.Second
+	pipe, err := child.StdinPipe()
+	if err != nil {
+		t.Fatal("DIAGNOSTIC_PIPE_FAILED")
+	}
+	if child.Start() != nil {
+		pipe.Close()
+		t.Fatal("DIAGNOSTIC_START_FAILED")
+	}
+	id, awaitErr := awaitEnrollment(ctx, marker)
+	if awaitErr != nil {
+		t.Error("DIAGNOSTIC_AWAIT_FAILED")
+	} else {
+		t.Log("DIAGNOSTIC_AWAIT_PASSED")
+		if connectedpolicy.ValidateOffline(ctx, enrollmentUnit, connectedpolicy.OfflineExpectation{UploaderUID: c.UploaderUID, UploaderGID: c.UploaderGID, SharedGID: c.SharedGID, ArtifactSHA256: c.ArtifactSHA256, Mode: "validate-enrollment"}) != nil {
+			t.Error("DIAGNOSTIC_POLICY_FAILED")
+		} else {
+			t.Log("DIAGNOSTIC_POLICY_PASSED")
+		}
+	}
+	pipe.Close()
+	cancel()
+	_ = child.Wait()
+	if stopEnrollment(marker, id) != nil {
+		t.Fatal("DIAGNOSTIC_CLEANUP_FAILED")
+	}
+}

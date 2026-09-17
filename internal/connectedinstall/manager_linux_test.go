@@ -74,3 +74,43 @@ func TestStrictBaselineAndPreAttemptFailure(t *testing.T) {
 		t.Fatal("invalid request claimed consumed enrollment")
 	}
 }
+
+func TestEnrollmentCollectionBetweenOwnershipReads(t *testing.T) {
+	marker, invocation := "owned-fixture", strings.Repeat("b", 32)
+	owned := map[string]string{"Id": enrollmentUnit, "LoadState": "loaded", "Description": marker, "InvocationID": invocation, "Transient": "yes", "ActiveState": "active"}
+	for _, scenario := range []string{"collected", "foreign", "read-error", "owned-stop"} {
+		t.Run(scenario, func(t *testing.T) {
+			reads, stops := 0, 0
+			read := func(context.Context) (map[string]string, error) {
+				reads++
+				if reads == 1 {
+					return owned, nil
+				}
+				if scenario == "read-error" {
+					return nil, ErrUnsafe
+				}
+				if scenario == "foreign" {
+					return map[string]string{"LoadState": "loaded", "Id": enrollmentUnit, "Description": marker, "InvocationID": strings.Repeat("c", 32), "Transient": "yes"}, nil
+				}
+				if scenario == "owned-stop" && reads == 2 {
+					return owned, nil
+				}
+				return map[string]string{"LoadState": "not-found"}, nil
+			}
+			err := stopEnrollmentWith(context.Background(), marker, invocation, read, func(context.Context) error { stops++; return nil })
+			if scenario == "foreign" || scenario == "read-error" {
+				if err != ErrRecovery || stops != 0 {
+					t.Fatal("uncertain/replaced unit was stopped")
+				}
+			} else {
+				wantStops := 0
+				if scenario == "owned-stop" {
+					wantStops = 1
+				}
+				if err != nil || stops != wantStops {
+					t.Fatal("owned collection sequence refused")
+				}
+			}
+		})
+	}
+}

@@ -171,7 +171,12 @@ func awaitEnrollment(ctx context.Context, marker string) (string, error) {
 func stopEnrollment(marker, invocation string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	state, err := enrollmentState(ctx)
+	return stopEnrollmentWith(ctx, marker, invocation, enrollmentState, func(ctx context.Context) error { return service(ctx, "stop", enrollmentUnit) })
+}
+
+// The private seam exercises manager collection races without native services.
+func stopEnrollmentWith(ctx context.Context, marker, invocation string, read func(context.Context) (map[string]string, error), stop func(context.Context) error) error {
+	state, err := read(ctx)
 	if err != nil {
 		return ErrRecovery
 	}
@@ -182,14 +187,22 @@ func stopEnrollment(marker, invocation string) error {
 		return ErrRecovery
 	}
 	invocation = state["InvocationID"]
-	check, err := enrollmentState(ctx)
-	if err != nil || !ownedEnrollment(check, marker) || check["InvocationID"] != invocation {
+	check, err := read(ctx)
+	if err != nil {
 		return ErrRecovery
 	}
-	if service(ctx, "stop", enrollmentUnit) != nil {
+	// --collect may remove the joined unit between the two ownership reads.
+	// Absence requires no stop; a replacement still must match the captured ID.
+	if check["LoadState"] == "not-found" {
+		return nil
+	}
+	if !ownedEnrollment(check, marker) || check["InvocationID"] != invocation {
 		return ErrRecovery
 	}
-	final, err := enrollmentState(ctx)
+	if stop(ctx) != nil {
+		return ErrRecovery
+	}
+	final, err := read(ctx)
 	if err != nil || (final["LoadState"] != "not-found" && (!ownedEnrollment(final, marker) || final["InvocationID"] != invocation || (final["ActiveState"] != "inactive" && final["ActiveState"] != "failed"))) {
 		return ErrRecovery
 	}
