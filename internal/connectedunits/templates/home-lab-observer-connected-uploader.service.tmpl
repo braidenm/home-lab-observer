@@ -38,6 +38,7 @@ ExecPaths=/bin/observer-connected-uploader
 BindReadOnlyPaths=/opt/home-lab-observer-connected/releases/{{.ArtifactSHA256}}/observer-connected-uploader:/bin/observer-connected-uploader
 BindReadOnlyPaths=/etc/home-lab-observer-connected/installed.json:/etc/home-lab-observer-connected/installed.json
 BindReadOnlyPaths=/var/lib/home-lab-observer-connected/handoff:/handoff
+BindReadOnlyPaths=/run/home-lab-observer-connected/activation:/activation
 BindPaths=/var/lib/home-lab-observer-connected/ledger:/state/ledger /var/lib/home-lab-observer-connected/uploader-status:/state/status
 ReadWritePaths=/state/ledger /state/status
 LoadCredential=connector.json:/etc/home-lab-observer-connected/credentials/connector.json
@@ -48,9 +49,8 @@ TasksMax=64
 TimeoutStopSec=15s
 KillMode=control-group
 SendSIGKILL=yes
-Restart=on-failure
-RestartPreventExitStatus=20 21 22
-RestartSec=60s
+Restart=no
+FileDescriptorStoreMax=0
 
 [Install]
 WantedBy=multi-user.target

@@ -36,9 +36,15 @@ An approved WSL-root fixture uses only fresh owned temporary directories and syn
 no-replace behavior and the separate one-MiB CA bound. No installer test creates persistent accounts/services or a
 real enrollment. Primitive systemd probes are documented separately and are not complete installed-profile proof.
 
+At clean commit `33cef83`, Windows build tooling cross-built all three actual Linux/amd64 command roots with
+distinct connected identities and successfully generated the exact manifest/resources/archive using `connectedpack`.
+This proves actual command packaging, not Linux build-script execution, publication or installed runtime behavior.
+The bounded private-input tests passed three Linux runs. Root temporary publication/replacement tests and focused
+installer tests also passed three runs; they do not yet inject faults across the entire refresh transaction.
+
 This checkpoint is **not completed F1**. Remaining implementation: activation/restart acceptance gate;
 compatible-code rollback; broader transaction failure/held-input composition tests. Separate exact internal
-dependency-closure regression tests now cover both worker commands. Remaining acceptance: actual clean connected bundle, loaded packaged profiles
+dependency-closure regression tests now cover both worker commands. Remaining acceptance: loaded packaged profiles
 under dedicated principals, full repository checks, independent final review and the explicitly unexecuted VM
 reboot/power-loss gates. Do not substitute helper tests or static templates for these requirements.
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/braidenm/home-lab-observer/internal/connectedidentity"
 	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
+	"github.com/braidenm/home-lab-observer/internal/connectedruntime"
 	"github.com/braidenm/home-lab-observer/internal/connectedstatus"
 	"github.com/braidenm/home-lab-observer/internal/numerichost"
 	"github.com/braidenm/home-lab-observer/internal/remoteprojection"
@@ -21,8 +22,9 @@ var releaseIdentity string
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
-	defer cancel()
-	os.Exit(run(ctx))
+	code := run(ctx)
+	cancel()
+	os.Exit(code)
 }
 
 func run(ctx context.Context) (code int) {
@@ -35,6 +37,9 @@ func run(ctx context.Context) (code int) {
 	}
 	c, err := connectedprofile.Load()
 	if err != nil || connectedprofile.CheckIdentity(c, true) != nil {
+		return 22
+	}
+	if connectedruntime.CheckPrimitives(true) != nil || connectedruntime.CheckView(true) != nil {
 		return 22
 	}
 	w, err := sharedhandoff.OpenWriter(connectedprofile.StateDirectory+"/handoff", sharedhandoff.Policy{CollectorUID: c.CollectorUID, UploaderUID: c.UploaderUID, SharedGID: c.SharedGID, ServerID: c.ServerID})
@@ -64,7 +69,7 @@ func run(ctx context.Context) (code int) {
 		if w.Publish(snapshot, remoteprojection.Identity{SourceID: c.ServerID, Version: identity.Version, OS: "linux"}) != nil {
 			return 22
 		}
-		if status.Write(connectedstatus.Record{Version: "observer-connected-status/v1", State: "COLLECTING", UpdatedAt: time.Now().UTC()}) != nil {
+		if status.Write(connectedstatus.Record{Version: "observer-connected-status/v1", InvocationID: os.Getenv("INVOCATION_ID"), State: "COLLECTING", UpdatedAt: time.Now().UTC()}) != nil {
 			return 22
 		}
 		timer := time.NewTimer(15 * time.Second)

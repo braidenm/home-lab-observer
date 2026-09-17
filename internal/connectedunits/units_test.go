@@ -19,7 +19,7 @@ func TestReviewedProfiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, text := range []string{string(u.Collector), string(u.Uploader)} {
-		for _, required := range []string{"Type=exec\n", "NoNewPrivileges=yes\n", "CapabilityBoundingSet=\n", "AmbientCapabilities=\n", "PrivateIPC=yes\n", "SystemCallArchitectures=native\n", "@ipc", "socketpair", "io_uring_setup", "io_uring_enter", "io_uring_register", "NoExecPaths=/\n", "MemoryMax=128M\n", "TasksMax=64\n", "TimeoutStopSec=15s\n", "KillMode=control-group\n", "RestartPreventExitStatus=20 21 22\n", "RestartSec=60s\n", "StandardOutput=null\n", "StandardError=null\n"} {
+		for _, required := range []string{"Type=exec\n", "NoNewPrivileges=yes\n", "CapabilityBoundingSet=\n", "AmbientCapabilities=\n", "PrivateIPC=yes\n", "SystemCallArchitectures=native\n", "@ipc", "socketpair", "io_uring_setup", "io_uring_enter", "io_uring_register", "NoExecPaths=/\n", "MemoryMax=128M\n", "TasksMax=64\n", "TimeoutStopSec=15s\n", "KillMode=control-group\n", "Restart=no\n", "FileDescriptorStoreMax=0\n", "StandardOutput=null\n", "StandardError=null\n"} {
 			if !strings.Contains(text, required) {
 				t.Fatalf("missing policy %s", required)
 			}

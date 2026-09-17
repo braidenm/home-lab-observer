@@ -47,9 +47,8 @@ TasksMax=64
 TimeoutStopSec=15s
 KillMode=control-group
 SendSIGKILL=yes
-Restart=on-failure
-RestartPreventExitStatus=20 21 22
-RestartSec=60s
+Restart=no
+FileDescriptorStoreMax=0
 
 [Install]
 WantedBy=multi-user.target

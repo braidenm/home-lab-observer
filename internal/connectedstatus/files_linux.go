@@ -49,13 +49,13 @@ func Open(path string) (*Writer, error) {
 		w.Close()
 		return nil, ErrUnsafe
 	}
-	entries, err := f.ReadDir(4)
-	if (err != nil && !errors.Is(err, io.EOF)) || len(entries) > 3 {
+	entries, err := f.ReadDir(6)
+	if (err != nil && !errors.Is(err, io.EOF)) || len(entries) > 5 {
 		w.Close()
 		return nil, ErrUnsafe
 	}
 	for _, e := range entries {
-		if e.Name() != ".status-lock" && e.Name() != ".status-next" && e.Name() != "status.json" {
+		if e.Name() != ".status-lock" && e.Name() != ".status-next" && e.Name() != "status.json" && e.Name() != "activation-response.json" && e.Name() != ".activation-next" {
 			w.Close()
 			return nil, ErrUnsafe
 		}
@@ -69,7 +69,11 @@ func Open(path string) (*Writer, error) {
 			w.Close()
 			return nil, ErrUnsafe
 		}
-		valid := privateFile(x, 1024)
+		limit := int64(1024)
+		if e.Name() == "activation-response.json" || e.Name() == ".activation-next" {
+			limit = 2048
+		}
+		valid := privateFile(x, limit)
 		x.Close()
 		if !valid {
 			w.Close()
@@ -78,9 +82,11 @@ func Open(path string) (*Writer, error) {
 	}
 	// Status is disposable, never delivery authority. Remove only the validated
 	// fixed staging file under the exclusive status lease after a prior crash.
-	if err := root.Remove(".status-next"); err != nil && !errors.Is(err, os.ErrNotExist) {
-		w.Close()
-		return nil, ErrUnsafe
+	for _, name := range []string{".status-next", ".activation-next"} {
+		if err := root.Remove(name); err != nil && !errors.Is(err, os.ErrNotExist) {
+			w.Close()
+			return nil, ErrUnsafe
+		}
 	}
 	return w, nil
 }
@@ -98,7 +104,21 @@ func (w *Writer) Write(r Record) error {
 	if err != nil {
 		return ErrUnsafe
 	}
-	f, err := w.root.OpenFile(".status-next", os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	return w.writeFixed(".status-next", "status.json", b)
+}
+
+// WriteActivationResponse publishes only the fixed private response slot. The
+// startup caller must encode its closed protocol before calling; status itself
+// has no activation authority and does not import uploader protocol or transport.
+func (w *Writer) WriteActivationResponse(data []byte) error {
+	if len(data) == 0 || len(data) > 2048 {
+		return ErrUnsafe
+	}
+	return w.writeFixed(".activation-next", "activation-response.json", data)
+}
+
+func (w *Writer) writeFixed(stage, name string, b []byte) error {
+	f, err := w.root.OpenFile(stage, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		return ErrUnsafe
 	}
@@ -115,7 +135,7 @@ func (w *Writer) Write(r Record) error {
 		f.Close()
 		return ErrUnsafe
 	}
-	if f.Close() != nil || w.root.Rename(".status-next", "status.json") != nil || w.directory.Sync() != nil {
+	if f.Close() != nil || w.root.Rename(stage, name) != nil || w.directory.Sync() != nil {
 		return ErrUnsafe
 	}
 	return nil

@@ -3,11 +3,45 @@
 package connectedstatus
 
 import (
-	"golang.org/x/sys/unix"
 	"os"
 	"testing"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
+
+func TestActivationResponseUsesOneBoundedPrivateSlot(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	w, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 50 {
+		if err := w.WriteActivationResponse([]byte(`{"synthetic":"bounded"}`)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if w.WriteActivationResponse(make([]byte, 2049)) != ErrUnsafe {
+		t.Fatal("unbounded response accepted")
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 2 {
+		t.Fatal("response history grew")
+	}
+	w, err = Open(dir)
+	if err != nil {
+		t.Fatal("valid old response prevents startup", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestPrivateBoundedStatusLifecycle(t *testing.T) {
 	dir := t.TempDir()

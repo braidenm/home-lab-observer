@@ -16,6 +16,7 @@ import (
 	"github.com/braidenm/home-lab-observer/internal/connectedenroll"
 	"github.com/braidenm/home-lab-observer/internal/connectedidentity"
 	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
+	"github.com/braidenm/home-lab-observer/internal/connectedstartup"
 	"github.com/braidenm/home-lab-observer/internal/connectedstatus"
 	"github.com/braidenm/home-lab-observer/internal/platformtransport"
 	"github.com/braidenm/home-lab-observer/internal/sharedhandoff"
@@ -43,8 +44,9 @@ func (s credentialSource) Credential(ctx context.Context, b uploadstate.Binding)
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
-	defer cancel()
-	os.Exit(run(ctx))
+	code := run(ctx)
+	cancel()
+	os.Exit(code)
 }
 
 func run(ctx context.Context) (code int) {
@@ -65,6 +67,18 @@ func run(ctx context.Context) (code int) {
 	}
 	c, err := connectedprofile.Load()
 	if err != nil || connectedprofile.CheckIdentity(c, false) != nil {
+		return 22
+	}
+	status, err := connectedstatus.Open("/state/status")
+	if err != nil {
+		return 22
+	}
+	defer func() {
+		if status.Close() != nil {
+			code = 22
+		}
+	}()
+	if connectedstartup.Run(ctx, c, status) != nil {
 		return 22
 	}
 	secret, err := connectedcredential.Load(c.ServerID, c.ConnectorID)
@@ -100,18 +114,9 @@ func run(ctx context.Context) (code int) {
 	if err != nil {
 		return 22
 	}
-	status, err := connectedstatus.Open("/state/status")
-	if err != nil {
-		return 22
-	}
-	defer func() {
-		if status.Close() != nil {
-			code = 22
-		}
-	}()
 	child, cancel := context.WithCancel(ctx)
 	defer cancel()
-	wrapper := &observedStepper{machine: machine, transport: observedTransport, status: status, cancel: cancel, record: connectedstatus.Record{Version: "observer-connected-status/v1", State: "WAITING_FIRST_UPLOAD", UpdatedAt: time.Now().UTC()}}
+	wrapper := &observedStepper{machine: machine, transport: observedTransport, status: status, cancel: cancel, record: connectedstatus.Record{Version: "observer-connected-status/v1", InvocationID: os.Getenv("INVOCATION_ID"), State: "WAITING_FIRST_UPLOAD", UpdatedAt: time.Now().UTC()}}
 	if status.Write(wrapper.record) != nil {
 		return 22
 	}
@@ -163,7 +168,7 @@ func (s *observedStepper) Step(ctx context.Context) (uploadstate.Outcome, error)
 				s.record.Acknowledgements++
 			}
 		case uploadstate.Idle:
-			s.record.State = freshness(s.record.CollectedAt, now)
+			s.record.State = idleState(s.record, now)
 		case uploadstate.Retry:
 			s.record.State = "RETRYING"
 		case uploadstate.RateLimited:
@@ -192,6 +197,13 @@ func freshness(collected, now time.Time) string {
 		return "ACKNOWLEDGED_FRESH"
 	}
 	return "ACKNOWLEDGED_STALE"
+}
+
+func idleState(record connectedstatus.Record, now time.Time) string {
+	if record.AcknowledgedAt.IsZero() {
+		return "WAITING_FIRST_UPLOAD"
+	}
+	return freshness(record.CollectedAt, now)
 }
 
 // This wrapper records logical transport attempts and the collection timestamp

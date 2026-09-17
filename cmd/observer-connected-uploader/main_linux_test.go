@@ -49,6 +49,19 @@ func TestCollectionFreshnessDoesNotUseAckReceipt(t *testing.T) {
 	}
 }
 
+func TestIdleDoesNotInventPreviousAcknowledgement(t *testing.T) {
+	now := time.Now().UTC()
+	if idleState(connectedstatus.Record{}, now) != "WAITING_FIRST_UPLOAD" {
+		t.Fatal("initial idle invented acknowledgement")
+	}
+	if idleState(connectedstatus.Record{AcknowledgedAt: now, CollectedAt: now.Add(-time.Second)}, now) != "ACKNOWLEDGED_FRESH" {
+		t.Fatal("known acknowledgement lost")
+	}
+	if idleState(connectedstatus.Record{AcknowledgedAt: now, CollectedAt: now.Add(-time.Minute)}, now) != "ACKNOWLEDGED_STALE" {
+		t.Fatal("known stale capture became fresh")
+	}
+}
+
 func TestPollingIsNotCountedAsTransportAttempt(t *testing.T) {
 	b := uploadstate.Binding{ServerID: "srv_" + strings.Repeat("a", 32), ConnectorID: "agent_" + strings.Repeat("b", 32)}
 	transport := &observedTransport{delegate: unusedTransport{t}}

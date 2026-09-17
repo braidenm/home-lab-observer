@@ -343,7 +343,7 @@ func prepareRoot(release string, collector, uploader, primary, shared uint32, ad
 		}
 	}
 	base := state + "/uploader-root"
-	for _, name := range []string{"bin", "etc", "etc/ssl", "etc/ssl/certs", "etc/home-lab-observer-connected", "state", "state/enrollment", "state/ledger", "state/status", "handoff"} {
+	for _, name := range []string{"bin", "etc", "etc/ssl", "etc/ssl/certs", "etc/home-lab-observer-connected", "state", "state/enrollment", "state/ledger", "state/status", "handoff", "activation"} {
 		if mkdirNew(base+"/"+name, 0, 0, 0755) != nil {
 			return ErrRecovery
 		}

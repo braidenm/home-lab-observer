@@ -16,6 +16,7 @@ const FreshnessWindow = 45 * time.Second
 
 type Record struct {
 	Version          string    `json:"version"`
+	InvocationID     string    `json:"invocation_id,omitempty"`
 	State            string    `json:"state"`
 	UpdatedAt        time.Time `json:"updated_at"`
 	AcknowledgedAt   time.Time `json:"acknowledged_at"`
@@ -38,6 +39,16 @@ func Decode(data []byte) (Record, error) {
 }
 
 func Encode(r Record) ([]byte, error) {
+	if r.InvocationID != "" {
+		if len(r.InvocationID) != 32 {
+			return nil, ErrUnsafe
+		}
+		for _, ch := range r.InvocationID {
+			if !(ch >= '0' && ch <= '9' || ch >= 'a' && ch <= 'f') {
+				return nil, ErrUnsafe
+			}
+		}
+	}
 	if r.CollectedAt.Year() < 1 || r.CollectedAt.Year() > 9999 {
 		return nil, ErrUnsafe
 	}
