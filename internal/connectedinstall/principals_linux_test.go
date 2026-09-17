@@ -92,6 +92,8 @@ func TestDedicatedNamesNumbersAndMemberships(t *testing.T) {
 	for _, tc := range []struct{ name, passwd, groups string }{
 		{"uid-alias", fixturePasswd + "alias:x:60101:65534::/nonexistent:/usr/sbin/nologin\n", fixtureGroups},
 		{"primary-group-outsider", fixturePasswd + "outsider:x:61000:60103::/nonexistent:/usr/sbin/nologin\n", fixtureGroups},
+		{"collector-wrong-primary", strings.Replace(fixturePasswd, "60101:60103:", "60101:65534:", 1), fixtureGroups},
+		{"uploader-wrong-primary", strings.Replace(fixturePasswd, "60102:60102:", "60102:60103:", 1), fixtureGroups},
 		{"login-shell", strings.Replace(fixturePasswd, "/usr/sbin/nologin", "/bin/bash", 1), fixtureGroups},
 		{"home", strings.Replace(fixturePasswd, "/nonexistent", "/home/shared", 1), fixtureGroups},
 		{"group-alias", fixturePasswd, fixtureGroups + "alias:x:60103:\n"},
@@ -109,13 +111,16 @@ func TestDedicatedNamesNumbersAndMemberships(t *testing.T) {
 }
 
 func TestEffectivePrincipalQueriesAreClosed(t *testing.T) {
-	if !exactInitgroups([]byte(uploaderName+" 60102 60103\n"), uploaderName, []uint32{60102, 60103}) || !exactInitgroups([]byte(collectorName+" 60103\n"), collectorName, []uint32{60103}) {
+	if !exactInitgroups([]byte(uploaderName+" 60103\n"), uploaderName, []uint32{60103}) || !exactInitgroups([]byte(collectorName+"\n"), collectorName, nil) {
 		t.Fatal("effective group mapping refused")
 	}
-	for _, bad := range []string{uploaderName + " 60102 60103 0\n", uploaderName + " 60102 60102\n", uploaderName + " 60102\n", uploaderName + " 60102 60103\nextra\n"} {
-		if exactInitgroups([]byte(bad), uploaderName, []uint32{60102, 60103}) {
+	for _, bad := range []string{uploaderName + " 60102 60103\n", uploaderName + " 60103 60103\n", uploaderName + " 60102\n", uploaderName + "\n", uploaderName + " 60103\nextra\n"} {
+		if exactInitgroups([]byte(bad), uploaderName, []uint32{60103}) {
 			t.Fatal("expanded effective groups accepted")
 		}
+	}
+	if exactInitgroups([]byte(collectorName+" 60103\n"), collectorName, nil) {
+		t.Fatal("unexpected collector supplementary group accepted")
 	}
 	if !lockedStatus([]byte(uploaderName+" L 2026-09-17 0 99999 7 -1\n"), uploaderName) {
 		t.Fatal("locked status refused")

@@ -59,8 +59,10 @@ func auditPrincipals(parent context.Context, c connectedprofile.Config) error {
 		uid, gid uint32
 		groups   []uint32
 	}{
-		{collectorName, c.CollectorUID, c.SharedGID, []uint32{c.SharedGID}},
-		{uploaderName, c.UploaderUID, c.UploaderGID, []uint32{c.UploaderGID, c.SharedGID}},
+		// glibc getent initgroups supplies no primary GID to getgrouplist.
+		// Primary GIDs are checked independently in the exact passwd records.
+		{collectorName, c.CollectorUID, c.SharedGID, nil},
+		{uploaderName, c.UploaderUID, c.UploaderGID, []uint32{c.SharedGID}},
 	} {
 		for _, key := range []string{user.name, strconv.FormatUint(uint64(user.uid), 10)} {
 			out, err := command(ctx, "/usr/bin/getent", []string{"passwd", key}, nil, 4096)

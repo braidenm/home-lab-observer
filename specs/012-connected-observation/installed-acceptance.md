@@ -8,10 +8,11 @@ installer or service activation. Complements [ADR 014](../../docs/adr/014-linux-
 The original findings below remain historical evidence, not the latest design status.
 The [endpoint policy](endpoint-policy.md), [installed composition](installed-composition.md)
 and [activation design](activation-design.md) now specify the selected Linux boundary.
-Stopped installation and worker implementation exist on the integration branch; internal
-root activation coordination and focused synthetic tests are implemented. Public lifecycle
-integration, complete fault-sequencing tests, independent review and exact packaged VM
-acceptance remain open. No connected release or live activation is approved by this update.
+Stopped installation, public Start/Restart, actual-worker activation coordination and
+focused synthetic sequencing tests are integrated. Exact packaged VM acceptance,
+compatible-code transition implementation, broader promotion/refresh fault tests and
+independent final review remain open. No connected release or live activation is
+approved by this update.
 
 The same four checked-in primitive probes also passed on the owner's Ubuntu 24.04/systemd
 255 host using isolated temporary resources and synthetic credentials. Existing workloads
