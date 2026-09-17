@@ -18,4 +18,8 @@
 - [ ] Integrate catalog, enrollment, OS-aware installation and authorized hosted views.
 - [ ] Verify packaged platforms, migration/rollback and an explicitly authorized owner canary.
 - [ ] Review and implement [activation evidence](activation-design.md), including bounded same-process checks and the parent/worker enforcement rendezvous; no manual bypass.
+  - [x] Implement bounded root request/response file helpers, closed manager-property parsing, dual-stack owned baseline fixtures, and internal transaction composition.
+  - [x] Exercise malformed manager evidence, record metadata/size/link refusals, unexpected fixture traffic, cancellation, and uncertain-start identity capture in repeated Linux tests.
+  - [ ] Integrate the principal audit and public start/restart entry points; complete transaction-wide fault injection and independent review.
+  - [ ] Prove the exact packaged transaction in a disposable supported VM before any live activation. Helper tests are not this acceptance evidence.
 - [ ] Specify richer remote quality-aware read models; keep Kubernetes deferred and actions in Spec 011.
