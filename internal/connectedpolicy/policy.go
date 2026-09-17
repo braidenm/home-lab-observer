@@ -29,7 +29,11 @@ func parse(data []byte, expected string) (properties, error) {
 	if len(data) == 0 || len(data) > maxOutput || strings.ContainsAny(string(data), "\x00\r") {
 		return properties{}, ErrUnsafe
 	}
-	values := make(map[string]string, 7)
+	wantFields := 7
+	if ownedUnit(expected) {
+		wantFields++
+	}
+	values := make(map[string]string, wantFields)
 	for _, line := range strings.Split(strings.TrimSuffix(string(data), "\n"), "\n") {
 		k, v, found := strings.Cut(line, "=")
 		if !found {
@@ -37,6 +41,12 @@ func parse(data []byte, expected string) (properties, error) {
 		}
 		switch k {
 		case "Id", "Slice", "IPAddressAllow", "IPAddressDeny", "DropInPaths", "LoadState", "NeedDaemonReload":
+		case "MemoryPressureWatch":
+			// Only our services have a worker environment contract. Ancestor
+			// slices remain governed by the existing IP inheritance checks.
+			if !ownedUnit(expected) || v != "skip" {
+				return properties{}, ErrUnsafe
+			}
 		default:
 			return properties{}, ErrUnsafe
 		}
@@ -45,7 +55,7 @@ func parse(data []byte, expected string) (properties, error) {
 		}
 		values[k] = v
 	}
-	if len(values) != 7 || values["Id"] != expected || values["LoadState"] != "loaded" || values["NeedDaemonReload"] != "no" {
+	if len(values) != wantFields || values["Id"] != expected || values["LoadState"] != "loaded" || values["NeedDaemonReload"] != "no" {
 		return properties{}, ErrUnsafe
 	}
 	return properties{expected, values["Slice"], values["IPAddressAllow"], values["IPAddressDeny"], values["DropInPaths"]}, nil

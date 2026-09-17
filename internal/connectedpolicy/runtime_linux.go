@@ -41,7 +41,12 @@ func (b *boundedOutput) Write(p []byte) (int, error) {
 func managerQuery(ctx context.Context, unit string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "/usr/bin/systemctl", "show", "--no-pager", "--property=Id", "--property=Slice", "--property=IPAddressAllow", "--property=IPAddressDeny", "--property=DropInPaths", "--property=LoadState", "--property=NeedDaemonReload", "--", unit)
+	args := []string{"show", "--no-pager", "--property=Id", "--property=Slice", "--property=IPAddressAllow", "--property=IPAddressDeny", "--property=DropInPaths", "--property=LoadState", "--property=NeedDaemonReload"}
+	if ownedUnit(unit) {
+		args = append(args, "--property=MemoryPressureWatch")
+	}
+	args = append(args, "--", unit)
+	cmd := exec.CommandContext(ctx, "/usr/bin/systemctl", args...)
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "LC_ALL=C", "SYSTEMD_COLORS=0", "SYSTEMD_PAGER=cat", "SYSTEMD_PAGERSECURE=1"}
 	var output boundedOutput
 	cmd.Stdout = &output

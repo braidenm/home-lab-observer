@@ -12,7 +12,31 @@ const uploader = "home-lab-observer-connected-uploader.service"
 var addresses = []string{"93.184.216.34"}
 
 func sample(id, parent, allow, deny string) []byte {
-	return []byte(fmt.Sprintf("Slice=%s\nIPAddressAllow=%s\nIPAddressDeny=%s\nId=%s\nLoadState=loaded\nDropInPaths=\nNeedDaemonReload=no\n", parent, allow, deny, id))
+	text := fmt.Sprintf("Slice=%s\nIPAddressAllow=%s\nIPAddressDeny=%s\nId=%s\nLoadState=loaded\nDropInPaths=\nNeedDaemonReload=no\n", parent, allow, deny, id)
+	if ownedUnit(id) {
+		text += "MemoryPressureWatch=skip\n"
+	}
+	return []byte(text)
+}
+
+func TestOwnedMemoryPressurePolicy(t *testing.T) {
+	for _, unit := range []string{uploader, enrollmentUnit} {
+		for _, value := range []string{"skip", "off", "on", "auto", "unknown", "", "SKIP"} {
+			m := topology()
+			m[unit] = []byte(strings.ReplaceAll(string(sample(unit, "system.slice", "93.184.216.34/32", "::/0 0.0.0.0/0")), "MemoryPressureWatch=skip", "MemoryPressureWatch="+value))
+			err := validate(context.Background(), unit, addresses, true, reader(m))
+			if (err == nil) != (value == "skip") {
+				t.Fatalf("incorrect memory-pressure admission for %s", value)
+			}
+		}
+		for _, suffix := range []string{"", "MemoryPressureWatch=skip\nMemoryPressureWatch=skip\n"} {
+			m := topology()
+			m[unit] = []byte(strings.ReplaceAll(string(sample(unit, "system.slice", "93.184.216.34/32", "::/0 0.0.0.0/0")), "MemoryPressureWatch=skip\n", suffix))
+			if validate(context.Background(), unit, addresses, true, reader(m)) != ErrUnsafe {
+				t.Fatal("missing or duplicate service environment policy accepted")
+			}
+		}
+	}
 }
 func topology() map[string][]byte {
 	return map[string][]byte{

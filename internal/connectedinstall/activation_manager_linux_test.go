@@ -8,7 +8,22 @@ import (
 )
 
 func workerFixture() string {
-	return "ActiveState=active\nMainPID=123\nInvocationID=" + strings.Repeat("a", 32) + "\nRestart=no\nStandardInput=null\nStandardOutput=null\nStandardError=null\nFileDescriptorStoreMax=0\nNFileDescriptorStore=0\nTriggeredBy=\nUnitFileState=disabled\nPrivateIPC=yes\n"
+	return "ActiveState=active\nMainPID=123\nInvocationID=" + strings.Repeat("a", 32) + "\nRestart=no\nStandardInput=null\nStandardOutput=null\nStandardError=null\nFileDescriptorStoreMax=0\nNFileDescriptorStore=0\nTriggeredBy=\nUnitFileState=disabled\nPrivateIPC=yes\nMemoryPressureWatch=skip\n"
+}
+
+func TestActivationMemoryPressurePolicy(t *testing.T) {
+	for _, value := range []string{"off", "on", "auto", "unknown", "", "SKIP"} {
+		bad := strings.ReplaceAll(workerFixture(), "MemoryPressureWatch=skip", "MemoryPressureWatch="+value)
+		if _, err := parseWorker([]byte(bad)); err != ErrUnsafe {
+			t.Fatal("memory-pressure drift accepted")
+		}
+	}
+	for _, suffix := range []string{"", "MemoryPressureWatch=skip\nMemoryPressureWatch=skip\n"} {
+		bad := strings.ReplaceAll(workerFixture(), "MemoryPressureWatch=skip\n", suffix)
+		if _, err := parseWorker([]byte(bad)); err != ErrUnsafe {
+			t.Fatal("missing or duplicate memory-pressure policy accepted")
+		}
+	}
 }
 
 func TestActivationWorkerProperties(t *testing.T) {

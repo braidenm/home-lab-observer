@@ -26,6 +26,7 @@ var offlineFields = []string{
 	"ProtectSystem", "DevicePolicy", "SystemCallArchitectures", "SystemCallFilter",
 	"SystemCallErrorNumber", "NoExecPaths", "ExecPaths", "LimitCORE",
 	"RestrictNamespaces", "RestrictRealtime", "RestrictSUIDSGID", "LockPersonality",
+	"MemoryPressureWatch",
 }
 
 func offlineExpected(e OfflineExpectation) (map[string]string, error) {
@@ -53,6 +54,7 @@ func offlineExpected(e OfflineExpectation) (map[string]string, error) {
 		"CapabilityBoundingSet": "", "AmbientCapabilities": "", "MountAPIVFS": "no", "ProtectSystem": "strict", "DevicePolicy": "closed",
 		"SystemCallArchitectures": "native", "SystemCallErrorNumber": "1", "NoExecPaths": "/", "ExecPaths": "/bin/observer-connected-uploader",
 		"LimitCORE": "0", "RestrictNamespaces": "yes", "RestrictRealtime": "yes", "RestrictSUIDSGID": "yes", "LockPersonality": "yes",
+		"MemoryPressureWatch": "skip",
 	}, nil
 }
 
