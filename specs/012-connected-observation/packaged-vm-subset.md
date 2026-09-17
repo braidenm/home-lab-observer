@@ -1,8 +1,8 @@
 # F1 packaged VM subset: synthetic stopped state and collector
 
-Status: bounded plan independently reviewed 2026-09-17; first execution failed
-closed at the dedicated principal audit, before synthetic credential creation or
-any worker start. Subsequent gates remain unexecuted.
+Status: bounded plan independently reviewed 2026-09-17; three fresh executions
+found fail-closed principal and transient-unit startup issues. Full subset
+completion remains pending; no steady uploader or production exchange occurred.
 This is partial acceptance, not a successful real enrollment/Install transaction,
 uploader activation, rollback, reboot recovery or completed F1.
 
@@ -90,10 +90,11 @@ steady uploader, production exchange or activation record was started/created.
 
 An independently reviewed empty-input diagnostic used the unchanged packaged
 offline validator with all original restrictions, discarded output and owned
-bounded cleanup. Baseline exited 22 before input. Adding only the fixed
-`MemoryPressureWatch=skip` property kept the process waiting for input and passed
+bounded cleanup. Baseline exited 22 after the parent closed empty input. Adding only the fixed
+`MemoryPressureWatch=skip` property sampled an active process and passed
 the loaded offline policy gate; closing the empty input then stopped it. This is
-diagnostic evidence, **not** successful enrollment or offline validation.
+diagnostic evidence, **not** successful enrollment or offline validation. That
+initial sample had no sustained-alive check and did not establish the sole cause.
 Systemd 255's default memory-pressure protocol supplies environment keys outside
 the worker's closed environment policy. `skip` suppresses those keys; `off` does
 not. Preserve the closed environment validator and cgroup memory limits; pin and
@@ -107,3 +108,31 @@ foreign invocation or read error. Synthetic sequencing tests cover this race.
 After diagnostics all three product units were independently confirmed absent,
 inactive and PID zero, with no activation directory. The VM was powered off
 while the profile correction was prepared.
+
+## Third execution and startup race (2026-09-17)
+
+Source `855cc49` package archive SHA256:
+`3d17d7ae20bf7b8107076373a1e434cbc82db964250eea38707403f4ea315c0e`;
+manifest SHA256:
+`0c7f4fc05d9ad69d43ceec5d5bc92109d13b352a6862fbc692f30bfa336b67e7`.
+Full subset again failed at offline validation after 1.96 seconds. A separate
+empty diagnostic root, with no credential/state/handoff binds and a test-only
+executable under the same offline syscall and identity profile, confirmed
+process hardening, exact runtime identity and closed environment checks passed.
+Only fixed diagnostic codes were reported. This probe is not packaged acceptance.
+
+A subsequent no-input invocation of the unchanged packaged validator captured
+the actual manager transition: loaded, exact nonce/Transient identity, inactive,
+empty InvocationID. A following read supplied the real active invocation; the
+process remained alive through a 250ms held-input dwell and passed loaded policy.
+The prior immediate ownership predicate had refused the legitimate pending
+state, then closed stdin itself. Exit 22 following that close was therefore not
+evidence of a pre-input worker boundary failure.
+
+The correction waits boundedly only for the exact nonce-owned inactive/activating
+unit to acquire an invocation. Malformed IDs, foreign units and ended states are
+refused; a known invocation cannot be cleared/replaced; input remains withheld
+until nonempty active/activating identity plus the existing policy/recheck gate.
+Deterministic tests cover pending-to-ready, replacement, malformed/foreign state,
+cancellation and timeout. All units were confirmed absent/inactive/PID zero
+after diagnostics and the VM powered off pending the fresh rerun.

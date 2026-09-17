@@ -114,3 +114,69 @@ func TestEnrollmentCollectionBetweenOwnershipReads(t *testing.T) {
 		})
 	}
 }
+
+func TestEnrollmentAwaitRequiresActualOwnedInvocation(t *testing.T) {
+	for _, scenario := range []string{"ready", "foreign-marker", "foreign-id", "not-transient", "malformed-id", "failed", "deactivating", "active-empty", "replaced", "cleared", "canceled", "cancel-during-read", "timeout"} {
+		t.Run(scenario, func(t *testing.T) {
+			deadline := 2 * time.Second
+			if scenario == "timeout" {
+				deadline = 50 * time.Millisecond
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), deadline)
+			defer cancel()
+			if scenario == "canceled" {
+				cancel()
+			}
+			reads := 0
+			id, err := awaitEnrollmentWith(ctx, "fixture", func(context.Context) (map[string]string, error) {
+				reads++
+				state := map[string]string{"Id": enrollmentUnit, "Description": "fixture", "Transient": "yes", "LoadState": "loaded", "ActiveState": "inactive", "InvocationID": ""}
+				switch scenario {
+				case "cancel-during-read":
+					cancel()
+					state["ActiveState"] = "active"
+					state["InvocationID"] = strings.Repeat("b", 32)
+				case "ready":
+					if reads > 1 {
+						state["ActiveState"] = "active"
+						state["InvocationID"] = strings.Repeat("b", 32)
+					}
+				case "foreign-marker":
+					state["Description"] = "other"
+				case "foreign-id":
+					state["Id"] = "other.service"
+				case "not-transient":
+					state["Transient"] = "no"
+				case "malformed-id":
+					state["InvocationID"] = "bad"
+				case "failed":
+					state["ActiveState"] = "failed"
+				case "deactivating":
+					state["ActiveState"] = "deactivating"
+				case "active-empty":
+					state["ActiveState"] = "active"
+				case "replaced", "cleared":
+					state["InvocationID"] = strings.Repeat("b", 32)
+					if reads > 1 {
+						state["ActiveState"] = "active"
+						state["InvocationID"] = ""
+						if scenario == "replaced" {
+							state["InvocationID"] = strings.Repeat("c", 32)
+						}
+					}
+				}
+				return state, nil
+			})
+			if scenario == "ready" {
+				if err != nil || id != strings.Repeat("b", 32) || reads != 2 {
+					t.Fatal("owned pending invocation not awaited")
+				}
+			} else if err != ErrUnsafe || id != "" {
+				t.Fatal("unproven invocation admitted")
+			}
+			if scenario == "canceled" && reads != 0 {
+				t.Fatal("canceled wait queried manager")
+			}
+		})
+	}
+}

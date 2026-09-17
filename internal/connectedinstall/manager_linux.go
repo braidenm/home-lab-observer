@@ -146,16 +146,38 @@ func runEnrollment(ctx context.Context, properties []string, executable, mode st
 }
 
 func awaitEnrollment(ctx context.Context, marker string) (string, error) {
+	return awaitEnrollmentWith(ctx, marker, enrollmentState)
+}
+
+func awaitEnrollmentWith(ctx context.Context, marker string, read func(context.Context) (map[string]string, error)) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+	observedInvocation := ""
 	for ctx.Err() == nil {
-		state, err := enrollmentState(ctx)
+		state, err := read(ctx)
+		if ctx.Err() != nil {
+			return "", ErrUnsafe
+		}
 		if err == nil && state["LoadState"] == "loaded" {
-			if !ownedEnrollment(state, marker) {
+			// A newly loaded transient unit can have our nonce but no invocation
+			// yet. Never deliver input until an actual active invocation exists.
+			if state["Id"] != enrollmentUnit || state["Description"] != marker || state["Transient"] != "yes" {
 				return "", ErrUnsafe
 			}
-			if state["ActiveState"] == "active" || state["ActiveState"] == "activating" {
+			if state["InvocationID"] != "" && !invocationPattern.MatchString(state["InvocationID"]) {
+				return "", ErrUnsafe
+			}
+			if observedInvocation != "" && state["InvocationID"] != observedInvocation {
+				return "", ErrUnsafe
+			}
+			if state["InvocationID"] != "" {
+				observedInvocation = state["InvocationID"]
+			}
+			if state["InvocationID"] != "" && (state["ActiveState"] == "active" || state["ActiveState"] == "activating") {
 				return state["InvocationID"], nil
+			}
+			if state["ActiveState"] != "inactive" && state["ActiveState"] != "activating" {
+				return "", ErrUnsafe
 			}
 		}
 		timer := time.NewTimer(50 * time.Millisecond)

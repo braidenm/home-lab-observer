@@ -427,11 +427,35 @@ func TestConnectedVMOfflineEmptyInput(t *testing.T) {
 		pipe.Close()
 		t.Fatal("DIAGNOSTIC_START_FAILED")
 	}
+	initial, initialErr := enrollmentState(ctx)
+	if initialErr != nil {
+		t.Log("DIAGNOSTIC_INITIAL_READ_FAILED")
+	} else {
+		if initial["LoadState"] == "loaded" {
+			t.Log("DIAGNOSTIC_INITIAL_LOADED")
+		}
+		if initial["Description"] == marker && initial["Transient"] == "yes" {
+			t.Log("DIAGNOSTIC_INITIAL_MARKER_MATCH")
+		}
+		if initial["InvocationID"] == "" {
+			t.Log("DIAGNOSTIC_INITIAL_INVOCATION_EMPTY")
+		}
+		for _, state := range []string{"inactive", "activating", "active", "failed"} {
+			if initial["ActiveState"] == state {
+				t.Log("DIAGNOSTIC_INITIAL_" + strings.ToUpper(state))
+			}
+		}
+	}
 	id, awaitErr := awaitEnrollment(ctx, marker)
 	if awaitErr != nil {
 		t.Error("DIAGNOSTIC_AWAIT_FAILED")
 	} else {
 		t.Log("DIAGNOSTIC_AWAIT_PASSED")
+		time.Sleep(250 * time.Millisecond)
+		current, e := enrollmentState(ctx)
+		if e != nil || !ownedEnrollment(current, marker) || current["InvocationID"] != id || current["ActiveState"] != "active" {
+			t.Error("DIAGNOSTIC_DWELL_FAILED")
+		}
 		if connectedpolicy.ValidateOffline(ctx, enrollmentUnit, connectedpolicy.OfflineExpectation{UploaderUID: c.UploaderUID, UploaderGID: c.UploaderGID, SharedGID: c.SharedGID, ArtifactSHA256: c.ArtifactSHA256, Mode: "validate-enrollment"}) != nil {
 			t.Error("DIAGNOSTIC_POLICY_FAILED")
 		} else {
@@ -443,5 +467,143 @@ func TestConnectedVMOfflineEmptyInput(t *testing.T) {
 	_ = child.Wait()
 	if stopEnrollment(marker, id) != nil {
 		t.Fatal("DIAGNOSTIC_CLEANUP_FAILED")
+	}
+}
+
+func TestConnectedVMProbeChild(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Fatal("PROBE_ROOT_REFUSED")
+	}
+	if connectedprofile.HardenSecretProcess() != nil {
+		t.Fatal("PROBE_HARDEN_FAILED")
+	}
+	t.Log("PROBE_HARDEN_OK")
+	if len(os.Args) < 4 {
+		t.Fatal("PROBE_IDENTITY_FAILED")
+	}
+	u, ue := strconv.ParseUint(os.Args[len(os.Args)-3], 10, 32)
+	g, ge := strconv.ParseUint(os.Args[len(os.Args)-2], 10, 32)
+	s, se := strconv.ParseUint(os.Args[len(os.Args)-1], 10, 32)
+	if ue != nil || ge != nil || se != nil || connectedprofile.CheckIdentity(connectedprofile.Config{UploaderUID: uint32(u), UploaderGID: uint32(g), SharedGID: uint32(s)}, false) != nil {
+		t.Fatal("PROBE_IDENTITY_FAILED")
+	}
+	t.Log("PROBE_IDENTITY_OK")
+	if connectedprofile.CheckEnvironment(os.Environ()) != nil {
+		t.Error("PROBE_ENV_FAILED")
+		unknown := 0
+		for _, entry := range os.Environ() {
+			key, _, _ := strings.Cut(entry, "=")
+			switch key {
+			case "GODEBUG", "PATH", "USER", "LOGNAME", "HOME", "SHELL", "LANG", "LC_ALL", "INVOCATION_ID", "SYSTEMD_EXEC_PID", "CREDENTIALS_DIRECTORY":
+			case "MEMORY_PRESSURE_WATCH":
+				t.Log("PROBE_MEMORY_WATCH_PRESENT")
+			case "MEMORY_PRESSURE_WRITE":
+				t.Log("PROBE_MEMORY_WRITE_PRESENT")
+			case "LANGUAGE":
+				t.Log("PROBE_LANGUAGE_PRESENT")
+			default:
+				unknown++
+			}
+		}
+		if unknown > 0 {
+			t.Log("PROBE_OTHER_ENV_PRESENT")
+		}
+	} else {
+		t.Log("PROBE_ENV_OK")
+	}
+}
+
+func TestConnectedVMPreInputProbe(t *testing.T) {
+	vmAdmission(t, true)
+	lock, err := acquireLease()
+	if err != nil {
+		t.Fatal("PROBE_LEASE_FAILED")
+	}
+	defer lock.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	data, err := connectedprofile.ReadRootFile(vmFixtureRoot+"/binding.json", 4096)
+	if err != nil {
+		t.Fatal("PROBE_BINDING_FAILED")
+	}
+	c, err := connectedprofile.Decode(data)
+	if err != nil {
+		t.Fatal("PROBE_BINDING_FAILED")
+	}
+	p := connectedunits.EnrollmentInput{UploaderUID: c.UploaderUID, UploaderGID: c.UploaderGID, SharedGID: c.SharedGID, ArtifactSHA256: c.ArtifactSHA256, Addresses: c.Addresses}
+	inv, err := connectedunits.RenderEnrollmentProperties(p, "validate-enrollment")
+	if err != nil {
+		t.Fatal("PROBE_RENDER_FAILED")
+	}
+	const unit = enrollmentUnit
+	const marker = "observer-connected-enrollment-preinput-probe"
+	state, err := command(ctx, "/usr/bin/systemctl", []string{"show", "--property=LoadState", "--value", unit}, nil, 64)
+	if err != nil || string(state) != "not-found\n" {
+		t.Fatal("PROBE_EXISTING_REFUSED")
+	}
+	const probeRoot = vmFixtureRoot + "/probe-root-v3"
+	if mkdirNew(probeRoot, 0, 0, 0755) != nil || mkdirNew(probeRoot+"/bin", 0, 0, 0755) != nil {
+		t.Fatal("PROBE_ROOT_CREATE_FAILED")
+	}
+	directory, err := rootDirectory(probeRoot + "/bin")
+	if err != nil {
+		t.Fatal("PROBE_ROOT_FAILED")
+	}
+	directory.Close()
+	root, err := os.OpenRoot(probeRoot + "/bin")
+	if err != nil {
+		t.Fatal("PROBE_ROOT_FAILED")
+	}
+	defer root.Close()
+	if publishNew(root, "fixture-probe", []byte("probe"), 0555) != nil {
+		t.Fatal("PROBE_PLACEHOLDER_FAILED")
+	}
+	state, err = command(ctx, "/usr/bin/systemctl", []string{"show", "--property=LoadState", "--value", unit}, nil, 64)
+	if err != nil || string(state) != "not-found\n" {
+		t.Fatal("PROBE_EXISTING_REFUSED")
+	}
+	args := []string{"--quiet", "--collect", "--pipe", "--wait", "--service-type=exec", "--unit=" + unit, "--description=" + marker}
+	for _, property := range inv.Properties {
+		key, _, _ := strings.Cut(property, "=")
+		switch key {
+		case "RootDirectory":
+			property = "RootDirectory=" + probeRoot
+		case "ExecPaths":
+			property = "ExecPaths=/bin/fixture-probe"
+		case "BindReadOnlyPaths":
+			property = "BindReadOnlyPaths=" + vmFixtureRoot + "/fixture.test:/bin/fixture-probe"
+		case "BindPaths":
+			continue
+		case "ReadWritePaths":
+			continue
+		}
+		args = append(args, "--property="+property)
+	}
+	args = append(args, "--", "/bin/fixture-probe", "-test.run=^TestConnectedVMProbeChild$", "-test.v", "--", strconv.FormatUint(uint64(c.UploaderUID), 10), strconv.FormatUint(uint64(c.UploaderGID), 10), strconv.FormatUint(uint64(c.SharedGID), 10))
+	child := exec.CommandContext(ctx, "/usr/bin/systemd-run", args...)
+	child.Env = []string{"PATH=/usr/bin:/bin", "LANG=C", "LC_ALL=C"}
+	child.WaitDelay = time.Second
+	output := &boundedOutput{limit: 2048}
+	child.Stdout = output
+	stderr := &boundedOutput{limit: 2048}
+	child.Stderr = stderr
+	err = child.Run()
+	// Only report closed tokens, never arbitrary test panic/runtime output.
+	for _, code := range []string{"PROBE_ROOT_REFUSED", "PROBE_HARDEN_FAILED", "PROBE_HARDEN_OK", "PROBE_IDENTITY_FAILED", "PROBE_IDENTITY_OK", "PROBE_ENV_FAILED", "PROBE_MEMORY_WATCH_PRESENT", "PROBE_MEMORY_WRITE_PRESENT", "PROBE_LANGUAGE_PRESENT", "PROBE_OTHER_ENV_PRESENT", "PROBE_ENV_OK"} {
+		if bytes.Contains(output.data, []byte(code)) {
+			t.Log(code)
+		}
+	}
+	clear(output.data)
+	if err != nil {
+		t.Error("PROBE_PROCESS_FAILED")
+	}
+	clear(stderr.data)
+	if stopEnrollment(marker, "") != nil {
+		t.Error("PROBE_CLEANUP_FAILED")
+	}
+	state, e := command(context.Background(), "/usr/bin/systemctl", []string{"show", "--property=MainPID", "--value", unit}, nil, 64)
+	if e != nil || string(state) != "0\n" {
+		t.Error("PROBE_NOT_JOINED")
 	}
 }
