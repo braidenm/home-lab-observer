@@ -16,6 +16,13 @@ rich standalone dashboard remain unchanged. The fixed installer operations are:
   An installed identity is not process liveness or a fresh acknowledgement.
 - `stop`: verifies exact owned artifacts/units, stops uploader then collector, checks inactive state and no main
   process. Registration and local state remain intact.
+- `start` / `restart`: share the installation lease, refuse partial refresh/removal, verify exact ownership and
+  stop/join the owned pair before repeating supported-host and dedicated-principal checks and running the fresh
+  actual-worker activation transaction. Host/principal admission failure therefore leaves verified owned workers
+  stopped; unknown ownership is never adopted or stopped.
+  Neither operation reuses a durable permission receipt or enables boot/automatic restart. A successful result means
+  this invocation passed startup checks, not that a remote upload has already been acknowledged. The first upload
+  waits at least 60 seconds. These commands remain subject to the unexecuted packaged disposable-VM release gate.
 - `refresh`: validates fixed-host TLS endpoints and CA trust, records a bounded next-generation journal, stops
   and disables workers, replaces only exact known hosts/CA/unit/config files, verifies loaded endpoint policy and
   publishes a receipt bound to the exact journal. Services remain stopped; activation is a separate gate. A crash,
@@ -54,8 +61,9 @@ This proves actual command packaging, not Linux build-script execution, publicat
 The bounded private-input tests passed three Linux runs. Root temporary publication/replacement tests and focused
 installer tests also passed three runs; they do not yet inject faults across the entire refresh transaction.
 
-This checkpoint is **not completed F1**. Remaining implementation: activation/restart acceptance gate;
-compatible-code rollback; broader transaction failure/held-input composition tests. Separate exact internal
+This checkpoint is **not completed F1**. The activation/restart gate is implemented with synthetic sequencing tests,
+but has not passed installed acceptance. Remaining implementation: compatible-code rollback; broader
+refresh/promotion failure and held-input composition tests. Separate exact internal
 dependency-closure regression tests now cover both worker commands. Remaining acceptance: loaded packaged profiles
 under dedicated principals, full repository checks, independent final review and the explicitly unexecuted VM
 reboot/power-loss gates. Do not substitute helper tests or static templates for these requirements.

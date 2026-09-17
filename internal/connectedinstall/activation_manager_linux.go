@@ -15,7 +15,7 @@ type workerInstance struct {
 	Active     string
 }
 
-var activationProperties = []string{"ActiveState", "MainPID", "InvocationID", "Restart", "StandardInput", "StandardOutput", "StandardError", "FileDescriptorStoreMax", "NFileDescriptorStore", "TriggeredBy", "UnitFileState"}
+var activationProperties = []string{"ActiveState", "MainPID", "InvocationID", "Restart", "StandardInput", "StandardOutput", "StandardError", "FileDescriptorStoreMax", "NFileDescriptorStore", "TriggeredBy", "UnitFileState", "PrivateIPC"}
 
 func inspectWorker(ctx context.Context, unit string) (workerInstance, error) {
 	if verifyManagedUnit(ctx, unit) != nil {
@@ -58,7 +58,7 @@ func parseWorker(b []byte) (workerInstance, error) {
 	if len(values) != len(activationProperties) {
 		return workerInstance{}, ErrUnsafe
 	}
-	for key, want := range map[string]string{"Restart": "no", "StandardInput": "null", "StandardOutput": "null", "StandardError": "null", "FileDescriptorStoreMax": "0", "NFileDescriptorStore": "0", "TriggeredBy": "", "UnitFileState": "disabled"} {
+	for key, want := range map[string]string{"Restart": "no", "StandardInput": "null", "StandardOutput": "null", "StandardError": "null", "FileDescriptorStoreMax": "0", "NFileDescriptorStore": "0", "TriggeredBy": "", "UnitFileState": "disabled", "PrivateIPC": "yes"} {
 		if values[key] != want {
 			return workerInstance{}, ErrUnsafe
 		}

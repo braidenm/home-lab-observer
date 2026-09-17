@@ -37,6 +37,17 @@ func run(ctx context.Context) int {
 	}
 	if len(os.Args) == 2 {
 		switch os.Args[1] {
+		case "start", "restart":
+			operation := connectedinstall.Start
+			if os.Args[1] == "restart" {
+				operation = connectedinstall.Restart
+			}
+			if operation(ctx) != nil {
+				fmt.Fprintln(os.Stderr, "ACTIVATION_REFUSED_OR_RECOVERY_REQUIRED: preserve local state; verify the supported profile and bounded status before retrying.")
+				return 22
+			}
+			fmt.Fprintln(os.Stdout, "STARTED_WAITING_FOR_UPLOAD: runtime checks passed for this invocation. First upload waits at least 60 seconds; boot and automatic restart remain disabled.")
+			return 0
 		case "status":
 			status, err := connectedinstall.ReadStatus()
 			if err != nil {
@@ -71,7 +82,7 @@ func run(ctx context.Context) int {
 		}
 	}
 	if len(os.Args) != 5 || os.Args[1] != "install" {
-		fmt.Fprintln(os.Stderr, "Usage: observer-connected-install install <verified-bundle-directory> <manifest-sha256> <server-id> | status | stop | refresh | uninstall")
+		fmt.Fprintln(os.Stderr, "Usage: observer-connected-install install <verified-bundle-directory> <manifest-sha256> <server-id> | status | start | restart | stop | refresh | uninstall")
 		return 22
 	}
 	if connectedinstall.CheckRequest(ctx, os.Args[2], os.Args[3], os.Args[4]) != nil {

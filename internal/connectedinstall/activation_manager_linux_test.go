@@ -8,7 +8,7 @@ import (
 )
 
 func workerFixture() string {
-	return "ActiveState=active\nMainPID=123\nInvocationID=" + strings.Repeat("a", 32) + "\nRestart=no\nStandardInput=null\nStandardOutput=null\nStandardError=null\nFileDescriptorStoreMax=0\nNFileDescriptorStore=0\nTriggeredBy=\nUnitFileState=disabled\n"
+	return "ActiveState=active\nMainPID=123\nInvocationID=" + strings.Repeat("a", 32) + "\nRestart=no\nStandardInput=null\nStandardOutput=null\nStandardError=null\nFileDescriptorStoreMax=0\nNFileDescriptorStore=0\nTriggeredBy=\nUnitFileState=disabled\nPrivateIPC=yes\n"
 }
 
 func TestActivationWorkerProperties(t *testing.T) {
@@ -27,6 +27,8 @@ func TestActivationWorkerProperties(t *testing.T) {
 		}
 	}
 	for name, bad := range map[string]string{
+		"shared IPC":         strings.ReplaceAll(b, "PrivateIPC=yes", "PrivateIPC=no"),
+		"missing IPC":        strings.ReplaceAll(b, "PrivateIPC=yes\n", ""),
 		"restart":            strings.ReplaceAll(b, "Restart=no", "Restart=on-failure"),
 		"stdio":              strings.ReplaceAll(b, "StandardInput=null", "StandardInput=socket"),
 		"configured store":   strings.ReplaceAll(b, "FileDescriptorStoreMax=0", "FileDescriptorStoreMax=1"),
