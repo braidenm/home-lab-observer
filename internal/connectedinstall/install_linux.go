@@ -120,10 +120,10 @@ func Install(ctx context.Context, request Request) (result error) {
 			return ErrRecovery
 		}
 	}
-	if _, err := command(ctx, "/usr/sbin/useradd", []string{"--system", "--no-create-home", "--shell", "/usr/sbin/nologin", "--gid", sharedName, collectorName}, nil, 1024); err != nil {
+	if _, err := command(ctx, "/usr/sbin/useradd", []string{"--system", "--no-create-home", "--home-dir", "/nonexistent", "--shell", "/usr/sbin/nologin", "--gid", sharedName, collectorName}, nil, 1024); err != nil {
 		return ErrRecovery
 	}
-	if _, err := command(ctx, "/usr/sbin/useradd", []string{"--system", "--no-create-home", "--shell", "/usr/sbin/nologin", "--gid", uploaderName, "--groups", sharedName, uploaderName}, nil, 1024); err != nil {
+	if _, err := command(ctx, "/usr/sbin/useradd", []string{"--system", "--no-create-home", "--home-dir", "/nonexistent", "--shell", "/usr/sbin/nologin", "--gid", uploaderName, "--groups", sharedName, uploaderName}, nil, 1024); err != nil {
 		return ErrRecovery
 	}
 	collector, err := user.Lookup(collectorName)
@@ -183,6 +183,9 @@ func Install(ctx context.Context, request Request) (result error) {
 	if config.Validate() != nil {
 		return ErrRecovery
 	}
+	if auditPrincipals(ctx, config) != nil {
+		return ErrRecovery
+	}
 	validation, _ := json.Marshal(connectedenroll.ValidationInput{ServerID: binding.ServerID, ConnectorID: binding.ConnectorID, UploaderUID: uint32(uu), UploaderGID: uint32(ug), SharedGID: uint32(sg)})
 	invocation, err = connectedunits.RenderEnrollmentProperties(policy, "validate-enrollment")
 	if err != nil {
@@ -236,6 +239,10 @@ func Install(ctx context.Context, request Request) (result error) {
 
 func preflight(ctx context.Context) error {
 	if runtime.GOARCH != "amd64" {
+		return ErrUnsafe
+	}
+	nss, err := connectedprofile.ReadRootFile("/etc/nsswitch.conf", 64<<10)
+	if err != nil || !supportedNSS(nss) {
 		return ErrUnsafe
 	}
 	for _, path := range []string{"/etc", "/var/lib", "/opt", "/etc/systemd/system"} {

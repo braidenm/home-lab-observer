@@ -146,6 +146,12 @@ func mkdirNew(path string, uid, gid int, mode os.FileMode) error {
 }
 
 func rootDirectory(path string) (*os.File, error) {
+	return trustedDirectory(path, false)
+}
+
+// trustedDirectory permits a missing descendant only after validating all
+// existing ancestors through anchored, no-follow descriptors.
+func trustedDirectory(path string, allowMissing bool) (*os.File, error) {
 	if !strings.HasPrefix(path, "/") {
 		return nil, ErrUnsafe
 	}
@@ -153,7 +159,17 @@ func rootDirectory(path string) (*os.File, error) {
 	if err != nil {
 		return nil, ErrUnsafe
 	}
-	for _, part := range strings.Split(strings.TrimPrefix(path, "/"), "/") {
+	return trustedDescendant(fd, strings.Split(strings.TrimPrefix(path, "/"), "/"), allowMissing)
+}
+
+// trustedDescendant consumes fd, which must already anchor a trusted parent.
+func trustedDescendant(fd int, parts []string, allowMissing bool) (*os.File, error) {
+	var parent unix.Stat_t
+	if unix.Fstat(fd, &parent) != nil || parent.Mode&unix.S_IFMT != unix.S_IFDIR || parent.Uid != 0 || parent.Mode&0022 != 0 || parent.Mode&07000 != 0 || !noACL(fd) {
+		unix.Close(fd)
+		return nil, ErrUnsafe
+	}
+	for _, part := range parts {
 		if part == "" || part == "." || part == ".." {
 			unix.Close(fd)
 			return nil, ErrUnsafe
@@ -161,6 +177,9 @@ func rootDirectory(path string) (*os.File, error) {
 		next, err := unix.Openat(fd, part, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 		unix.Close(fd)
 		if err != nil {
+			if allowMissing && err == unix.ENOENT {
+				return nil, nil
+			}
 			return nil, ErrUnsafe
 		}
 		fd = next

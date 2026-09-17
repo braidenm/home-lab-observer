@@ -30,6 +30,18 @@ limits to zero before secret reads; no host crash-handler or system-wide setting
 
 ## Evidence and remaining work
 
+The first connected Linux profile accepts identity sources `files` or `files systemd` only, with no custom NSS
+actions or `initgroups` override. Before promotion and activation, bounded local records and fixed effective
+lookups must agree on dedicated names, numeric IDs, exact memberships, locked accounts/groups, no group
+administrators, `/nonexistent` homes and non-login shells. Existing systemd/userdb registration directories and
+their ancestors must be root-controlled; a missing descendant does not excuse a writable or symlinked ancestor.
+This checks the declared profile, not universal NSS enumeration. Root-managed systemd identity admission,
+existing process credentials and later privileged host changes remain trusted operator responsibilities.
+No global NSS settings are modified. The primary baseline is the
+[systemd v255 NSS documentation](https://raw.githubusercontent.com/systemd/systemd/v255/man/nss-systemd.xml)
+and [dynamic-user allocator](https://raw.githubusercontent.com/systemd/systemd/v255/src/core/dynamic-user.c),
+reviewed 2026-09-17. Parser and fresh-temporary-tree tests do not establish full installed principal proof.
+
 The actual three Linux/amd64 command roots compile. Focused synthetic tests cover bounded status, wrong-owner/
 symlink/FIFO refusal, input flush/restoration, manager-output ownership, bounded subprocess pipe joins and freshness.
 An approved WSL-root fixture uses only fresh owned temporary directories and synthetic records for publication,
