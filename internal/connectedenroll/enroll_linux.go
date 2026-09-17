@@ -83,7 +83,7 @@ func input(r io.Reader, target any) error {
 // Run reads/writes only parent-owned anonymous pipes. It never prints errors,
 // retries an exchange, repairs a partial directory, or starts either worker.
 func Run(ctx context.Context, mode string, in io.Reader, out io.Writer) int {
-	if ctx == nil || ctx.Err() != nil {
+	if ctx == nil || ctx.Err() != nil || in == nil || out == nil {
 		return 22
 	}
 	if mode == "validate-enrollment" {
