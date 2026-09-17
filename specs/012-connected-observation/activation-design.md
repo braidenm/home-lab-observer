@@ -147,6 +147,13 @@ results, but cannot itself authorize later activation or contain host observatio
 - Test absent-request waiting, same-directory replacement refusal, inherited
   socket descriptors above a lowered file-descriptor limit, oversized descriptor
   enumeration and denied root process inspection. No failed audit publishes a request.
+- The root transaction has private fixed-adapter seams for deterministic ordering
+  and fault tests: no request before descriptor/policy audit, no commit before
+  matched worker evidence and final probe checks, stale or replaced invocation
+  refusal, uncertain publication, and bounded independent cleanup after cancellation.
+  Recheck cancellation and both captured invocations after the final status read.
+  These in-memory tests do not install services or substitute for real manager,
+  filesystem, network-policy or packaged-VM acceptance.
 - Emit fixed actionable states: acceptance missing, policy drift, unsupported
   primitive, failed runtime check, or recovery required. No raw socket errors,
   addresses, paths, credentials or unbounded labels enter diagnostics.

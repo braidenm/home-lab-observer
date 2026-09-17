@@ -5,15 +5,12 @@ package connectedinstall
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
 	"time"
 
 	"github.com/braidenm/home-lab-observer/internal/connectedactivation"
-	"github.com/braidenm/home-lab-observer/internal/connectedpolicy"
-	"github.com/braidenm/home-lab-observer/internal/connectedprocess"
 	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
 )
 
@@ -21,23 +18,27 @@ import (
 // audited principals, and has stopped/joined both exact installed workers.
 // Packaged disposable-VM acceptance remains a release prerequisite, not a flag.
 func activateStopped(parent context.Context, c connectedprofile.Config) (result error) {
+	return activateStoppedWith(parent, c, systemActivationOperations())
+}
+
+func activateStoppedWith(parent context.Context, c connectedprofile.Config, ops activationOperations) (result error) {
 	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 	defer cancel()
 	for _, unit := range []string{uploaderUnit, collectorUnit} {
-		state, err := inspectWorker(ctx, unit)
+		state, err := ops.inspect(ctx, unit)
 		if err != nil || state.Active != "inactive" {
 			return ErrUnsafe
 		}
 	}
-	d, err := pinActivation(c.UploaderGID)
+	d, err := ops.pin(c.UploaderGID)
 	if err != nil {
 		return err
 	}
-	defer d.Close()
-	if clearActivationResponse(c) != nil {
+	defer d.close()
+	if ops.clearResponse(c) != nil {
 		return ErrUnsafe
 	}
-	pair, err := newProbePair(ctx)
+	pair, err := ops.probes(ctx)
 	if err != nil {
 		return err
 	}
@@ -54,7 +55,7 @@ func activateStopped(parent context.Context, c connectedprofile.Config) (result 
 			if !ok {
 				continue
 			}
-			got, e := inspectWorker(cleanup, unit)
+			got, e := ops.inspect(cleanup, unit)
 			if e != nil {
 				result = ErrRecovery
 				continue
@@ -62,25 +63,25 @@ func activateStopped(parent context.Context, c connectedprofile.Config) (result 
 			if got.PID == 0 && (got.Active == "inactive" || got.Active == "failed") {
 				continue
 			}
-			if want.Invocation == "" || got.Invocation != want.Invocation || (got.PID != want.PID && want.PID != 0) || service(cleanup, "stop", unit) != nil {
+			if want.Invocation == "" || got.Invocation != want.Invocation || (got.PID != want.PID && want.PID != 0) || ops.service(cleanup, "stop", unit) != nil {
 				result = ErrRecovery
 				continue
 			}
-			joined, e := inspectWorker(cleanup, unit)
+			joined, e := ops.inspect(cleanup, unit)
 			if e != nil || joined.PID != 0 || joined.Active != "inactive" {
 				result = ErrRecovery
 			}
 		}
 	}()
-	if connectedpolicy.ValidateEffective(ctx, uploaderUnit, c.Addresses) != nil {
+	if ops.policy(ctx, uploaderUnit, c.Addresses) != nil {
 		return ErrUnsafe
 	}
-	if err := startActivationWorker(ctx, uploaderUnit, owned); err != nil {
+	if err := startActivationWorkerWith(ctx, uploaderUnit, owned, ops.service, ops.inspect); err != nil {
 		return err
 	}
 	uploader := owned[uploaderUnit]
-	identity, err := connectedprocess.Audit(ctx, uploader.PID, connectedprofile.ReleaseDirectory+"/"+c.ArtifactSHA256+"/observer-connected-uploader")
-	if err != nil || identity.PID != uploader.PID || !sameWorker(ctx, uploaderUnit, uploader) {
+	identity, err := ops.audit(ctx, uploader.PID, connectedprofile.ReleaseDirectory+"/"+c.ArtifactSHA256+"/observer-connected-uploader")
+	if err != nil || identity.PID != uploader.PID || !ops.sameWorker(ctx, uploaderUnit, uploader) {
 		return ErrUnsafe
 	}
 	config, err := connectedprofile.Encode(c)
@@ -89,45 +90,46 @@ func activateStopped(parent context.Context, c connectedprofile.Config) (result 
 	}
 	digest := sha256.Sum256(config)
 	nonce := make([]byte, 32)
-	if _, err := rand.Read(nonce); err != nil {
+	if _, err := ops.random(nonce); err != nil {
 		return ErrUnsafe
 	}
-	request := connectedactivation.Request{Version: connectedactivation.RequestVersion, Nonce: hex.EncodeToString(nonce), ArtifactSHA256: c.ArtifactSHA256, ConfigSHA256: hex.EncodeToString(digest[:]), PolicyGeneration: c.PolicyGeneration, IPv4Port: pair.v4.port(), IPv6Port: pair.v6.port()}
+	v4, v6 := pair.ports()
+	request := connectedactivation.Request{Version: connectedactivation.RequestVersion, Nonce: hex.EncodeToString(nonce), ArtifactSHA256: c.ArtifactSHA256, ConfigSHA256: hex.EncodeToString(digest[:]), PolicyGeneration: c.PolicyGeneration, IPv4Port: v4, IPv6Port: v6}
 	encoded, err := connectedactivation.EncodeRequest(request)
 	if err != nil {
 		return ErrUnsafe
 	}
-	if !unchangedActivation(ctx, c, config, uploader) || !pair.denied() {
+	if !ops.unchanged(ctx, c, config, uploader) || !pair.denied() {
 		return ErrUnsafe
 	}
-	if publishActivation(d, "request.json", encoded, c.UploaderGID) != nil {
+	if d.publish("request.json", encoded) != nil {
 		return ErrRecovery
 	}
 	var response connectedactivation.Response
 	for {
-		if !sameWorker(ctx, uploaderUnit, uploader) || !pair.denied() {
+		if !ops.sameWorker(ctx, uploaderUnit, uploader) || !pair.denied() {
 			return ErrUnsafe
 		}
-		response, err = readActivationResponse(c)
+		response, err = ops.response(c)
 		if err == nil {
 			if !connectedactivation.MatchResponse(request, uploader.Invocation, response) {
 				return ErrUnsafe
 			}
 			break
 		}
-		if !os.IsNotExist(err) || activationWait(ctx) != nil {
+		if !os.IsNotExist(err) || ops.wait(ctx) != nil {
 			return ErrUnsafe
 		}
 	}
-	if err := startActivationWorker(ctx, collectorUnit, owned); err != nil {
+	if err := startActivationWorkerWith(ctx, collectorUnit, owned, ops.service, ops.inspect); err != nil {
 		return err
 	}
 	collector := owned[collectorUnit]
 	for {
-		if !sameWorker(ctx, collectorUnit, collector) || !sameWorker(ctx, uploaderUnit, uploader) {
+		if !ops.sameWorker(ctx, collectorUnit, collector) || !ops.sameWorker(ctx, uploaderUnit, uploader) {
 			return ErrUnsafe
 		}
-		record, e := readStatusRecord("collector-status", c.CollectorUID)
+		record, e := ops.status("collector-status", c.CollectorUID)
 		if e == nil && record.InvocationID == collector.Invocation {
 			if record.State != "COLLECTING" {
 				return ErrUnsafe
@@ -137,11 +139,11 @@ func activateStopped(parent context.Context, c connectedprofile.Config) (result 
 		if e != nil && !os.IsNotExist(e) {
 			return ErrUnsafe
 		}
-		if activationWait(ctx) != nil {
+		if ops.wait(ctx) != nil {
 			return ErrUnsafe
 		}
 	}
-	if pair.finish(ctx) != nil || !unchangedActivation(ctx, c, config, uploader) || !sameWorker(ctx, collectorUnit, collector) {
+	if pair.finish(ctx) != nil || !ops.unchanged(ctx, c, config, uploader) || !ops.sameWorker(ctx, collectorUnit, collector) {
 		return ErrUnsafe
 	}
 	commit := connectedactivation.Commit{Version: connectedactivation.CommitVersion, RequestSHA256: response.RequestSHA256, InvocationID: response.InvocationID, Challenge: response.Challenge}
@@ -149,17 +151,23 @@ func activateStopped(parent context.Context, c connectedprofile.Config) (result 
 	if err != nil || ctx.Err() != nil {
 		return ErrUnsafe
 	}
-	if publishActivation(d, "commit.json", encoded, c.UploaderGID) != nil {
+	if d.publish("commit.json", encoded) != nil {
 		return ErrRecovery
 	}
 	for {
-		if !sameWorker(ctx, uploaderUnit, uploader) || !sameWorker(ctx, collectorUnit, collector) {
+		if !ops.sameWorker(ctx, uploaderUnit, uploader) || !ops.sameWorker(ctx, collectorUnit, collector) {
 			return ErrUnsafe
 		}
-		record, e := readStatusRecord("uploader-status", c.UploaderUID)
+		record, e := ops.status("uploader-status", c.UploaderUID)
 		if e == nil && record.InvocationID == uploader.Invocation {
 			switch record.State {
 			case "WAITING_FIRST_UPLOAD", "PENDING", "ACKNOWLEDGED_FRESH":
+				// The status read can race cancellation or a replaced invocation.
+				// Do not turn stale readiness into a successful transaction that
+				// skips cleanup. A cancellation after return remains a caller race.
+				if ctx.Err() != nil || !ops.sameWorker(ctx, uploaderUnit, uploader) || !ops.sameWorker(ctx, collectorUnit, collector) || ctx.Err() != nil {
+					return ErrUnsafe
+				}
 				return nil
 			default:
 				return ErrUnsafe
@@ -168,19 +176,24 @@ func activateStopped(parent context.Context, c connectedprofile.Config) (result 
 		if e != nil && !os.IsNotExist(e) {
 			return ErrUnsafe
 		}
-		if activationWait(ctx) != nil {
+		if ops.wait(ctx) != nil {
 			return ErrUnsafe
 		}
 	}
 }
 
-func unchangedActivation(ctx context.Context, c connectedprofile.Config, encoded []byte, uploader workerInstance) bool {
-	current, err := inspectInstalled()
+func (ops activationOperations) unchanged(ctx context.Context, c connectedprofile.Config, encoded []byte, uploader workerInstance) bool {
+	current, err := ops.installed()
 	if err != nil {
 		return false
 	}
 	actual, err := connectedprofile.Encode(current)
-	return err == nil && bytes.Equal(actual, encoded) && connectedpolicy.ValidateEffective(ctx, uploaderUnit, c.Addresses) == nil && sameWorker(ctx, uploaderUnit, uploader)
+	return err == nil && bytes.Equal(actual, encoded) && ops.policy(ctx, uploaderUnit, c.Addresses) == nil && ops.sameWorker(ctx, uploaderUnit, uploader)
+}
+
+func (ops activationOperations) sameWorker(ctx context.Context, unit string, want workerInstance) bool {
+	got, err := ops.inspect(ctx, unit)
+	return err == nil && want.Active == "active" && got == want
 }
 
 func activationWait(ctx context.Context) error {
