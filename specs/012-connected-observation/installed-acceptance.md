@@ -71,6 +71,27 @@ installed-worker isolation, public-destination policy or enforcement on a differ
 
 ## Primary sources and code evidence
 
+### Checked-in primitive runner (2026-09-11)
+
+The manual `connected-primitives` fixture was independently executed on WSL Ubuntu 24.04/systemd 255.4.
+Its BASELINE, DENIED, COLLECTOR and CREDENTIAL checks all passed using temporary resources, uniquely named
+collected transient units and the existing unprivileged principal. The online profile denied AF_UNIX,
+socketpair, System V shared memory and io_uring setup while allowing AF_INET/AF_INET6 socket creation;
+the collector profile also denied socket creation. The offline profile omits the invalid transient
+`RestrictAddressFamilies=none` value and instead denies the socket syscall explicitly.
+This is primitive-control evidence only, not a complete installed worker, enrollment, TLS, reboot or
+power-loss acceptance result. No persistent service, account or real registration was created.
+
+### Additional credential-layout evidence (2026-09-11)
+
+An independently run owned transient RootDirectory service on Ubuntu 24.04 WSL/systemd 255.4 used the existing
+`nobody:nogroup` principal, NoNewPrivileges and a synthetic empty LoadCredential file. Inside that root, `/run` was
+root:root 1777, `/run/credentials` root:root 0755, and the per-unit credential directory root:root 0550. Its access
+ACL granted only owner r-x, named worker UID 65534 r-x, group none, mask r-x and other none. The credential file
+was root:root 0440 with owner r--, named worker UID r--, group none, mask r-- and other none. The worker could read
+but not write it. No account, persistent unit, real secret or host canary was created; owned temporary resources
+were cleaned up. This establishes a concrete mode/ACL expectation, not final installed-profile acceptance.
+
 Consulted 2026-09-11:
 
 - [systemd v255 execution controls](https://github.com/systemd/systemd/blob/v255/man/systemd.exec.xml):

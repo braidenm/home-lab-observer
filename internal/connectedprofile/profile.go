@@ -28,8 +28,8 @@ var serverPattern = regexp.MustCompile(`^srv_[a-f0-9]{32}$`)
 var connectorPattern = regexp.MustCompile(`^agent_[a-f0-9]{32}$`)
 var digestPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
-func ValidServerID(value string) bool {return serverPattern.MatchString(value)}
-func ValidConnectorID(value string) bool {return connectorPattern.MatchString(value)}
+func ValidServerID(value string) bool    { return serverPattern.MatchString(value) }
+func ValidConnectorID(value string) bool { return connectorPattern.MatchString(value) }
 
 type Config struct {
 	Version          string   `json:"version"`

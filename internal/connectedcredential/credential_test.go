@@ -1,0 +1,23 @@
+package connectedcredential
+
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
+
+func TestBoundedExactCredential(t *testing.T) {
+	r := CredentialRecord{Version: "observer-connected-credential/v1", ServerID: "srv_" + strings.Repeat("a", 32), ConnectorID: "agent_" + strings.Repeat("b", 32), Secret: "hlc_" + strings.Repeat("c", 43)}
+	b, _ := json.Marshal(r)
+	if _, err := DecodeCredential(b, r.ServerID, r.ConnectorID); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range [][]byte{nil, append(append([]byte(nil), b...), '\n'), []byte(strings.Replace(string(b), `"secret":`, `"unknown":0,"secret":`, 1)), []byte(strings.Repeat("x", 513))} {
+		if _, err := DecodeCredential(bad, r.ServerID, r.ConnectorID); err != ErrUnsafe {
+			t.Fatal("malformed credential accepted")
+		}
+	}
+	if _, err := DecodeCredential(b, r.ServerID, "agent_"+strings.Repeat("d", 32)); err != ErrUnsafe {
+		t.Fatal("cross binding accepted")
+	}
+}

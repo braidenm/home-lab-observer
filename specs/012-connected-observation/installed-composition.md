@@ -1,5 +1,7 @@
 # F1: first installable Linux connected worker
 
+Current implementation/evidence checkpoint: [installed-implementation.md](installed-implementation.md).
+
 Status: accepted for implementation after independent review, 2026-09-11. This is an end-to-end implementation plan, not activation approval or
 evidence of installed isolation. Complements ADR 014 and the existing installed-acceptance research; does not
 replace its negative tests. Requires reviewed D2d persistence and C2 pacing to land before integration.
@@ -211,6 +213,13 @@ services, revoke the separate registration, and offer explicit removal of owned 
 on failure and disclose that deleting credentials/ledger is not recoverable service rollback. Rollback of code selects
 the prior immutable compatible artifact with the same ledger; incompatible state refuses startup. The legacy connector
 remains working and is neither overwritten nor retired by the canary.
+
+The first canary's `uninstall` is deliberately detach-only: under the installation lease, validate exact
+owned artifacts/unit bytes, stop and join both units, disable them, move the exact unit files into a root-owned
+quarantine, reload the manager and publish a bounded completion marker. Keep credential, ledger, accounts,
+artifacts and diagnostics. Report explicitly that the separate registration must be revoked in Platform Demo;
+local uninstall cannot assert remote revocation. A partial detach reports recovery required and preserves evidence.
+Recursive state deletion and account recycling are not performed by this initial command.
 
 ## Implementation and evidence gates
 
