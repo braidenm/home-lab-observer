@@ -172,6 +172,10 @@ Sources accessed 2026-09-17, pinned to the supported v255 baseline:
 - [systemd security analysis](https://github.com/systemd/systemd/blob/v255/man/systemd-analyze.xml):
   the score assesses a subset of unit settings, not complete application or IPC
   security. Use it as diagnostic context, never the activation decision.
+- [Linux process descriptors](https://man7.org/linux/man-pages/man5/proc_pid_fd.5.html)
+  and [resource limits](https://man7.org/linux/man-pages/man2/getrlimit.2.html):
+  descriptor inspection has ptrace permission checks; an allocation limit is not
+  a complete inventory of already-open descriptors. Refuse unavailable inspection.
 
 No new owner product decision is required for these conservative checks. A
 supported disposable-VM environment and real acceptance evidence are still
