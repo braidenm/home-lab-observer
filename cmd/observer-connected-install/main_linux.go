@@ -61,10 +61,17 @@ func run(ctx context.Context) int {
 			}
 			fmt.Fprintln(os.Stdout, "UNINSTALLED_LOCAL_STATE_RETAINED: services detached. Credential, ledger, accounts and artifacts remain. Revoke the separate registration in Platform Demo; it has NOT been remotely revoked.")
 			return 0
+		case "refresh":
+			if connectedinstall.Refresh(ctx) != nil {
+				fmt.Fprintln(os.Stderr, "REFRESH_REFUSED_OR_RECOVERY_REQUIRED: keep services stopped; inspect bounded local status before further action.")
+				return 22
+			}
+			fmt.Fprintln(os.Stdout, "REFRESHED_STOPPED: exact endpoint pins and CA trust updated together; services remain stopped and disabled pending packaged activation acceptance.")
+			return 0
 		}
 	}
 	if len(os.Args) != 5 || os.Args[1] != "install" {
-		fmt.Fprintln(os.Stderr, "Usage: observer-connected-install install <verified-bundle-directory> <manifest-sha256> <server-id> | status | stop | uninstall")
+		fmt.Fprintln(os.Stderr, "Usage: observer-connected-install install <verified-bundle-directory> <manifest-sha256> <server-id> | status | stop | refresh | uninstall")
 		return 22
 	}
 	if connectedinstall.CheckRequest(ctx, os.Args[2], os.Args[3], os.Args[4]) != nil {

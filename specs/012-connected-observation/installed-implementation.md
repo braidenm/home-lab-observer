@@ -16,6 +16,10 @@ rich standalone dashboard remain unchanged. The fixed installer operations are:
   An installed identity is not process liveness or a fresh acknowledgement.
 - `stop`: verifies exact owned artifacts/units, stops uploader then collector, checks inactive state and no main
   process. Registration and local state remain intact.
+- `refresh`: validates fixed-host TLS endpoints and CA trust, records a bounded next-generation journal, stops
+  and disables workers, replaces only exact known hosts/CA/unit/config files, verifies loaded endpoint policy and
+  publishes a receipt bound to the exact journal. Services remain stopped; activation is a separate gate. A crash,
+  refused write or missing/mismatched receipt reports `REFRESH_RECOVERY_REQUIRED`, not a ready mixed generation.
 - `uninstall`: stops/disables only exact owned services, quarantines their unit files and retains credentials,
   ledger, accounts, artifacts and diagnostics. The owner must separately revoke registration in Platform Demo.
   A partial detach preserves evidence and reports recovery required.
@@ -32,9 +36,9 @@ An approved WSL-root fixture uses only fresh owned temporary directories and syn
 no-replace behavior and the separate one-MiB CA bound. No installer test creates persistent accounts/services or a
 real enrollment. Primitive systemd probes are documented separately and are not complete installed-profile proof.
 
-This checkpoint is **not completed F1**. Remaining implementation: generation-safe endpoint refresh; activation/
-restart acceptance gate; compatible-code rollback; broader transaction failure/held-input composition tests and
-dependency-closure regressions. Remaining acceptance: actual clean connected bundle, loaded packaged profiles
+This checkpoint is **not completed F1**. Remaining implementation: activation/restart acceptance gate;
+compatible-code rollback; broader transaction failure/held-input composition tests. Separate exact internal
+dependency-closure regression tests now cover both worker commands. Remaining acceptance: actual clean connected bundle, loaded packaged profiles
 under dedicated principals, full repository checks, independent final review and the explicitly unexecuted VM
 reboot/power-loss gates. Do not substitute helper tests or static templates for these requirements.
 

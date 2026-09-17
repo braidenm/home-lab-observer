@@ -62,12 +62,21 @@ func validPreparing(data []byte) bool {
 }
 
 func inspectInstalled() (connectedprofile.Config, error) {
+	return inspectInstalledState(true)
+}
+
+func inspectInstalledState(requireClosedRefresh bool) (connectedprofile.Config, error) {
 	if os.Getuid() != 0 || os.Geteuid() != 0 {
 		return connectedprofile.Config{}, ErrUnsafe
 	}
 	c, err := connectedprofile.Load()
 	if err != nil {
 		return c, ErrUnsafe
+	}
+	if requireClosedRefresh {
+		if _, _, err := refreshState(c); err != nil {
+			return c, err
+		}
 	}
 	release := connectedprofile.ReleaseDirectory + "/" + c.ArtifactSHA256
 	d, err := rootDirectory(release)
@@ -131,6 +140,9 @@ func ReadStatus() (Status, error) {
 				return Status{}, ErrUnsafe
 			}
 			return Status{State: entry.state}, nil
+		}
+		if _, _, err := refreshState(c); err != nil {
+			return Status{State: "REFRESH_RECOVERY_REQUIRED"}, nil
 		}
 	}
 	c, err := inspectInstalled()
@@ -206,7 +218,9 @@ func Stop(ctx context.Context) error {
 		return err
 	}
 	defer lock.Close()
-	if _, err := inspectInstalled(); err != nil {
+	// An interrupted refresh must not prevent stopping an otherwise exact,
+	// unchanged owned pair. Mixed artifact/unit identities still fail closed.
+	if _, err := inspectInstalledState(false); err != nil {
 		return err
 	}
 	return stopOwnedWorkers(ctx)

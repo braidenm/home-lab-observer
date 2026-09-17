@@ -2,6 +2,11 @@
 
 Current implementation/evidence checkpoint: [installed-implementation.md](installed-implementation.md).
 
+The first explicit endpoint refresh leaves workers stopped and disabled. A bounded old/next generation journal
+and exact-content completion digest prevent an old receipt authorizing a partial new generation. Only endpoint
+addresses/generation may change; principals, artifact and both durable binding IDs stay unchanged. No ledger or
+credential restoration occurs. Activation/restart must independently pass the packaged acceptance route.
+
 Status: accepted for implementation after independent review, 2026-09-11. This is an end-to-end implementation plan, not activation approval or
 evidence of installed isolation. Complements ADR 014 and the existing installed-acceptance research; does not
 replace its negative tests. Requires reviewed D2d persistence and C2 pacing to land before integration.
