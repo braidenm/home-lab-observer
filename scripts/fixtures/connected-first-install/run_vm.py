@@ -120,6 +120,11 @@ def capacity(work_root: Path) -> None:
         refuse("VM_CAPACITY_OR_BUSY_REFUSED")
 
 
+def ext4_command(directory: Path, target: Path) -> tuple[str, ...]:
+    # Resolve mkfs.ext4 to Ubuntu's mke2fs without relying on argv[0] defaults.
+    return ("mkfs.ext4", "-t", "ext4", "-F", "-q", "-L", "HLOFIX", "-d", str(directory), str(target))
+
+
 def payload_image(instance: Path, archive: Path, manifest: Path, checksums: Path, receiver: Path, expected_commit: str, expected_manifest_sha256: str, expected_archive_sha256: str, expected_receiver_sha256: str) -> Path:
     directory = instance / "payload"
     directory.mkdir(mode=0o700)
@@ -136,7 +141,7 @@ def payload_image(instance: Path, archive: Path, manifest: Path, checksums: Path
         refuse("PAYLOAD_TOO_LARGE")
     with target.open("xb") as image:
         image.truncate(size)
-    run("mkfs.ext4", "-F", "-q", "-L", "HLOFIX", "-d", str(directory), str(target))
+    run(*ext4_command(directory, target))
     if directory.resolve() != instance.resolve() / "payload":
         refuse("PAYLOAD_CLEANUP_SCOPE_REFUSED")
     for source in directory.iterdir():
@@ -282,7 +287,9 @@ def main() -> int:
             found = shutil.which(tool, path=SAFE_PATH)
             if found is None:
                 refuse("TOOL_MISSING")
-            TOOLS[tool] = str(owned_file(found, 50 * MIB))
+            # Ubuntu's mkfs.ext4 is commonly a link to mke2fs. Execute only
+            # the resolved root-owned, non-writable system binary.
+            TOOLS[tool] = str(owned_file(str(Path(found).resolve(strict=True)), 50 * MIB))
         root = Path(args.work_root)
         if not root.is_absolute() or root.is_symlink() or root.resolve(strict=True) != root or not qemu_safe(root):
             refuse("WORK_ROOT_REFUSED")
