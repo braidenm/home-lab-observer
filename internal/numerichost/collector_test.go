@@ -145,7 +145,7 @@ func TestTruncatedFilesystemsCannotPublishCompleteOverview(t *testing.T) {
 	cfg.MaxFilesystems = 2
 	p := &numericProvider{mounts: 3}
 	s := numerichost.New(clock{}, p, cfg).Collect(context.Background())
-	if len(*s.Filesystems.Data) != 2 || !s.Filesystems.Quality.Truncated || project(t, s) {
+	if len(*s.Filesystems.Data) != 2 || s.Filesystems.State != observation.Degraded || !s.Filesystems.Quality.Truncated || project(t, s) {
 		t.Fatal("truncated inventory advertised complete")
 	}
 	count := 0
@@ -156,6 +156,66 @@ func TestTruncatedFilesystemsCannotPublishCompleteOverview(t *testing.T) {
 	}
 	if count != 2 {
 		t.Fatal("filesystem bound exceeded")
+	}
+}
+
+type partialFilesystemProvider struct{ numericProvider }
+
+func (p *partialFilesystemProvider) Usage(ctx context.Context, path string) (numerichost.UsageStat, error) {
+	if strings.HasSuffix(path, "/b") {
+		return numerichost.UsageStat{}, fs.ErrPermission
+	}
+	return p.numericProvider.Usage(ctx, path)
+}
+
+func TestFilesystemFailuresAreNotCapTruncation(t *testing.T) {
+	for _, capped := range []bool{false, true} {
+		cfg := config()
+		if capped {
+			cfg.MaxFilesystems = 2
+		}
+		p := &partialFilesystemProvider{numericProvider{mounts: 3}}
+		s := numerichost.New(clock{}, p, cfg).Collect(context.Background())
+		if s.Filesystems.State != observation.Degraded || s.Filesystems.Quality.Errors != 1 ||
+			s.Filesystems.Quality.Truncated != capped || s.Filesystems.Quality.Total != 3 {
+			t.Fatal("failed row and output cap were conflated")
+		}
+		want := 2
+		if capped {
+			want = 1
+		}
+		if s.Filesystems.Data == nil || len(*s.Filesystems.Data) != want {
+			t.Fatal("valid filesystem rows were lost")
+		}
+	}
+}
+
+func TestAllSelectedFilesystemFailuresRetainLocalCapAndReason(t *testing.T) {
+	cfg := config()
+	cfg.MaxFilesystems = 2
+	p := &numericProvider{mounts: 3, fail: "usage", err: fs.ErrPermission}
+	s := numerichost.New(clock{}, p, cfg).Collect(context.Background())
+	if s.Filesystems.State != observation.PermissionDenied || s.Filesystems.ReasonCode != observation.ReasonPermissionDenied ||
+		s.Filesystems.Data != nil || s.Filesystems.Quality.Errors != 2 || s.Filesystems.Quality.Total != 3 || !s.Filesystems.Quality.Truncated {
+		t.Fatal("empty failed inventory lost quality or claimed complete coverage")
+	}
+}
+
+type mixedFilesystemFailureProvider struct{ numericProvider }
+
+func (*mixedFilesystemFailureProvider) Usage(_ context.Context, path string) (numerichost.UsageStat, error) {
+	if strings.HasSuffix(path, "/a") {
+		return numerichost.UsageStat{}, fs.ErrPermission
+	}
+	return numerichost.UsageStat{}, errors.ErrUnsupported
+}
+
+func TestMixedFilesystemFailuresDoNotClaimOneUniformCause(t *testing.T) {
+	p := &mixedFilesystemFailureProvider{numericProvider{mounts: 2}}
+	s := numerichost.New(clock{}, p, config()).Collect(context.Background())
+	if s.Filesystems.State != observation.Unavailable || s.Filesystems.ReasonCode != observation.ReasonCollectionFailed ||
+		s.Filesystems.Data != nil || s.Filesystems.Quality.Errors != 2 || s.Filesystems.Quality.Truncated {
+		t.Fatal("mixed filesystem failures misclassified")
 	}
 }
 

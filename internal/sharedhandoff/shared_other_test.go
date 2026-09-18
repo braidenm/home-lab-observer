@@ -23,6 +23,9 @@ func TestUnsupportedHasNoFilesystemSideEffects(t *testing.T) {
 	if w.Publish(observation.Snapshot{}, remoteprojection.Identity{}) != ErrUnsupported {
 		t.Fatal("unsupported publish")
 	}
+	if w.PublishNative(observation.Snapshot{}, remoteprojection.Identity{}) != ErrUnsupported {
+		t.Fatal("unsupported native publish")
+	}
 	if _, err := r.Read(context.Background(), ""); err != ErrUnsupported {
 		t.Fatal("unsupported read")
 	}
