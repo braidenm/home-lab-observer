@@ -42,6 +42,11 @@ previous-or-next active target are re-established. The legacy generic
 resources remain stopped for explicit recovery, never guessed from current
 DNS, host CA, or directory order.
 
+The [journal publication boundary](../../specs/012-connected-observation/transition-staging.md#authoritative-journal-publication-boundary)
+has its own proposal-bound temporary role and a forward-only retry. A
+durably complete stage rules out automatic abort: after a crash, absence of a
+temporary name cannot prove that a journal rename was never attempted.
+
 The [detailed transition plan](../../specs/012-connected-observation/compatible-code-transition.md)
 defines compatibility, legacy journal admission, interruption behavior and tests.
 The [staging design](../../specs/012-connected-observation/transition-staging.md#legacy-predecessor-design-gate)
