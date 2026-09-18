@@ -1,0 +1,47 @@
+name: Connected transition replacement fixture
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/connected-replace-fixture.yml'
+      - 'internal/connectedinstall/**'
+      - 'specs/012-connected-observation/transition-staging.md'
+      - 'go.mod'
+      - 'go.sum'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/connected-replace-fixture.yml'
+      - 'internal/connectedinstall/**'
+      - 'specs/012-connected-observation/transition-staging.md'
+      - 'go.mod'
+      - 'go.sum'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: connected-replace-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  owned-replacement:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Compile synthetic replacement fixture
+        run: go test -c ./internal/connectedinstall -o "$RUNNER_TEMP/connected-replace.test"
+      - name: Prove root-owned replacement and residue refusal on ext4
+        run: >-
+          sudo env -i PATH=/usr/bin:/bin TMPDIR=/tmp OBSERVER_CONNECTED_REPLACE_ACCEPTANCE=1
+          "$RUNNER_TEMP/connected-replace.test"
+          -test.run='^TestOwnedTransitionReplacementFixture$' -test.count=1 -test.timeout=120s -test.v
