@@ -9,10 +9,12 @@ The original findings below remain historical evidence, not the latest design st
 The [endpoint policy](endpoint-policy.md), [installed composition](installed-composition.md)
 and [activation design](activation-design.md) now specify the selected Linux boundary.
 Stopped installation, public Start/Restart, actual-worker activation coordination and
-focused synthetic sequencing tests are integrated. Exact packaged VM acceptance,
-compatible-code transition implementation, broader promotion/refresh fault tests and
-independent final review remain open. No connected release or live activation is
-approved by this update.
+focused synthetic sequencing tests are integrated. The bounded synthetic packaged
+VM subset, including quality-aware collector output and a stopped-ledger reboot/
+abrupt-power-off witness, passed as recorded in [packaged-vm-subset.md](packaged-vm-subset.md).
+Full installed enrollment/uploader acceptance, compatible-code transition recovery,
+broader promotion/refresh fault tests and independent final review remain open.
+No connected release or live activation is approved by this update.
 
 The same four checked-in primitive probes also passed on the owner's Ubuntu 24.04/systemd
 255 host using isolated temporary resources and synthetic credentials. Existing workloads
@@ -72,7 +74,8 @@ verified; no owner checkbox substitutes for that proof. Otherwise retain unavail
 | Namespace-isolated 1 MiB tmpfs pressure fixture | Executed separately; actual ENOSPC behavior only, not persistent-device sync. |
 | WSL 255 cgroup IPv4/IPv6 filtering | Owned transient-unit probes passed: baseline connection, deny-all timeout, then precise loopback exception restoring connection. Not full destination policy. |
 | Exact installed unit UID/mount/credential/network/TLS probes | Not executed. WSL is a feasible first test environment only when each capability is exercised. |
-| Physical-host mount coverage, supported ARM64 platform, reboot and VM power loss | Not executed; separate installed-release gates remain open. |
+| Physical-host mount coverage and supported ARM64 platform | Not executed; separate installed-release gates remain open. |
+| VM reboot and abrupt power-off | Stopped synthetic ext4 ledger identity and logical state survived both in the packaged subset; in-flight refresh, upload, promotion and full recovery remain unexecuted. |
 
 WSL observations describe its Linux guest, not the Windows host. All future fixtures must use synthetic data,
 explicitly owned resources, bounded cleanup and fixed result output; no raw credentials or host observations.
