@@ -10,6 +10,9 @@ import (
 )
 
 func TestOwnedTransitionStageLegacyFixture(t *testing.T) {
+	if _, err := ReadLegacyAt(nil); err != ErrUnsafe {
+		t.Fatal("missing anchored config accepted")
+	}
 	requireOwnedTransitionStageFixture(t)
 	for _, scenario := range []string{
 		"absent", "both", "journal-only", "completion-only", "empty",
