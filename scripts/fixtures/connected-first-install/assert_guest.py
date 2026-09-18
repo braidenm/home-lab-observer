@@ -241,19 +241,22 @@ def snapshot() -> dict:
     need("PrivateNetwork=yes\n" in collector_unit and "LoadCredential=" not in collector_unit and "InaccessiblePaths=-/etc/home-lab-observer-connected/credentials" in collector_unit, "COLLECTOR_ISOLATION")
     need("RootDirectory=" + str(STATE / "uploader-root") in uploader_unit and "LoadCredential=connector.json:/etc/home-lab-observer-connected/credentials/connector.json" in uploader_unit and "IPAddressDeny=any\n" in uploader_unit and "IPAddressAllow=93.184.216.34/32\n" in uploader_unit, "UPLOADER_ISOLATION")
     # systemd 255 renders LoadCredential as [unprintable], including when empty.
-    # Exact unit bytes plus the effective fragment path and no drop-ins prove
-    # the credential directives; printable properties prove the remaining policy.
-    collector_properties = unit_properties(units[0], ("FragmentPath", "DropInPaths",
+    # Exact unit bytes, no pending daemon reload, the effective fragment path,
+    # and no drop-ins prove the credential directives; printable properties
+    # prove the remaining policy.
+    collector_properties = unit_properties(units[0], ("FragmentPath", "DropInPaths", "NeedDaemonReload",
         "PrivateNetwork", "RootDirectory", "BindPaths", "NoNewPrivileges"))
-    uploader_properties = unit_properties(units[1], ("FragmentPath", "DropInPaths",
+    uploader_properties = unit_properties(units[1], ("FragmentPath", "DropInPaths", "NeedDaemonReload",
         "RootDirectory", "BindPaths", "BindReadOnlyPaths", "NoNewPrivileges", "IPAddressDeny"))
     need(collector_properties == {
         "FragmentPath": "/etc/systemd/system/" + units[0], "DropInPaths": "",
+        "NeedDaemonReload": "no",
         "PrivateNetwork": "yes", "RootDirectory": "", "BindPaths": "",
         "NoNewPrivileges": "yes",
     }, "COLLECTOR_EFFECTIVE")
     need(uploader_properties["FragmentPath"] == "/etc/systemd/system/" + units[1]
          and uploader_properties["DropInPaths"] == ""
+         and uploader_properties["NeedDaemonReload"] == "no"
          and uploader_properties["RootDirectory"] == str(STATE / "uploader-root")
          and str(STATE / "ledger") in uploader_properties["BindPaths"]
          and str(release) in uploader_properties["BindReadOnlyPaths"]

@@ -92,7 +92,7 @@ On systemd 255, `systemctl show` does not render `LoadCredential` as text (it
 reports `[unprintable]` even for an empty value), and normalizes
 `IPAddressDeny=any` to both IPv4 and IPv6 default-route ranges. The guest
 therefore proves credential policy from exact unit bytes, the effective
-`FragmentPath` and an empty `DropInPaths`, then checks printable effective
+`FragmentPath`, an empty `DropInPaths`, and `NeedDaemonReload=no`, then checks printable effective
 network and namespace properties separately. It must not treat `[unprintable]`
 as evidence that a credential is absent.
 
