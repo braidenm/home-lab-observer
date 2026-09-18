@@ -16,6 +16,18 @@ Full installed enrollment/uploader acceptance, compatible-code transition recove
 broader promotion/refresh fault tests and independent final review remain open.
 No connected release or live activation is approved by this update.
 
+## Hosted owner and sharing readiness (2026-09-17)
+
+The signed-in owner and admin server views currently show setup, not a registered
+connected server dashboard. Platform Demo's existing server access service lists
+owner or resource-scoped `home-lab:diagnostics-viewer` grants for sanitized snapshot
+reads; enrollment/revocation and typed server actions still require owner. These
+are distinct capabilities, not a general admin role. The F1 canary must verify
+the exact owner's resource grant and visible dashboard only after supported
+registration and transport acceptance. Delegating start/stop/restart or other
+write authority requires a separate typed, audited, per-resource/per-action spec;
+the read-only witness and installer work here must not silently extend it.
+
 The same four checked-in primitive probes also passed on the owner's Ubuntu 24.04/systemd
 255 host using isolated temporary resources and synthetic credentials. Existing workloads
 and the legacy connector were not changed. This does not establish final installed-profile,
