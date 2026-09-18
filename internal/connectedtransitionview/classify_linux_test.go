@@ -99,7 +99,11 @@ func TestReadOnlyTransitionPhases(t *testing.T) {
 		{"completed", connectedstagefs.Authority{Journal: proposal, Completion: completion}, newSet, connectedtransition.StagedCleanupPending},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			phase, err := Classify(stage, tc.authority, tc.active, stage.Record.Ledger)
+			phase, err := Classify(Evidence{
+				Preparation: stage.Preparation, Files: stage.Files, Record: stage.Record,
+				Journal: tc.authority.Journal, Completion: tc.authority.Completion,
+				Active: tc.active, Ledger: stage.Record.Ledger,
+			})
 			if err != nil || phase != tc.want {
 				t.Fatal("valid read-only phase refused", err, phase)
 			}
@@ -129,7 +133,11 @@ func TestReadOnlyTransitionRejectsForeignEvidence(t *testing.T) {
 			case "receipt":
 				authority.Completion = []byte("premature")
 			}
-			phase, err := Classify(stage, authority, oldSet, ledger)
+			phase, err := Classify(Evidence{
+				Preparation: stage.Preparation, Files: stage.Files, Record: stage.Record,
+				Journal: authority.Journal, Completion: authority.Completion,
+				Active: oldSet, Ledger: ledger,
+			})
 			if err != ErrUnavailable || phase != "" {
 				t.Fatal("foreign transition evidence classified")
 			}

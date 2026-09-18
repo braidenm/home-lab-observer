@@ -17,6 +17,7 @@ func TestTransitionViewHasNoInstallerOrWorkerAuthority(t *testing.T) {
 		for _, forbidden := range []string{
 			"/internal/connectedcredential", "/internal/connectedenroll",
 			"/internal/connectedinstall", "/internal/connectedstartup",
+			"/internal/connectedstagefs",
 			"/internal/platformtransport", "/internal/uploadledger",
 			"/internal/uploadloop",
 		} {
