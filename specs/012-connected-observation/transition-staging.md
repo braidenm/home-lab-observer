@@ -216,6 +216,17 @@ name cannot prove a rename was never attempted. Only an incomplete
 pre-stage preparation may be considered for separately proved abort. This
 conservative boundary avoids confusing a failed rename with safe rollback.
 
+An unused first-transition-only primitive now enforces this boundary for
+`none` and `legacy-refresh-v1` predecessors: it reopens the anchored stage and
+installed legacy evidence, requires both new-format authority names absent or
+the exact proposal already present with no receipt, refuses unknown journal
+temporary names, and uses an exclusive no-replace rename. It syncs and
+reopens the config directory on normal publication and retry. It does not
+handle a prior new-format transition, establish the caller's lease/worker/
+ledger/resource proofs, or expose an installer command. Its bounded temporary
+name scan refuses a config directory with more than 4096 entries; a crowded
+directory needs operator inspection rather than an unbounded allocation.
+
 ### Interrupted active-file replacement
 
 Each of the five fixed active resources needs a proposal-bound, role-specific

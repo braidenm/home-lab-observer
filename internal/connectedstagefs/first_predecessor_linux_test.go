@@ -36,7 +36,27 @@ func TestOwnedTransitionStageFirstPredecessorFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	record := stage.Record
+	legacyReceipt, legacyReceiptPath := writeSyntheticLegacyPredecessor(t, configPath, stagePath, stage.Record)
+	stage, err = InspectFirstPredecessorAt(config)
+	if err != nil || stage.Record.PredecessorFormat != connectedtransition.PredecessorLegacy {
+		t.Fatal("anchored exact legacy predecessor refused", err)
+	}
+	if err := os.WriteFile(legacyReceiptPath, append(append([]byte(nil), legacyReceipt...), '\n'), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := InspectFirstPredecessorAt(config); err != ErrRecovery || got.Record.Version != "" {
+		t.Fatal("changed installed legacy receipt accepted", err)
+	}
+	if err := os.Remove(legacyReceiptPath); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := InspectFirstPredecessorAt(config); err != ErrRecovery || got.Record.Version != "" {
+		t.Fatal("missing installed legacy receipt accepted", err)
+	}
+}
+
+func writeSyntheticLegacyPredecessor(t *testing.T, configPath, stagePath string, record connectedtransition.Record) ([]byte, string) {
+	t.Helper()
 	record.Previous.PolicyGeneration = 2
 	record.Next.PolicyGeneration = 3
 	previousBytes, err := connectedprofile.Encode(record.Previous)
@@ -62,6 +82,8 @@ func TestOwnedTransitionStageFirstPredecessorFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	legacyReceipt := []byte("observer-connected-refresh-complete/v1\n" + syntheticStageHash(legacyJournal) + "\n")
+	legacyJournalPath := filepath.Join(configPath, LegacyJournalName)
+	legacyReceiptPath := filepath.Join(configPath, LegacyCompletionName)
 	record.PredecessorFormat = connectedtransition.PredecessorLegacy
 	record.PredecessorCompletionSHA = syntheticStageHash(legacyReceipt)
 	proposal, err := connectedtransition.Encode(record)
@@ -88,20 +110,5 @@ func TestOwnedTransitionStageFirstPredecessorFixture(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	stage, err = InspectFirstPredecessorAt(config)
-	if err != nil || stage.Record.PredecessorFormat != connectedtransition.PredecessorLegacy {
-		t.Fatal("anchored exact legacy predecessor refused", err)
-	}
-	if err := os.WriteFile(legacyReceiptPath, append(append([]byte(nil), legacyReceipt...), '\n'), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if got, err := InspectFirstPredecessorAt(config); err != ErrRecovery || got.Record.Version != "" {
-		t.Fatal("changed installed legacy receipt accepted", err)
-	}
-	if err := os.Remove(legacyReceiptPath); err != nil {
-		t.Fatal(err)
-	}
-	if got, err := InspectFirstPredecessorAt(config); err != ErrRecovery || got.Record.Version != "" {
-		t.Fatal("missing installed legacy receipt accepted", err)
-	}
+	return legacyReceipt, legacyReceiptPath
 }
