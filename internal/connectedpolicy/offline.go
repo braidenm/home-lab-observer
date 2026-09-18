@@ -16,8 +16,6 @@ type OfflineExpectation struct {
 
 var artifactDigest = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
-const enrollmentUnit = "home-lab-observer-connected-enrollment.service"
-
 var offlineFields = []string{
 	"Id", "LoadState", "NeedDaemonReload", "DropInPaths", "Transient",
 	"User", "Group", "SupplementaryGroups", "RootDirectory", "RootImage",

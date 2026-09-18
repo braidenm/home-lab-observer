@@ -27,6 +27,7 @@ type GrantInput struct {
 	UploaderGID uint32 `json:"uploader_gid"`
 	SharedGID   uint32 `json:"shared_gid"`
 }
+
 type Binding struct {
 	ServerID    string `json:"server_id"`
 	ConnectorID string `json:"connector_id"`

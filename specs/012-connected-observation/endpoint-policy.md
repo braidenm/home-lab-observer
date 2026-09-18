@@ -48,6 +48,9 @@ administrator from changing the host policy after validation.
 The systemd v255 primary-source allow-precedence and unsupported-BPF caveats are
 recorded in [the accepted composition plan](installed-composition.md).
 
+Endpoint validation alone does not authorize installation, credential release,
+or worker start.
+
 ## Offline enrollment validation gate (2026-09-17)
 
 Both `validate-enrollment` and `validate-ledger` are held on empty stdin until

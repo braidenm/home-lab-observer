@@ -16,6 +16,7 @@ import (
 var ErrUnsafe = errors.New("connected_endpoint_policy_unsafe")
 
 const maxOutput = 16 * 1024
+const enrollmentUnit = "home-lab-observer-connected-enrollment.service"
 
 var sliceName = regexp.MustCompile(`^(?:-|[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})\.slice$`)
 

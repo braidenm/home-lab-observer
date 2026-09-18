@@ -17,7 +17,8 @@ func TestPrivateInputIsCanonicalBoundedAndClosed(t *testing.T) {
 	if err := input(bytes.NewReader(data), &got); err != nil || got != g {
 		t.Fatal("canonical private input refused")
 	}
-	for _, bad := range [][]byte{append(append([]byte(nil), data...), '\n'), bytes.Repeat([]byte("x"), 513), []byte(`{"server_id":"synthetic","unknown":"private"}`), nil} {
+	duplicate := append([]byte(`{"server_id":"`+g.ServerID+`",`), data[1:]...)
+	for _, bad := range [][]byte{append(append([]byte(nil), data...), '\n'), duplicate, bytes.Repeat([]byte("x"), 513), []byte(`{"server_id":"synthetic","unknown":"private"}`), nil} {
 		if input(bytes.NewReader(bad), &got) == nil {
 			t.Fatal("ambiguous private input accepted")
 		}

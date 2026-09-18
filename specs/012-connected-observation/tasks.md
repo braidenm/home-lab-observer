@@ -16,13 +16,17 @@
 - [ ] Specify and review credential lifecycle and OS isolation; implement without observation/control authority mixing.
   - [x] Specify and test fixed installed-credential decoding and Linux systemd ACL admission as an unused library; packaged mount acceptance remains open.
   - [x] Render reviewed fixed systemd worker and transient enrollment templates as an unused library; actual installed enforcement is still unproved.
+  - [x] Validate exact loaded offline enrollment/ledger confinement and empty typed credential arrays as an unused library; installed manager acceptance remains open.
+  - [x] Compose the fixed four-mode enrollment worker as an unused Linux library; actual grant exchange and promotion remain acceptance gates.
 - [ ] Implement private handoff, bounded uploader and connection health with failure tests.
   - [x] Define bounded disposable operational status and its private single-slot Linux writer; not upload or activation authority.
+- [x] Add fixed-host endpoint resolution and exact loaded-systemd IP-policy admission as an unused library; kernel enforcement and installed startup remain acceptance gates.
 - [ ] Integrate catalog, enrollment, OS-aware installation and authorized hosted views.
   - [x] Implement a stopped-first Linux installer and synthetic packaged fixture locally; this is not a published or owner-installed connected release.
   - [ ] Finish review and installed acceptance before making the connected package downloadable or enrolling the owner server.
   - [ ] Show the registered owner server in Platform Demo and verify owner-controlled read/write sharing without granting global administration.
 - [ ] Verify packaged platforms, migration/rollback and an explicitly authorized owner canary.
+  - [x] Add the private binding-checked existing-ledger result codec; no operator exposure or promotion authority.
   - [x] Freeze the current code-owned connected compatibility descriptor and resource/state hashes; recognition grants no code-selection authority.
   - [x] Declare bounded v1/v2 connected build identities tied to the compiled contract; identity does not authenticate a publisher.
   - [x] Verify exact connected bundle bytes and deterministic archive from an independently trusted manifest digest; no installation or selection authority.
@@ -34,6 +38,7 @@
   - [ ] Prove cross-version packaged compatibility; local command/policy tests do not establish this gate.
   - [x] Merge pure ext4 identity, installed-profile, transition-record and recovery-classifier foundations (PRs 50-53); none authorizes activation.
   - [x] Define and test the bounded pure activation request/response/commit records; no service activation authority.
+  - [x] Add the same-process uploader-side startup rendezvous as an unused Linux library; root transaction and installed enforcement remain open.
   - [x] Add pure fixed-stage byte admission for the proposal, CA bytes and exact predecessor chain; this does not establish filesystem ownership or durability.
   - [x] Classify complete staged evidence without treating a retained predecessor receipt as new completion; this does not permit abort, cleanup or worker startup.
   - [x] Add independent anchored ext4 stage inspection and exclusive publication primitives with root synthetic interruption tests; not wired to installer commands.

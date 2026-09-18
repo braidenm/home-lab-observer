@@ -18,6 +18,7 @@ func offlineSample(t *testing.T, mode string) (OfflineExpectation, map[string]st
 	m["SystemCallFilter"] = testedSyscallDenials
 	return e, m
 }
+
 func offlineBytes(m map[string]string) []byte {
 	keys := make([]string, 0, len(m))
 	for key := range m {
@@ -30,6 +31,7 @@ func offlineBytes(m map[string]string) []byte {
 	}
 	return []byte(b.String())
 }
+
 func TestOfflineModesAndActualManagerNormalization(t *testing.T) {
 	for _, mode := range []string{"validate-enrollment", "validate-ledger", "validate-existing-ledger"} {
 		e, m := offlineSample(t, mode)
@@ -43,6 +45,7 @@ func TestOfflineModesAndActualManagerNormalization(t *testing.T) {
 		}
 	}
 }
+
 func TestOfflineRejectsDriftAndAdditionalAuthority(t *testing.T) {
 	for key, value := range map[string]string{
 		"User": "0", "Group": "0", "SupplementaryGroups": "60103 0",
@@ -82,6 +85,7 @@ func TestOfflineRejectsDriftAndAdditionalAuthority(t *testing.T) {
 		}
 	}
 }
+
 func TestOfflineRejectsIncompleteAmbiguousInputs(t *testing.T) {
 	e, m := offlineSample(t, "validate-enrollment")
 	data := offlineBytes(m)
