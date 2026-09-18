@@ -20,7 +20,7 @@ import (
 )
 
 func TestCodeOwnedDescriptor(t *testing.T) {
-	const golden = "8ad68a7396f61460e50fc59a59fa952089ac83580d713c5684f985ec47845f56"
+	const golden = "149388842ed010284b6b0c023c477be7c597ac78d4d5d79a4192a9389697de7f"
 	data := connectedcompat.Descriptor()
 	var compact bytes.Buffer
 	if len(data) > 16384 || json.Compact(&compact, data) != nil || !bytes.Equal(append(compact.Bytes(), '\n'), data) || connectedcompat.Digest() != golden || !connectedcompat.Known(golden) {
@@ -54,9 +54,15 @@ func TestDescriptorMatchesResourcesAndState(t *testing.T) {
 			MaxFilesystems int      `json:"max_filesystems"`
 			MaxInteger     uint64   `json:"max_exact_integer"`
 		} `json:"wire"`
-		Resources  map[string]string `json:"resources"`
-		Transition string            `json:"transition_protocol"`
-		Filesystem string            `json:"durable_filesystem_identity"`
+		Resources map[string]string `json:"resources"`
+		Worker    struct {
+			Startup         int  `json:"uploader_startup_delay_seconds"`
+			Poll            int  `json:"uploader_poll_delay_seconds"`
+			UnscopedStartup *int `json:"startup_delay_seconds"`
+			UnscopedPoll    *int `json:"poll_delay_seconds"`
+		} `json:"worker"`
+		Transition string `json:"transition_protocol"`
+		Filesystem string `json:"durable_filesystem_identity"`
 	}
 	if json.Unmarshal(connectedcompat.Descriptor(), &d) != nil {
 		t.Fatal("descriptor")
@@ -66,6 +72,9 @@ func TestDescriptorMatchesResourcesAndState(t *testing.T) {
 	}
 	if d.Transition != "not-implemented" || d.Filesystem != "not-asserted" {
 		t.Fatal("unproved transition capability asserted")
+	}
+	if d.Worker.Startup != 60 || d.Worker.Poll != 15 || d.Worker.UnscopedStartup != nil || d.Worker.UnscopedPoll != nil {
+		t.Fatal("uploader schedule scope differs")
 	}
 	resources := connectedunits.Resources()
 	if !connectedcompat.MatchesResources(resources) {

@@ -21,6 +21,9 @@ native quality-aware documents are admitted; native is the current producer.
 Admission age is 120 seconds with 30-second future skew; offline witness comparison
 never expires pending data. Freeze credential/install/enrollment/status schemas,
 shared handoff protocol, fixed worker isolation and actual template/schema hashes.
+Scheduling fields explicitly name the uploader: its startup delay is 60 seconds
+and polling interval 15 seconds. The collector starts collecting immediately;
+the descriptor does not assign the uploader's delay to every worker role.
 
 Activation request/response/commit v1 is recognized, but its per-invocation checks
 are still required. Transition protocol is explicitly **not implemented** and
