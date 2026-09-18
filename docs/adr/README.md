@@ -20,7 +20,7 @@
 | [016](016-fixed-platform-https-transport.md) | Accepted for unused snapshot adapter | Fixed HTTPS destination and separate enrollment ambiguity boundary |
 | [017](017-fail-closed-enrollment-coordination.md) | Accepted for unused coordination kernel | One-shot enrollment fails closed before credential, ledger, and READY activation |
 | [018](018-shared-read-handoff.md) | Accepted for uninstalled Linux library | Exact-principal shared-read handoff, separate from owner-private storage |
-
 | [019](019-private-enrollment-persistence.md) | Accepted for unused Linux adapter | Exclusive private enrollment commit witnesses; installed credential promotion remains separate |
+| [020](020-linux-installed-worker-composition.md) | Accepted for implementation | Bounded first installed Linux worker composition; release remains gated |
 
 Accepted ADRs are immutable except for status and supersession links. Material changes require a new ADR.
