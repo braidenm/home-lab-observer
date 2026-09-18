@@ -1,0 +1,32 @@
+# Reproducible disposable first-install VM acceptance harness
+
+Status: implementation in progress. The harness is manual, never a PR CI job or a live-host installer.
+
+An operator supplies a checksum-verified official Ubuntu 24.04 amd64 cloud image, the exact reviewed
+three-binary connected bundle and a dedicated empty work directory on a KVM host. The harness refuses
+the wrong image digest, non-absolute paths, preexisting output, insufficient 2-vCPU/3-GiB/12-GiB
+capacity, any other active QEMU guest, or missing cloud-init/QEMU/ext4 tools. It never reuses the
+Platform CI base disk, mounts a host directory into a guest, enables an external NIC or connects to
+Platform Demo. Every case uses a new copy-on-write overlay and seed. A read-only ext4 payload image
+transfers only the reviewed bundle, synthetic receiver and test driver into the guest's own filesystem.
+
+The guest verifies Ubuntu/systemd 255, no NIC/default route, bundle checksums, then binds a public
+test address only on loopback and trusts a throwaway guest-only TLS certificate for the compiled
+origin. A fixed synthetic one-use grant is entered through a pseudo-terminal after the installer's
+no-echo prompt. The receiver accepts one exact enrollment exchange and no upload. No grant, credential,
+HTTP request body or raw environment is printed to the serial evidence channel.
+
+The minimum matrix is: refused preflight without grant; successful stopped install and exact unit,
+principal, ledger and filesystem assertions; normal reboot and stopped retry refusal; abrupt QEMU
+power cut immediately after PREPARING is durable, fresh-boot retained-residue and retry refusal;
+abrupt QEMU power cut after successful stopped install, fresh-boot stopped-state persistence.
+Synthetic root sync-failure tests remain supplementary; the VM harness must not claim they simulate
+real hardware cache loss. Isolation assertions for mounts, sockets, credentials and systemd policy
+remain explicit evidence items, with failures a hard no-go.
+
+The host bounds every QEMU process by timeout and PID, holds an exclusive fixture lease, and prints
+fixed redacted PASS/FAIL case identifiers. It preserves evidence on failure. On success, an explicit
+cleanup operation may remove only the uniquely named, resolved fixture directory it created, after
+QEMU exits and the path is verified under the admitted work root. Never recursively delete the image
+root or CI directories. The harness does not activate observer services, install on the owner host,
+or merge its parent PR. Independent review and operator sign-off remain mandatory.

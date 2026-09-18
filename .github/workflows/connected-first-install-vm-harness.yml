@@ -1,0 +1,32 @@
+name: Connected first-install VM harness static checks
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/connected-first-install-vm-harness.yml'
+      - 'scripts/fixtures/connected-first-install/**'
+      - 'specs/012-connected-observation/first-install-vm-harness.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/connected-first-install-vm-harness.yml'
+      - 'scripts/fixtures/connected-first-install/**'
+      - 'specs/012-connected-observation/first-install-vm-harness.md'
+
+permissions:
+  contents: read
+
+jobs:
+  syntax-and-admission-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check guest shell syntax
+        run: bash -n scripts/fixtures/connected-first-install/guest.sh
+      - name: Check bounded host admission tests
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 -m unittest discover -s scripts/fixtures/connected-first-install -p 'test_run_vm.py' -v
