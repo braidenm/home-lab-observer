@@ -24,7 +24,10 @@ fingerprint. It receives no credential, handoff, network or arbitrary path.
 Use one bounded typed transition journal for endpoint refresh and code selection.
 Its before/after configurations, predecessor completion and operation-specific
 changes are strict. Completion records the previous artifact only for a successful
-code selection. Recovery can finish only the exact recorded transition forward,
+code selection. Before staging, a separate bounded preparation witness binds
+the proposed journal digest and unchanged predecessor resources/ledger. It is
+intent evidence, not transition, cleanup or activation authority. Recovery can
+finish only the exact recorded transition forward,
 with workers stopped; it never rolls back durable upload state. Every subsequent
 start requires a fresh activation transaction, and no completion record is
 activation authority.
