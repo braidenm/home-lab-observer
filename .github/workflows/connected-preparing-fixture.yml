@@ -6,6 +6,7 @@ on:
       - '.github/workflows/connected-preparing-fixture.yml'
       - 'internal/connectedpreparing/**'
       - 'specs/012-connected-observation/installed-preparing-publication.md'
+      - 'specs/012-connected-observation/installed-config-root.md'
       - 'go.mod'
       - 'go.sum'
   push:
@@ -14,6 +15,7 @@ on:
       - '.github/workflows/connected-preparing-fixture.yml'
       - 'internal/connectedpreparing/**'
       - 'specs/012-connected-observation/installed-preparing-publication.md'
+      - 'specs/012-connected-observation/installed-config-root.md'
       - 'go.mod'
       - 'go.sum'
 
@@ -40,8 +42,8 @@ jobs:
           cache: true
       - name: Compile synthetic publisher fixture
         run: go test -c ./internal/connectedpreparing -o "$RUNNER_TEMP/connected-preparing.test"
-      - name: Prove root-owned publisher and recovery refusals
+      - name: Prove root-owned config creation and marker publication
         run: >-
-          sudo env -i PATH=/usr/bin:/bin TMPDIR=/tmp OBSERVER_CONNECTED_PREPARING_ACCEPTANCE=1
+          sudo env -i PATH=/usr/bin:/bin TMPDIR=/tmp OBSERVER_CONNECTED_PREPARING_ACCEPTANCE=1 OBSERVER_CONNECTED_CONFIG_ROOT_ACCEPTANCE=1
           "$RUNNER_TEMP/connected-preparing.test"
-          -test.run='^TestOwnedPreparingPublicationFixture$' -test.count=1 -test.timeout=120s -test.v
+          -test.run='^TestOwned(PreparingPublication|ConfigDirectory)Fixture$' -test.count=1 -test.timeout=120s -test.v

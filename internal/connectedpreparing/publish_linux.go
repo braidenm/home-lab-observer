@@ -59,25 +59,34 @@ func Publish(record Record) error {
 	if os.Getuid() != 0 || os.Geteuid() != 0 {
 		return ErrUnsafe
 	}
-	rootFD, err := unix.Open("/", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	etc, err := openTrustedEtc()
 	if err != nil {
-		return ErrUnsafe
-	}
-	defer unix.Close(rootFD)
-	etc, err := openDirAt(rootFD, "etc")
-	if err != nil {
-		return ErrUnsafe
+		return err
 	}
 	defer etc.Close()
-	if !trustedDirectory(etc, false) {
-		return ErrUnsafe
-	}
 	config, err := openDirAt(int(etc.Fd()), "home-lab-observer-connected")
 	if err != nil {
 		return ErrUnsafe
 	}
 	defer config.Close()
 	return publishAt(config, record, nil)
+}
+
+func openTrustedEtc() (*os.File, error) {
+	rootFD, err := unix.Open("/", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, ErrUnsafe
+	}
+	defer unix.Close(rootFD)
+	etc, err := openDirAt(rootFD, "etc")
+	if err != nil {
+		return nil, ErrUnsafe
+	}
+	if !trustedDirectory(etc, false) {
+		etc.Close()
+		return nil, ErrUnsafe
+	}
+	return etc, nil
 }
 
 func openDirAt(parent int, name string) (*os.File, error) {

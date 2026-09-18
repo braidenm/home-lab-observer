@@ -98,20 +98,7 @@ func TestOwnedPreparingPublicationFixture(t *testing.T) {
 				}
 			case "ACL directory":
 				wantErr = ErrUnsafe
-				acl := []byte{
-					2, 0, 0, 0,
-					1, 0, 7, 0, 255, 255, 255, 255,
-					2, 0, 4, 0, 254, 255, 0, 0,
-					4, 0, 5, 0, 255, 255, 255, 255,
-					16, 0, 5, 0, 255, 255, 255, 255,
-					32, 0, 5, 0, 255, 255, 255, 255,
-				}
-				if err := unix.Fsetxattr(int(dir.Fd()), "system.posix_acl_access", acl, 0); err != nil {
-					if err == unix.ENOTSUP {
-						t.Skip("fixture filesystem has no POSIX ACLs")
-					}
-					t.Fatal("set ACL", err)
-				}
+				fixtureACL(t, dir)
 			case "unknown entry":
 				if os.WriteFile(filepath.Join(path, "other"), nil, 0600) != nil {
 					t.Fatal("write")
@@ -195,4 +182,22 @@ func fixtureDirectory(t *testing.T) (*os.File, string) {
 		t.Fatal(err)
 	}
 	return dir, path
+}
+
+func fixtureACL(t *testing.T, dir *os.File) {
+	t.Helper()
+	acl := []byte{
+		2, 0, 0, 0,
+		1, 0, 7, 0, 255, 255, 255, 255,
+		2, 0, 4, 0, 254, 255, 0, 0,
+		4, 0, 5, 0, 255, 255, 255, 255,
+		16, 0, 5, 0, 255, 255, 255, 255,
+		32, 0, 5, 0, 255, 255, 255, 255,
+	}
+	if err := unix.Fsetxattr(int(dir.Fd()), "system.posix_acl_access", acl, 0); err != nil {
+		if err == unix.ENOTSUP {
+			t.Skip("fixture filesystem has no POSIX ACLs")
+		}
+		t.Fatal("set ACL", err)
+	}
 }
