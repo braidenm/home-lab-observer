@@ -14,12 +14,19 @@
 
 - [x] Prove fixture acceptance in the actual Platform Demo parser (PR365, including source binding and three OS labels).
 - [ ] Specify and review credential lifecycle and OS isolation; implement without observation/control authority mixing.
+  - [x] Specify and test fixed installed-credential decoding and Linux systemd ACL admission as an unused library; packaged mount acceptance remains open.
+  - [x] Render reviewed fixed systemd worker and transient enrollment templates as an unused library; actual installed enforcement is still unproved.
 - [ ] Implement private handoff, bounded uploader and connection health with failure tests.
+  - [x] Define bounded disposable operational status and its private single-slot Linux writer; not upload or activation authority.
 - [ ] Integrate catalog, enrollment, OS-aware installation and authorized hosted views.
   - [x] Implement a stopped-first Linux installer and synthetic packaged fixture locally; this is not a published or owner-installed connected release.
   - [ ] Finish review and installed acceptance before making the connected package downloadable or enrolling the owner server.
   - [ ] Show the registered owner server in Platform Demo and verify owner-controlled read/write sharing without granting global administration.
 - [ ] Verify packaged platforms, migration/rollback and an explicitly authorized owner canary.
+  - [x] Freeze the current code-owned connected compatibility descriptor and resource/state hashes; recognition grants no code-selection authority.
+  - [x] Declare bounded v1/v2 connected build identities tied to the compiled contract; identity does not authenticate a publisher.
+  - [x] Verify exact connected bundle bytes and deterministic archive from an independently trusted manifest digest; no installation or selection authority.
+  - [x] Add a closed build-only connected packer that emits final checksums last; no release publication or installation.
   - [x] Implement and locally test the bounded [existing-ledger witness](used-ledger-witness.md); no activation or rollback authority.
   - [x] Integrate the separately named [offline existing-ledger command](existing-ledger-offline-mode.md), private binding-checked result and exact confinement policy with local focused tests.
   - [ ] Prove cross-version packaged compatibility; local command/policy tests do not establish this gate.

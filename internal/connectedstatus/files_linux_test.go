@@ -4,10 +4,13 @@ package connectedstatus
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/braidenm/home-lab-observer/internal/connectedactivation"
 )
 
 func TestActivationResponseUsesOneBoundedPrivateSlot(t *testing.T) {
@@ -19,13 +22,26 @@ func TestActivationResponseUsesOneBoundedPrivateSlot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	response, err := connectedactivation.EncodeResponse(connectedactivation.Response{
+		Version:       connectedactivation.ResponseVersion,
+		RequestSHA256: strings.Repeat("a", 64),
+		InvocationID:  strings.Repeat("b", 32),
+		Challenge:     strings.Repeat("c", 64),
+		Result:        connectedactivation.Pass,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	for range 50 {
-		if err := w.WriteActivationResponse([]byte(`{"synthetic":"bounded"}`)); err != nil {
+		if err := w.WriteActivationResponse(response); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if w.WriteActivationResponse(make([]byte, 2049)) != ErrUnsafe {
 		t.Fatal("unbounded response accepted")
+	}
+	if w.WriteActivationResponse([]byte(`{"secret":"raw"}`)) != ErrUnsafe {
+		t.Fatal("unclosed response accepted")
 	}
 	if err := w.Close(); err != nil {
 		t.Fatal(err)

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"regexp"
 )
 
@@ -21,6 +22,15 @@ type CredentialRecord struct {
 	ConnectorID string `json:"connector_id"`
 	Secret      string `json:"secret"`
 }
+
+const redactedCredential = "connected credential [redacted]"
+
+// Formatting and structured logs must never disclose credential material.
+// Explicit JSON marshaling remains available only for the private install
+// record; callers must not log those bytes.
+func (CredentialRecord) String() string       { return redactedCredential }
+func (CredentialRecord) GoString() string     { return redactedCredential }
+func (CredentialRecord) LogValue() slog.Value { return slog.StringValue(redactedCredential) }
 
 func DecodeCredential(b []byte, server, connector string) (CredentialRecord, error) {
 	var r CredentialRecord
