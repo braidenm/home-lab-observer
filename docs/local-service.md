@@ -44,11 +44,12 @@ system's user configuration directory. To choose a location, use a dedicated wri
 
 CPU utilization appears in Trends; the original current-snapshot contract exposes CPU capacity. Windows process status
 is explicitly `unknown` where the OS adapter cannot provide it; other available process readings remain useful.
-Services, containers,
-hardware sensors and native log sources appear as unsupported in the legacy snapshot until their collector slices are implemented.
-Docker containers have a separate opt-in Workloads view; see [container observations](container-observations.md). Missing
-observations show gaps or an unavailable state. Native Windows/macOS collection describes the host; a Linux container
-running inside Docker Desktop cannot provide the same host visibility.
+The legacy host snapshot still reports services, containers, hardware sensors and native log sources as unsupported;
+that contract is not expanded by the dedicated views. Docker containers have a separate opt-in Workloads view; see
+[container observations](container-observations.md). Preview 3 also has a separate, opt-in
+[native log metadata view](native-log-history.md) for Linux and Windows; macOS native logs remain unsupported. Missing
+observations show gaps or an unavailable state. Native Windows/macOS host collection describes the host; a Linux
+container running inside Docker Desktop cannot provide the same host visibility.
 
 ## Manage and troubleshoot
 
