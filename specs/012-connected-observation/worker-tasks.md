@@ -46,6 +46,12 @@ Later installed slices remain proposed. Implement one bounded slice per PR; do n
 
 ## F1 — Linux service package and acceptance
 
+- [x] Implement the private [existing-ledger witness](used-ledger-witness.md) and
+  prove logical state/file identity preservation locally. This primitive does not
+  enable an installer, upgrade, rollback, uploader or network operation.
+- [ ] Integrate the witness into separately reviewed confined validation and
+  cross-version packaged recovery tests before claiming installed compatibility.
+
 CI reliability evidence (2026-09-11): the C2 Windows check exposed a smoke
 startup-cleanup gap: a child whose readiness/token check failed was not returned
 to its caller for joining, and SQLite cleanup could mask the original error.
