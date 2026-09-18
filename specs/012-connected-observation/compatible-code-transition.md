@@ -246,6 +246,16 @@ those are installer responsibilities. The existing descriptor still says
 transition protocol `not-implemented`. A passing codec must not be interpreted
 as permission to select, resume, roll back, or activate code.
 
+A second pure classifier may accept a previously decoded record, caller-verified
+active resource hashes and ledger witness, plus either no receipt or the exact
+record-bound receipt. Every resource must equal its recorded previous or next
+hash. An absent receipt is always recovery-required, even if all files still
+match previous or already match next; an exact receipt is complete only if every
+resource matches next. A third resource value, changed ledger or non-exact
+receipt refuses. The caller must establish root-owned file identity, retained
+predecessor/staging evidence, stopped workers and durable synchronization. The
+classifier does not perform I/O, repair, switch a release or authorize restart.
+
 #### Independent review refinements (still proposed)
 
 Before implementing the codec or writes, freeze these additional recovery states:
