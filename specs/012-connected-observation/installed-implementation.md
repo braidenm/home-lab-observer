@@ -67,8 +67,11 @@ This checkpoint is **not completed F1**. The activation/restart gate is implemen
 but has not passed installed acceptance. Remaining implementation: compatible-code rollback; broader
 refresh/promotion failure and held-input composition tests. Separate exact internal
 dependency-closure regression tests now cover both worker commands. Remaining acceptance: loaded packaged profiles
-under dedicated principals, full repository checks, independent final review and the explicitly unexecuted VM
-reboot/power-loss gates. Do not substitute helper tests or static templates for these requirements.
+under dedicated principals, full repository checks and independent final review.
+The packaged VM subset and stopped-ledger reboot/abrupt-power-off witness passed
+as recorded in [packaged-vm-subset.md](packaged-vm-subset.md); in-flight
+refresh, promotion and uploader recovery under power loss remain untested.
+Do not substitute helper tests or static templates for these requirements.
 
 The draft collector now publishes native quality-aware host metrics: available CPU,
 RAM and uptime remain usable even when filesystem coverage is unproved. The
