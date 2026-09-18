@@ -219,6 +219,33 @@ foreign manager identity remains stopped/recovery-required for explicit handling
 
 ### Implementation order and completion gates
 
+#### Pure journal codec slice
+
+The first implementation slice is a side-effect-free `internal/connectedtransition`
+codec, with no installer import or command wiring. It freezes the canonical compact
+JSON `observer-connected-transition/v1` record (16 KiB maximum): operation,
+previous/next installed configs, optional predecessor completion SHA-256,
+optional previous-code before/after digests, recognized contract digest,
+previous/next resource hash sets (CA, hosts, both units, installed config), and
+the pre-transition ledger logical SHA-256 plus ext4 UUID/directory/database
+inode-and-generation witness. Completion is exactly
+`observer-connected-transition-complete/v1\n` + record SHA-256 hex + `\n`.
+All hashes are lowercase SHA-256; empty predecessor and previous-code values
+mean no prior completed transition/code selection, never an inferred target.
+
+Decoding requires byte-for-byte canonical re-encoding and rejects unknown keys,
+invalid config/ledger witnesses, overflow, wrong operation deltas, and malformed
+hashes. Refresh preserves artifact and previous-code pointer while changing only
+generation/addresses; code selection preserves addresses and all non-artifact
+identity while incrementing generation, and sets previous-code-after to the
+replaced artifact. The codec recomputes the installed-config and fixed-hosts
+hashes from the embedded configs; resource sets remain complete even when
+individual bytes do not change. This codec does not validate actual files, compiled compatibility
+authority, trusted target packages, predecessor chain, or an installed ledger;
+those are installer responsibilities. The existing descriptor still says
+transition protocol `not-implemented`. A passing codec must not be interpreted
+as permission to select, resume, roll back, or activate code.
+
 #### Independent review refinements (still proposed)
 
 Before implementing the codec or writes, freeze these additional recovery states:
