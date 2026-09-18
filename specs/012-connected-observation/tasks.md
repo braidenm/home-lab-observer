@@ -21,6 +21,7 @@
 - [ ] Integrate catalog, enrollment, OS-aware installation and authorized hosted views.
 - [ ] Verify packaged platforms, migration/rollback and an explicitly authorized owner canary.
   - [x] Freeze the current code-owned connected compatibility descriptor and resource/state hashes; recognition grants no code-selection authority.
+  - [x] Declare bounded v1/v2 connected build identities tied to the compiled contract; identity does not authenticate a publisher.
   - [x] Define and test the bounded pure activation request/response/commit records; no service activation authority.
   - [x] Add pure fixed-stage byte admission for the proposal, CA bytes and exact predecessor chain; this does not establish filesystem ownership or durability.
   - [x] Classify complete staged evidence without treating a retained predecessor receipt as new completion; this does not permit abort, cleanup or worker startup.
