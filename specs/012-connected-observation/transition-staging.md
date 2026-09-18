@@ -26,6 +26,14 @@ must still establish the supplied CA's stage provenance and inspect each
 actual active file through anchored ownership/mode checks; these expected
 bytes are not write authority.
 
+The Linux active-resource reader uses only the five fixed installed paths and
+the root-owned, no-follow bounded file reader. It detaches each byte sequence,
+then accepts only exact previous/next code-derived bytes, including mixed
+interrupted states, before passing hashes to the pure classifier. This read
+does not establish the exact installed file modes, ext4 write durability,
+private ledger witness, or stopped-worker state. Those remain mandatory before
+replacement, cleanup, or activation.
+
 The separate Linux stage-filesystem slice provides anchored `InspectAt` and
 `PublishAt` primitives, not an installer command. Both require root and an
 exact root-owned config directory on ext4. Inspection permits only the fixed
