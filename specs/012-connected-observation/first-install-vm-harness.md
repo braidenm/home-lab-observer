@@ -70,6 +70,13 @@ root-owned 0700 and retains exactly the four uploader-owned 0600 one-use records
 ledger moves to its sibling. Prove their bounded canonical record shape and
 installed-connector binding without printing secret bytes. Every directory
 membership refusal emits only a fixed stage label, not a path or member name.
+On Ubuntu 24.04/systemd 255, starting the stopped uploader unit transiently
+creates empty mount-point scaffolding under its `RootDirectory=` (`root`, `usr`,
+`var`, `proc`, `sys`, `dev/mqueue`, and `run/systemd/incoming`). The guest must
+verify the exact observed members, root ownership, modes and empty leaves;
+these are not installer payload or host bind mounts. See the
+[systemd execution environment](https://www.freedesktop.org/software/systemd/man/systemd.exec.html)
+for `RootDirectory=` and private mount namespace behavior.
 Across reboot and retry, compare inode, size and byte hash of installed
 metadata, credential, enrollment records and ledger rather than just their existence;
 abrupt QEMU power cut after successful stopped install, fresh-boot stopped-state persistence.

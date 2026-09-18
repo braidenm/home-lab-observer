@@ -59,6 +59,21 @@ class HarnessAdmissionTest(unittest.TestCase):
             with self.assertRaisesRegex(AssertionError, "^UNKNOWN_MEMBER_UNKNOWN$"):
                 assert_guest.names(root, set(), "hle_private")
 
+    def test_systemd_root_scaffold_is_closed_and_checks_private_mount_points(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("root", "usr", "var", "proc", "sys", "dev/mqueue", "run/systemd/incoming"):
+                (root / name).mkdir(parents=True)
+            with mock.patch.object(assert_guest, "plain") as check:
+                assert_guest.systemd_root_scaffold(root)
+                self.assertEqual(check.call_count, 10)
+                self.assertIn(mock.call(root / "proc", 0o555, 0, 0, True), check.call_args_list)
+                self.assertIn(mock.call(root / "root", 0o750, 0, 0, True), check.call_args_list)
+                (root / "dev/foreign-member").write_bytes(b"private")
+                with self.assertRaisesRegex(AssertionError, "^UNKNOWN_MEMBER_UPLOADER_DEV$") as error:
+                    assert_guest.systemd_root_scaffold(root)
+                self.assertNotIn("foreign-member", str(error.exception))
+
     def test_driver_diagnostic_is_allowlisted_and_redacted(self):
         for label, phase in drive_pty.PHASE_LABELS:
             self.assertEqual(drive_pty.classify_failure(b"prefix " + label + b" fixed text"), phase)
