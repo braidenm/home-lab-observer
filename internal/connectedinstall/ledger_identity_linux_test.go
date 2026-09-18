@@ -39,9 +39,6 @@ func TestLedgerIdentityAtAnchoredPrivateState(t *testing.T) {
 	member(".upload-lock", nil)
 	ctx := context.Background()
 	before, err := ledgerIdentityAt(ctx, state, uid, gid)
-	if err == ledgeridentity.ErrUnavailable && os.Getenv("OBSERVER_EXT4_ACCEPTANCE") != "1" {
-		t.Skip("ext4 ioctl unavailable")
-	}
 	if err != nil || ledgeridentity.Validate(before) != nil {
 		t.Fatal("anchored fixture refused")
 	}

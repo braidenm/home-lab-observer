@@ -49,6 +49,7 @@ func ledgerIdentityAt(ctx context.Context, statePath string, uid, gid uint32) (l
 	}
 	seen := map[string]bool{}
 	var auditedDatabase os.FileInfo
+	var totalBytes int64
 	for _, entry := range entries {
 		name, limit := entry.Name(), int64(0)
 		switch name {
@@ -77,6 +78,10 @@ func ledgerIdentityAt(ctx context.Context, statePath string, uid, gid uint32) (l
 		}
 		memberOwner, ok := stat.Sys().(*syscall.Stat_t)
 		if !ok || memberOwner.Gid != gid {
+			return ledgeridentity.Witness{}, ErrUnsafe
+		}
+		totalBytes += stat.Size()
+		if totalBytes > 1048576 {
 			return ledgeridentity.Witness{}, ErrUnsafe
 		}
 		if name == "upload.sqlite" {
