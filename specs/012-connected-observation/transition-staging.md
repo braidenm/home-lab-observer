@@ -84,6 +84,44 @@ workers; no phase grants replacement, cleanup or activation authority. The
 composition accepts detached evidence rather than importing the stage
 filesystem package that also owns publication primitives.
 
+## Legacy predecessor design gate
+
+The pure record/stage classifier now distinguishes an initial transition, an
+exact completed legacy refresh, and a completed new-format predecessor. Its
+closed predecessor format is in the canonical record and preparation witness
+and binds the predecessor completion digest. This is only byte-level
+admission: the installer still does **not** independently anchor and compare
+the installed `refresh.json`/`refresh-complete` pair to the staged copies.
+That remains a release blocker, not a reason to treat an existing refresh as
+an initial installation or to erase its evidence:
+
+| Format | Stage predecessor members | Active new-format authority before publication | Separate evidence |
+| --- | --- | --- | --- |
+| `none` | absent; only three stage members | journal and receipt absent | prove initial generation and both legacy names absent |
+| `legacy-refresh-v1` | exact canonical legacy refresh and receipt | journal and receipt absent | independently re-read the fixed legacy names and compare to the staged bytes |
+| `transition-v1` | exact canonical transition and receipt | exact predecessor journal and receipt | retain and verify new-format chain, resource hashes, contract and code pointer |
+
+The completion digest is empty only for `none`; the other formats require the
+exact SHA-256 of their staged receipt. Both predecessor members are present or
+absent together. The legacy form must pass the existing pure
+`AdmitCompletedLegacy` check against the proposed previous configuration,
+including exact canonical bytes and receipt. The corresponding installed
+configuration, active resources and private ledger must still be verified
+independently under the lease. Neither a legacy receipt nor an old new-format
+receipt completes the new proposal. After publishing the new journal, a
+legacy predecessor leaves the new-format receipt absent until the new exact
+completion is durably published; the old legacy files remain separately
+intact. The existing `transition-v1` retained-receipt rule is unchanged.
+
+Any format/receipt/inventory mismatch, missing or substituted fixed legacy
+file, or altered predecessor after preparation refuses while stopped. Resume
+never synthesizes a predecessor from current DNS, CA or directory order. Pure
+tests for all three formats and first transition after a completed legacy
+refresh cover retained old receipts and missing/foreign staged evidence.
+Still prove anchored fixed-file identity, publication interruption and
+power-loss behavior in the disposable VM. No migration is considered accepted
+until those tests and independent review pass.
+
 ## Fixed evidence
 
 - `transition-preparing.json` in the root-owned config directory contains
@@ -92,8 +130,11 @@ filesystem package that also owns publication primitives.
   are intent evidence, not a replacement for the journal.
 - A single root-owned `transition-stage` directory (mode 0700) holds only
   fixed names: `proposal.json`, `old-ca.pem`, `new-ca.pem`,
-  `predecessor.json` and `predecessor-complete`. The last two are absent
-  only for a first transition without a completed new journal. Legacy
+  `predecessor.json` and `predecessor-complete`. Once the legacy predecessor
+  byte-admission gate is implemented, the last two are absent only for an
+  actual initial
+  installation with no completed legacy or new-format predecessor. For a
+  legacy predecessor they retain exact legacy bytes, while the installed
   `refresh.json` and `refresh-complete` remain separately intact. CA files
   are individually bounded by 1 MiB; proposal by 16 KiB; predecessor journal
   and receipt by their protocol maxima. No arbitrary path or recursive cleanup
