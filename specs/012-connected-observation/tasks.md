@@ -17,4 +17,5 @@
 - [ ] Implement private handoff, bounded uploader and connection health with failure tests.
 - [ ] Integrate catalog, enrollment, OS-aware installation and authorized hosted views.
 - [ ] Verify packaged platforms, migration/rollback and an explicitly authorized owner canary.
+  - [x] Add pure fixed-stage byte admission for the proposal, CA bytes and exact predecessor chain; this does not establish filesystem ownership or durability.
 - [ ] Specify richer remote quality-aware read models; keep Kubernetes deferred and actions in Spec 011.
