@@ -75,13 +75,14 @@ class HarnessAdmissionTest(unittest.TestCase):
                 self.assertNotIn("foreign-member", str(error.exception))
 
     def test_effective_systemd_properties_are_exact_and_bounded(self):
-        fields = ("FragmentPath", "DropInPaths")
-        with mock.patch.object(assert_guest, "run", return_value="DropInPaths=\nFragmentPath=/etc/systemd/system/example.service\n"):
+        fields = ("FragmentPath", "DropInPaths", "NeedDaemonReload")
+        with mock.patch.object(assert_guest, "run", return_value="DropInPaths=\nNeedDaemonReload=no\nFragmentPath=/etc/systemd/system/example.service\n"):
             self.assertEqual(assert_guest.unit_properties("example.service", fields), {
-                "FragmentPath": "/etc/systemd/system/example.service", "DropInPaths": ""})
+                "FragmentPath": "/etc/systemd/system/example.service", "DropInPaths": "",
+                "NeedDaemonReload": "no"})
         for output in ("FragmentPath=/etc/systemd/system/example.service\n",
-                       "FragmentPath=/etc/systemd/system/example.service\nDropInPaths=\nDropInPaths=/etc/override.conf\n",
-                       "FragmentPath=/etc/systemd/system/example.service\nDropInPaths=\nForeign=private\n",
+                       "FragmentPath=/etc/systemd/system/example.service\nDropInPaths=\nNeedDaemonReload=no\nDropInPaths=/etc/override.conf\n",
+                       "FragmentPath=/etc/systemd/system/example.service\nDropInPaths=\nNeedDaemonReload=no\nForeign=private\n",
                        "x" * 4097):
             with mock.patch.object(assert_guest, "run", return_value=output):
                 with self.assertRaisesRegex(AssertionError, "^SYSTEMD_PROPERTY_OUTPUT$"):
