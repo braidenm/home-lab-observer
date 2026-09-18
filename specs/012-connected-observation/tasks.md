@@ -24,6 +24,7 @@
   - [x] Integrate the separately named [offline existing-ledger command](existing-ledger-offline-mode.md), private binding-checked result and exact confinement policy with local focused tests.
   - [ ] Prove cross-version packaged compatibility; local command/policy tests do not establish this gate.
   - [x] Merge pure ext4 identity, installed-profile, transition-record and recovery-classifier foundations (PRs 50-53); none authorizes activation.
+  - [x] Add pure fixed-stage byte admission for the proposal, CA bytes and exact predecessor chain; this does not establish filesystem ownership or durability.
   - [ ] Integrate the bounded preparation witness, exact predecessor/staging retention and forward-only interrupted transition recovery.
   - [ ] Prove compatible code selection and rollback across two packaged releases without restoring or changing the used ledger.
 - [ ] Review and implement [activation evidence](activation-design.md), including bounded same-process checks and the parent/worker enforcement rendezvous; no manual bypass.

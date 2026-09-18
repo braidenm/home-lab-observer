@@ -6,6 +6,17 @@ This narrows the [compatible transition plan](compatible-code-transition.md).
 It does not authorize installation, activation or a live migration. The first
 implementation must remain Linux/amd64, root-owned and stopped-worker-only.
 
+The pure stage-admission slice validates a caller-supplied exact inventory of
+fixed file names and bytes before any installer write/resume logic uses them.
+It requires a canonical preparation witness matching the canonical proposal,
+bounded old/new CA bytes matching the recorded hashes, and either no new-format
+predecessor or both its canonical journal and exact receipt. A retained
+predecessor must lead to the proposal's previous configuration, resource
+hashes, compatibility contract and code-history pointer. Extra, missing or
+oversized entries refuse. This check does not establish file ownership,
+durability, legacy-journal migration, ledger identity or worker state; the
+installer must prove those separately from anchored descriptors.
+
 ## Fixed evidence
 
 - `transition-preparing.json` in the root-owned config directory contains
