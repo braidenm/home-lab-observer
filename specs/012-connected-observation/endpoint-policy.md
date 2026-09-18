@@ -48,5 +48,33 @@ administrator from changing the host policy after validation.
 The systemd v255 primary-source allow-precedence and unsupported-BPF caveats are
 recorded in [the accepted composition plan](installed-composition.md).
 
-The offline enrollment-policy gate is a separate follow-up; endpoint validation
-alone does not authorize installation, credential release, or worker start.
+Endpoint validation alone does not authorize installation, credential release,
+or worker start.
+
+## Offline enrollment validation gate (2026-09-17)
+
+Both `validate-enrollment` and `validate-ledger` are held on empty stdin until
+the installer verifies its transient invocation and `ValidateOffline` checks
+loaded numeric identities, exact artifact/state binds, minimal root, private
+network/IPC, empty capabilities and required syscall denials. The installer must
+recheck invocation ownership before releasing input; this gate never starts a
+service or sends a credential. Each mode permits only its own private directory.
+
+`systemctl show` renders credential arrays as `[unprintable]` even when empty.
+The gate therefore queries five typed D-Bus properties: LoadCredential,
+LoadCredentialEncrypted, SetCredential, SetCredentialEncrypted and
+ImportCredential. Only the exact empty-array sequence is accepted. A streaming
+matcher retains only a byte position/failure flag, not credential content; raw
+output and errors are never diagnostic text. Commands share a bounded deadline
+and use fixed paths, arguments and a clean environment. The supported v255 types
+are defined in [systemd's execution interface](https://github.com/systemd/systemd/blob/v255/src/core/dbus-execute.c)
+and were confirmed against systemd 255.4. Windows policy tests and five Linux
+test repetitions passed; independent review found no remaining slice blocker.
+
+The checked-in four-mode primitive fixture also passed on the owner-authorized
+Ubuntu 24.04 x86_64 server: baseline, denied IPC/socket operations, collector
+socket denial and synthetic empty-credential ACL isolation. Temporary services
+and files were removed; no application/container was restarted. These primitive
+results are not final installed-profile, BPF endpoint, filesystem-coverage or
+production activation approval. Private server connection details stay outside
+this public repository.
