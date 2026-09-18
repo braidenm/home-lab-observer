@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 
 	"github.com/braidenm/home-lab-observer/internal/connectedbundle"
+	"github.com/braidenm/home-lab-observer/internal/connectedcompat"
 	"github.com/braidenm/home-lab-observer/internal/connectedidentity"
 	"github.com/braidenm/home-lab-observer/internal/connectedunits"
 	"github.com/braidenm/home-lab-observer/internal/ownerfs"
@@ -35,7 +36,7 @@ func run(args []string) error {
 	if f.Parse(args) != nil || f.NArg() != 0 {
 		return connectedbundle.ErrInvalid
 	}
-	i := connectedidentity.Identity{Role: *role, Version: *version, Commit: *commit, OS: "linux", Arch: "amd64"}
+	i := connectedidentity.Identity{Role: *role, Version: *version, Commit: *commit, OS: "linux", Arch: "amd64", ContractSHA256: connectedcompat.Digest()}
 	if *mode == "identity" {
 		if *binaries != "" || *output != "" {
 			return connectedbundle.ErrInvalid

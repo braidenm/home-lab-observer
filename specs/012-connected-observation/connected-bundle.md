@@ -5,6 +5,13 @@ Native release manifests, identity roles and archive validators remain unchanged
 
 ## Closed bundle
 
+Current build tooling emits explicit connected bundle/identity v2 with the
+[recognized compatibility descriptor](compatibility-descriptor.md). The original
+v1 format below remains strictly readable/verifiable, but declares no known
+compatibility contract. V2 retains the same closed payload set and additionally
+binds the compiled contract digest across the manifest and all three identities.
+This is recognition, not upgrade, rollback or activation approval.
+
 The separate `observer-connected-bundle/v1` manifest contains a prerelease version,
 40-lowercase-hex commit, linux/amd64 platform, the fixed Ubuntu24.04/systemd255 canary
 profile, and a sorted exact list of three binaries and reviewed template resources.
@@ -52,8 +59,9 @@ supply template text, command paths, environment or arbitrary unit fragments.
 
 Workers take no arguments. Collector uses the shared GID as primary; uploader uses
 its private primary GID and the shared group only as supplementary. Exit codes
-20/21/22 are non-restart credential/terminal/recovery states. Crash restart is bounded
-and retains the separate C2 startup cooldown. Unit directives implement the accepted
+20/21/22 are non-restart credential/terminal/recovery states. Automatic crash restart
+and boot activation are disabled; each explicit start retains the separate C2
+startup cooldown and requires fresh activation checks. Unit directives implement the accepted
 profile, but effective inherited policy and actual namespace/syscall probes remain
 mandatory before activation; template tests alone do not prove installed isolation.
 

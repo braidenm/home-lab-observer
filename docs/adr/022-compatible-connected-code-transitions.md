@@ -30,6 +30,11 @@ start repeats ADR 021, and no completion record is activation authority.
 
 The [detailed transition plan](../../specs/012-connected-observation/compatible-code-transition.md)
 defines compatibility, legacy journal admission, interruption behavior and tests.
+The bounded [descriptor binding slice](../../specs/012-connected-observation/compatibility-descriptor.md)
+recognizes current state/wire contracts using connected v2, while explicitly
+marking transitions unsupported and durable filesystem identity unasserted.
+That descriptor must be revised before transition-enabled releases; it does not
+promote this proposed ADR to implemented or waive any acceptance gate.
 ADR 020 remains authoritative on isolation and ledger preservation; this proposal
 supersedes no accepted ADR until reviewed and implemented.
 

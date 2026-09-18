@@ -8,7 +8,7 @@ import (
 )
 
 func fixture() Identity {
-	return Identity{"collector", "0.1.0-canary.1", strings.Repeat("a", 40), "linux", "amd64"}
+	return Identity{Role: "collector", Version: "0.1.0-canary.1", Commit: strings.Repeat("a", 40), OS: "linux", Arch: "amd64"}
 }
 
 func TestClosedIdentity(t *testing.T) {

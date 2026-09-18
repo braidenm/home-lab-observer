@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"sort"
 
+	"github.com/braidenm/home-lab-observer/internal/connectedcompat"
 	"github.com/braidenm/home-lab-observer/internal/connectedidentity"
 	"github.com/braidenm/home-lab-observer/internal/connectedunits"
 	"github.com/braidenm/home-lab-observer/internal/ownerfs"
@@ -24,6 +25,7 @@ import (
 
 const ManifestName = "connected-manifest.json"
 const Version = "observer-connected-bundle/v1"
+const VersionV2 = "observer-connected-bundle/v2"
 const Profile = "ubuntu24.04-systemd255-amd64-canary"
 const MaxManifestBytes = 16384
 const MaxResourceBytes = 16384
@@ -43,13 +45,14 @@ type File struct {
 	Mode   uint32 `json:"mode"`
 }
 type Manifest struct {
-	Schema  string `json:"schema"`
-	Version string `json:"version"`
-	Commit  string `json:"commit"`
-	OS      string `json:"os"`
-	Arch    string `json:"arch"`
-	Profile string `json:"profile"`
-	Files   []File `json:"files"`
+	Schema         string `json:"schema"`
+	Version        string `json:"version"`
+	Commit         string `json:"commit"`
+	OS             string `json:"os"`
+	Arch           string `json:"arch"`
+	Profile        string `json:"profile"`
+	ContractSHA256 string `json:"contract_sha256,omitempty"`
+	Files          []File `json:"files"`
 }
 
 func Names() []string {
@@ -65,8 +68,11 @@ func Names() []string {
 }
 
 func (m Manifest) Validate() error {
-	identity := connectedidentity.Identity{Role: "install", Version: m.Version, Commit: m.Commit, OS: m.OS, Arch: m.Arch}
-	if m.Schema != Version || m.Profile != Profile || identity.Validate() != nil {
+	if m.Schema == VersionV2 && !connectedcompat.MatchesResources(connectedunits.Resources()) {
+		return ErrInvalid
+	}
+	identity := connectedidentity.Identity{Role: "install", Version: m.Version, Commit: m.Commit, OS: m.OS, Arch: m.Arch, ContractSHA256: m.ContractSHA256}
+	if (m.Schema != Version && m.Schema != VersionV2) || (m.Schema == Version && m.ContractSHA256 != "") || (m.Schema == VersionV2 && !connectedcompat.Known(m.ContractSHA256)) || m.Profile != Profile || identity.Validate() != nil {
 		return ErrInvalid
 	}
 	names := Names()
@@ -84,6 +90,12 @@ func (m Manifest) Validate() error {
 		}
 	}
 	return nil
+}
+
+// HasKnownContract recognizes a declared code-owned contract. It does not verify
+// actual files, distribution authenticity, transitions or activation readiness.
+func (m Manifest) HasKnownContract() bool {
+	return m.Validate() == nil && m.Schema == VersionV2 && connectedcompat.Known(m.ContractSHA256)
 }
 
 func Encode(m Manifest) ([]byte, error) {
@@ -226,7 +238,7 @@ func inspectFile(root *os.Root, directory string, entry File, m Manifest) error 
 		return ErrInvalid
 	}
 	if role, ok := binaries[entry.Name]; ok {
-		if inspectBinary(f, entry.Size, connectedidentity.Identity{Role: role, Version: m.Version, Commit: m.Commit, OS: m.OS, Arch: m.Arch}) != nil {
+		if inspectBinary(f, entry.Size, connectedidentity.Identity{Role: role, Version: m.Version, Commit: m.Commit, OS: m.OS, Arch: m.Arch, ContractSHA256: m.ContractSHA256}) != nil {
 			return ErrInvalid
 		}
 	} else {
@@ -290,7 +302,11 @@ func VerifyDirectory(directory, expectedManifestSHA256 string) (Manifest, error)
 // CreateManifest verifies already staged exact resources and binaries. The build
 // tool alone adds the new manifest; this never repairs an existing installation.
 func CreateManifest(directory, version, commit string) ([]byte, error) {
-	m := Manifest{Schema: Version, Version: version, Commit: commit, OS: "linux", Arch: "amd64", Profile: Profile}
+	return createManifest(directory, version, commit, VersionV2, connectedcompat.Digest())
+}
+
+func createManifest(directory, version, commit, schema, contract string) ([]byte, error) {
+	m := Manifest{Schema: schema, Version: version, Commit: commit, OS: "linux", Arch: "amd64", Profile: Profile, ContractSHA256: contract}
 	if (connectedidentity.Identity{Role: "install", Version: version, Commit: commit, OS: "linux", Arch: "amd64"}).Validate() != nil {
 		return nil, ErrInvalid
 	}

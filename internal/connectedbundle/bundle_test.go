@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/braidenm/home-lab-observer/internal/connectedcompat"
 	"github.com/braidenm/home-lab-observer/internal/connectedidentity"
 	"github.com/braidenm/home-lab-observer/internal/connectedunits"
 )
@@ -57,6 +58,12 @@ func TestClosedManifest(t *testing.T) {
 // Three tiny Go command fixtures are cross-built and never executed. This tests
 // actual ELF/buildinfo/identity integration, not the final workers' behavior.
 func TestRealGoBundleVerification(t *testing.T) {
+	for _, schema := range []string{Version, VersionV2} {
+		t.Run(schema, func(t *testing.T) { testRealGoBundleVerification(t, schema) })
+	}
+}
+
+func testRealGoBundleVerification(t *testing.T, schema string) {
 	goExe, err := exec.LookPath("go")
 	if err != nil {
 		t.Fatal("Go compiler required")
@@ -64,6 +71,10 @@ func TestRealGoBundleVerification(t *testing.T) {
 	source := t.TempDir()
 	bundle := t.TempDir()
 	m := fakeManifest()
+	m.Schema = schema
+	if schema == VersionV2 {
+		m.ContractSHA256 = connectedcompat.Digest()
+	}
 	if os.WriteFile(filepath.Join(source, "go.mod"), []byte("module github.com/braidenm/home-lab-observer\n\ngo 1.27.1\n"), 0o644) != nil {
 		t.Fatal("fixture module")
 	}
@@ -76,7 +87,7 @@ func TestRealGoBundleVerification(t *testing.T) {
 		if os.WriteFile(filepath.Join(dir, "main.go"), code, 0o644) != nil {
 			t.Fatal("fixture source")
 		}
-		record, _ := connectedidentity.Encode(connectedidentity.Identity{Role: role, Version: m.Version, Commit: m.Commit, OS: "linux", Arch: "amd64"})
+		record, _ := connectedidentity.Encode(connectedidentity.Identity{Role: role, Version: m.Version, Commit: m.Commit, OS: "linux", Arch: "amd64", ContractSHA256: m.ContractSHA256})
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		cmd := exec.CommandContext(ctx, goExe, "build", "-trimpath", "-ldflags=-s -w -X main.releaseIdentity="+record, "-o", filepath.Join(bundle, name), "./cmd/"+name)
 		cmd.Dir = source
@@ -97,7 +108,12 @@ func TestRealGoBundleVerification(t *testing.T) {
 			t.Fatal("fixture resource")
 		}
 	}
-	manifest, err := CreateManifest(bundle, m.Version, m.Commit)
+	var manifest []byte
+	if schema == VersionV2 {
+		manifest, err = CreateManifest(bundle, m.Version, m.Commit)
+	} else {
+		manifest, err = createManifest(bundle, m.Version, m.Commit, m.Schema, m.ContractSHA256)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,6 +123,14 @@ func TestRealGoBundleVerification(t *testing.T) {
 	manifestSHA := digest(manifest)
 	if _, err := VerifyDirectory(bundle, manifestSHA); err != nil {
 		t.Fatal(err)
+	}
+	if schema == VersionV2 {
+		built, err := CreateManifest(bundle, m.Version, m.Commit)
+		// The completed bundle contains a manifest, so build-only exact-input
+		// validation must refuse it rather than overwrite/repackage implicitly.
+		if err != ErrInvalid || built != nil {
+			t.Fatal("completed bundle accepted as build input")
+		}
 	}
 	var first, second bytes.Buffer
 	if WriteArchive(&first, bundle, manifestSHA) != nil || WriteArchive(&second, bundle, manifestSHA) != nil || !bytes.Equal(first.Bytes(), second.Bytes()) {
@@ -135,7 +159,7 @@ func TestRealGoBundleVerification(t *testing.T) {
 	if count != len(Names())+1 {
 		t.Fatal("archive file count")
 	}
-	for _, mutation := range []string{"missing", "extra", "linked", "symlink", "resource", "mixed-role", "mixed-commit", "malformed-manifest", "manifest-mode", "actual-manifest-mode", "wrong-digest"} {
+	for _, mutation := range []string{"missing", "extra", "linked", "symlink", "resource", "mixed-role", "mixed-commit", "malformed-manifest", "manifest-mode", "actual-manifest-mode", "wrong-digest", "mixed-contract", "unknown-contract"} {
 		t.Run(mutation, func(t *testing.T) {
 			dir := t.TempDir()
 			for _, name := range append(Names(), ManifestName) {
@@ -153,6 +177,24 @@ func TestRealGoBundleVerification(t *testing.T) {
 			}
 			expected := manifestSHA
 			switch mutation {
+			case "mixed-contract", "unknown-contract":
+				changed, _ := Decode(manifest)
+				if changed.Schema == Version {
+					changed.Schema = VersionV2
+					changed.ContractSHA256 = connectedcompat.Digest()
+				} else {
+					changed.Schema = Version
+					changed.ContractSHA256 = ""
+				}
+				if mutation == "unknown-contract" {
+					changed.Schema = VersionV2
+					changed.ContractSHA256 = strings.Repeat("f", 64)
+				}
+				data, _ := json.Marshal(changed)
+				if os.WriteFile(filepath.Join(dir, ManifestName), data, 0o644) != nil {
+					t.Fatal("changed contract fixture")
+				}
+				expected = digest(data)
 			case "missing":
 				os.Remove(filepath.Join(dir, "observer-connected-collector"))
 			case "extra":
