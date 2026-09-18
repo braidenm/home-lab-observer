@@ -87,13 +87,14 @@ filesystem package that also owns publication primitives.
 
 ## Legacy predecessor design gate
 
-The current pure record/stage classifier recognizes an initial transition or
-a completed new-format predecessor. It does **not** yet bind the exact legacy
-`refresh.json`/`refresh-complete` pair to the first new-format transition.
-That is a release blocker, not a reason to treat an existing refresh as an
-initial installation or to erase its evidence. Before the first transition
-write, add a closed predecessor format to the canonical record and preparation
-witness, bound to the predecessor completion digest:
+The pure record/stage classifier now distinguishes an initial transition, an
+exact completed legacy refresh, and a completed new-format predecessor. Its
+closed predecessor format is in the canonical record and preparation witness
+and binds the predecessor completion digest. This is only byte-level
+admission: the installer still does **not** independently anchor and compare
+the installed `refresh.json`/`refresh-complete` pair to the staged copies.
+That remains a release blocker, not a reason to treat an existing refresh as
+an initial installation or to erase its evidence:
 
 | Format | Stage predecessor members | Active new-format authority before publication | Separate evidence |
 | --- | --- | --- | --- |
@@ -115,12 +116,12 @@ intact. The existing `transition-v1` retained-receipt rule is unchanged.
 
 Any format/receipt/inventory mismatch, missing or substituted fixed legacy
 file, or altered predecessor after preparation refuses while stopped. Resume
-never synthesizes a predecessor from current DNS, CA or directory order. Add
-pure tests for all three formats, first transition after a completed legacy
-refresh, retained old receipt, missing/foreign legacy evidence and interrupted
-preparation/publication; then prove anchored file identity and power-loss
-behavior in the disposable VM. No record-format change or migration is
-considered accepted until those tests and independent review pass.
+never synthesizes a predecessor from current DNS, CA or directory order. Pure
+tests for all three formats and first transition after a completed legacy
+refresh cover retained old receipts and missing/foreign staged evidence.
+Still prove anchored fixed-file identity, publication interruption and
+power-loss behavior in the disposable VM. No migration is considered accepted
+until those tests and independent review pass.
 
 ## Fixed evidence
 
@@ -131,7 +132,8 @@ considered accepted until those tests and independent review pass.
 - A single root-owned `transition-stage` directory (mode 0700) holds only
   fixed names: `proposal.json`, `old-ca.pem`, `new-ca.pem`,
   `predecessor.json` and `predecessor-complete`. Once the legacy predecessor
-  gate is implemented, the last two are absent only for an actual initial
+  byte-admission gate is implemented, the last two are absent only for an
+  actual initial
   installation with no completed legacy or new-format predecessor. For a
   legacy predecessor they retain exact legacy bytes, while the installed
   `refresh.json` and `refresh-complete` remain separately intact. CA files

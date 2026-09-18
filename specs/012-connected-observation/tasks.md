@@ -42,5 +42,6 @@
   - [x] Read the fixed authoritative transition journal/receipt names under the anchored ext4 config directory; classification and writes remain separate.
   - [x] Read both fixed legacy refresh names as separate anchored ext4 evidence with a privileged refusal fixture; stage comparison remains open.
   - [x] Compose only read-only staged/active/ledger evidence into a diagnostic phase; it grants no replacement, cleanup or worker start.
-  - [ ] Implement the closed none/legacy/new-format predecessor stage model and prove the exact legacy-to-first-transition chain before publication or recovery is enabled.
+  - [x] Add closed none/legacy/new-format predecessor byte admission and pure phase classification; no installed legacy-file provenance is inferred.
+  - [ ] Independently anchor and compare installed legacy refresh files to the staged predecessor before publication or recovery is enabled.
 - [ ] Specify richer remote quality-aware read models; keep Kubernetes deferred and actions in Spec 011.

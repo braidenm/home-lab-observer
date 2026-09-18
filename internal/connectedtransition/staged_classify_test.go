@@ -110,3 +110,35 @@ func TestStagedClassificationRetainsOldReceiptAsOld(t *testing.T) {
 		t.Fatal("changed resources before publication admitted")
 	}
 }
+
+func TestStagedClassificationLegacyPredecessorUsesAbsentNewAuthority(t *testing.T) {
+	record, preparation, files := legacyStageFixture(t)
+	proposal := files[StageProposalName]
+	newReceipt, err := Completion(proposal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := StagedObserved{Resources: record.PreviousResources, Ledger: record.Ledger}
+	if phase, err := ClassifyStaged(preparation, files, before); err != nil || phase != StagedPreparationPending {
+		t.Fatal("legacy preparation with absent new authority refused", err, phase)
+	}
+	before.Receipt = files[StagePredecessorCompletionName]
+	if _, err := ClassifyStaged(preparation, files, before); err == nil {
+		t.Fatal("legacy receipt adopted as new-format active receipt")
+	}
+	mixed := record.PreviousResources
+	mixed.CA = record.NextResources.CA
+	published := StagedObserved{Journal: proposal, Resources: mixed, Ledger: record.Ledger}
+	if phase, err := ClassifyStaged(preparation, files, published); err != nil || phase != StagedForwardRecovery {
+		t.Fatal("published legacy-chain transition refused", err, phase)
+	}
+	published.Receipt = files[StagePredecessorCompletionName]
+	if _, err := ClassifyStaged(preparation, files, published); err == nil {
+		t.Fatal("legacy receipt completed new proposal")
+	}
+	published.Receipt = newReceipt
+	published.Resources = record.NextResources
+	if phase, err := ClassifyStaged(preparation, files, published); err != nil || phase != StagedCleanupPending {
+		t.Fatal("exact new completion refused", err, phase)
+	}
+}

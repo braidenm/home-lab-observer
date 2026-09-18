@@ -50,7 +50,7 @@ func ValidateStage(preparation []byte, files map[string][]byte) (Record, error) 
 	}
 	predecessor, hasPredecessor := files[StagePredecessorName]
 	completion, hasCompletion := files[StagePredecessorCompletionName]
-	if hasPredecessor != hasCompletion || hasPredecessor != (record.PredecessorCompletionSHA != "") {
+	if hasPredecessor != hasCompletion || hasPredecessor != (record.PredecessorFormat != PredecessorNone) {
 		return Record{}, ErrInvalid
 	}
 	if !hasPredecessor {
@@ -58,6 +58,13 @@ func ValidateStage(preparation []byte, files map[string][]byte) (Record, error) 
 	}
 	if len(completion) == 0 || len(completion) > 256 || hash(completion) != record.PredecessorCompletionSHA {
 		return Record{}, ErrInvalid
+	}
+	if record.PredecessorFormat == PredecessorLegacy {
+		legacyDigest, err := AdmitCompletedLegacy(predecessor, completion, record.Previous)
+		if err != nil || legacyDigest != record.PredecessorCompletionSHA {
+			return Record{}, ErrInvalid
+		}
+		return record, nil
 	}
 	previous, err := Decode(predecessor)
 	if err != nil {

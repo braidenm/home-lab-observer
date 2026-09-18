@@ -40,6 +40,7 @@ func sample(t *testing.T, operation string) (connectedtransition.Record, []byte,
 	record := connectedtransition.Record{
 		Version: connectedtransition.Version, Operation: operation,
 		Previous: previous, Next: next, PreviousCodeAfter: codeAfter,
+		PredecessorFormat: connectedtransition.PredecessorNone,
 		ContractSHA256: strings.Repeat("e", 64),
 		PreviousResources: Hash(oldSet), NextResources: Hash(newSet),
 		Ledger: connectedtransition.Ledger{
