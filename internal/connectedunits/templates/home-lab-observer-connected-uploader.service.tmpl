@@ -1,0 +1,57 @@
+[Unit]
+Description=Home Lab Observer connected numeric uploader
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+[Service]
+Type=exec
+User={{.UploaderUID}}
+Group={{.UploaderGID}}
+SupplementaryGroups={{.SharedGID}}
+RootDirectory=/var/lib/home-lab-observer-connected/uploader-root
+MountAPIVFS=no
+ExecStart=/bin/observer-connected-uploader
+WorkingDirectory=/
+UMask=0077
+StandardInput=null
+StandardOutput=null
+StandardError=null
+Environment=GODEBUG=netdns=go
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateIPC=yes
+ProtectSystem=strict
+DevicePolicy=closed
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=~@mount @module @raw-io @reboot @swap @ipc ptrace process_vm_readv process_vm_writev kcmp perf_event_open bpf userfaultfd socketpair io_uring_setup io_uring_enter io_uring_register mknod mknodat
+SystemCallErrorNumber=EPERM
+NoExecPaths=/
+ExecPaths=/bin/observer-connected-uploader
+BindReadOnlyPaths=/opt/home-lab-observer-connected/releases/{{.ArtifactSHA256}}/observer-connected-uploader:/bin/observer-connected-uploader
+BindReadOnlyPaths=/etc/home-lab-observer-connected/installed.json:/etc/home-lab-observer-connected/installed.json
+BindReadOnlyPaths=/var/lib/home-lab-observer-connected/handoff:/handoff
+BindReadOnlyPaths=/run/home-lab-observer-connected/activation:/activation
+BindPaths=/var/lib/home-lab-observer-connected/ledger:/state/ledger /var/lib/home-lab-observer-connected/uploader-status:/state/status
+ReadWritePaths=/state/ledger /state/status
+LoadCredential=connector.json:/etc/home-lab-observer-connected/credentials/connector.json
+IPAddressDeny=any
+{{.AddressRules}}LimitCORE=0
+MemoryMax=128M
+MemoryPressureWatch=skip
+TasksMax=64
+TimeoutStopSec=15s
+KillMode=control-group
+SendSIGKILL=yes
+Restart=no
+FileDescriptorStoreMax=0
+
+[Install]
+WantedBy=multi-user.target
