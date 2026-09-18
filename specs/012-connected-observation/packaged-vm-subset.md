@@ -183,3 +183,11 @@ The acceptance predicate has Linux-native fixture tests covering useful partial
 data, false complete coverage, foreign server binding, invalid metric values and
 the legacy response. These tests do not run a service, establish current packaged
 VM acceptance or prove hosted transport. A fresh admitted VM run is still required.
+
+That fresh run also exercises the unchanged packaged `validate-existing-ledger`
+mode twice through the real offline manager profile. It compares private results
+to the synthetic pristine record fingerprint, retains anchored ext4 directory and
+database identity across both opens, and checks that the named paths still point
+to the promoted objects. Fingerprints and filesystem identifiers never enter test
+output. This adds no steady uploader, HTTP request, steady-uploader activation or real
+credential. It is not yet evidence for used/pending state or reboot stability.

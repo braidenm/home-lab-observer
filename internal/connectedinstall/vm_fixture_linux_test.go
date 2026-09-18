@@ -22,6 +22,8 @@ import (
 	"github.com/braidenm/home-lab-observer/internal/connectedunits"
 	"github.com/braidenm/home-lab-observer/internal/enrollmentcoord"
 	"github.com/braidenm/home-lab-observer/internal/enrollmentstore"
+	"github.com/braidenm/home-lab-observer/internal/ledgeridentity"
+	"github.com/braidenm/home-lab-observer/internal/ledgerwitness"
 	"github.com/braidenm/home-lab-observer/internal/remoteprojection"
 	"github.com/braidenm/home-lab-observer/internal/sharedhandoff"
 	"github.com/braidenm/home-lab-observer/internal/uploadstate"
@@ -204,6 +206,46 @@ func TestConnectedVMOfflineAndCollector(t *testing.T) {
 	result, err := runEnrollment(ctx, invoke.Properties, invoke.Executable, "validate-ledger", validation, policy)
 	if err != nil || string(result) != "VALID" {
 		t.Fatal("VM_FIXTURE_OFFLINE_LEDGER_FAILED")
+	}
+	// Exercise the actual packaged existing-state mode, not an in-process
+	// substitute. Its private result must equal the seeded pristine record, and
+	// repeated opens must preserve the same anchored ext4 identity.
+	directory, err := os.Open(connectedprofile.StateDirectory + "/ledger")
+	if err != nil {
+		t.Fatal("VM_FIXTURE_LEDGER_IDENTITY_FAILED")
+	}
+	defer directory.Close()
+	database, err := os.Open(connectedprofile.StateDirectory + "/ledger/upload.sqlite")
+	if err != nil {
+		t.Fatal("VM_FIXTURE_LEDGER_IDENTITY_FAILED")
+	}
+	defer database.Close()
+	physical, err := ledgeridentity.Inspect(ctx, directory, database)
+	if err != nil {
+		t.Fatal("VM_FIXTURE_LEDGER_IDENTITY_FAILED")
+	}
+	binding := uploadstate.Binding{ServerID: c.ServerID, ConnectorID: c.ConnectorID}
+	wantFingerprint, err := ledgerwitness.Fingerprint(uploadstate.Record{Binding: binding}, binding)
+	if err != nil {
+		t.Fatal("VM_FIXTURE_EXPECTED_WITNESS_FAILED")
+	}
+	invoke, err = connectedunits.RenderEnrollmentProperties(policy, "validate-existing-ledger")
+	if err != nil {
+		t.Fatal("VM_FIXTURE_RENDER_FAILED")
+	}
+	for range 2 {
+		privateResult, runErr := runEnrollment(ctx, invoke.Properties, invoke.Executable, "validate-existing-ledger", validation, policy)
+		gotFingerprint, decodeErr := ledgerwitness.DecodeResult(privateResult, binding)
+		clear(privateResult)
+		afterPhysical, identityErr := ledgeridentity.Inspect(ctx, directory, database)
+		currentDirectory, directoryErr := os.Stat(connectedprofile.StateDirectory + "/ledger")
+		currentDatabase, databaseErr := os.Stat(connectedprofile.StateDirectory + "/ledger/upload.sqlite")
+		if runErr != nil || decodeErr != nil || gotFingerprint != wantFingerprint || identityErr != nil || afterPhysical != physical || directoryErr != nil || databaseErr != nil || !os.SameFile(after, currentDirectory) || !os.SameFile(afterDB, currentDatabase) {
+			t.Fatal("VM_FIXTURE_EXISTING_LEDGER_FAILED")
+		}
+	}
+	if database.Close() != nil || directory.Close() != nil {
+		t.Fatal("VM_FIXTURE_LEDGER_CLOSE_FAILED")
 	}
 	units, err := connectedunits.RenderUnits(c)
 	if err != nil {
