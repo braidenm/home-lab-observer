@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"sync/atomic"
@@ -32,6 +33,18 @@ func main() {
 	}
 	var consumed atomic.Bool
 	interrupt := os.Args[4] == "interrupt"
+	dns, err := net.ListenPacket("udp4", "127.0.0.1:53")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "FIXTURE_DNS_LISTEN_FAILED")
+		os.Exit(1)
+	}
+	defer dns.Close()
+	go func() {
+		if serveDNS(dns) != nil {
+			fmt.Fprintln(os.Stderr, "FIXTURE_DNS_FAILED")
+			os.Exit(1)
+		}
+	}()
 	server := &http.Server{
 		Addr:              os.Args[1],
 		ReadHeaderTimeout: 3 * time.Second,

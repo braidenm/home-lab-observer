@@ -17,7 +17,14 @@ transfers only the reviewed bundle, synthetic receiver and test driver into the 
 
 The guest verifies Ubuntu/systemd 255, no NIC/default route, bundle checksums, then binds a public
 test address only on loopback and trusts a throwaway guest-only TLS certificate for the compiled
-origin. A fixed synthetic one-use grant is entered through a pseudo-terminal after the installer's
+origin. The guest must not map that hostname in `/etc/hosts`: Go can surface its IPv4 entry as an
+IPv4-mapped address that the production public-address policy correctly rejects. Instead, the
+already pinned synthetic receiver serves a bounded, non-recursive UDP DNS response on guest
+`127.0.0.1:53`. Only the exact compiled hostname's A query returns the fixed loopback alias;
+AAAA returns NODATA, and all other names/types are refused. The guest's regular
+`/etc/resolv.conf` names only `127.0.0.1` with fixed timeouts and attempts. Any malformed or
+oversized DNS packet is dropped, and the responder never forwards or logs a query. No other
+network interface or default route is added. A fixed synthetic one-use grant is entered through a pseudo-terminal after the installer's
 no-echo prompt. The receiver accepts one exact enrollment exchange and no upload. No grant, credential,
 HTTP request body or raw environment is printed to the serial evidence channel.
 On an install failure, the PTY driver retains at most 8 KiB of output in memory
