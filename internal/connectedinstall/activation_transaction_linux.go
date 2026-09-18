@@ -22,6 +22,9 @@ func activateStopped(parent context.Context, c connectedprofile.Config) (result 
 }
 
 func activateStoppedWith(parent context.Context, c connectedprofile.Config, ops activationOperations) (result error) {
+	if parent == nil || parent.Err() != nil {
+		return ErrUnsafe
+	}
 	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 	defer cancel()
 	for _, unit := range []string{uploaderUnit, collectorUnit} {

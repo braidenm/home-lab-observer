@@ -6,7 +6,20 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
 )
+
+func TestActivationRejectsAbsentOrCanceledContextBeforeEffects(t *testing.T) {
+	if activateStoppedWith(nil, connectedprofile.Config{}, activationOperations{}) != ErrUnsafe {
+		t.Fatal("nil activation context accepted")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if activateStoppedWith(ctx, connectedprofile.Config{}, activationOperations{}) != ErrUnsafe {
+		t.Fatal("canceled activation context accepted")
+	}
+}
 
 func TestActivationStartCaptureOnTimeout(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
