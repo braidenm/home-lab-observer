@@ -108,6 +108,19 @@ def run(*args: str) -> str:
     return subprocess.check_output(args, text=True, timeout=10, stderr=subprocess.DEVNULL)
 
 
+def unit_properties(unit: str, fields: tuple[str, ...]) -> dict[str, str]:
+    output = run("/usr/bin/systemctl", "show", *("--property=" + field for field in fields), unit)
+    need(len(output) <= 4096, "SYSTEMD_PROPERTY_OUTPUT")
+    values = {}
+    for line in output.splitlines():
+        key, separator, value = line.partition("=")
+        need(separator == "=" and key in fields and key not in values,
+             "SYSTEMD_PROPERTY_OUTPUT")
+        values[key] = value
+    need(set(values) == set(fields), "SYSTEMD_PROPERTY_OUTPUT")
+    return values
+
+
 def payload_assert() -> None:
     identity = json.loads((PAYLOAD / "reviewed-identity.json").read_text())
     expected = identity["manifest_sha256"]
@@ -227,10 +240,26 @@ def snapshot() -> dict:
     uploader_unit = Path("/etc/systemd/system/home-lab-observer-connected-uploader.service").read_text()
     need("PrivateNetwork=yes\n" in collector_unit and "LoadCredential=" not in collector_unit and "InaccessiblePaths=-/etc/home-lab-observer-connected/credentials" in collector_unit, "COLLECTOR_ISOLATION")
     need("RootDirectory=" + str(STATE / "uploader-root") in uploader_unit and "LoadCredential=connector.json:/etc/home-lab-observer-connected/credentials/connector.json" in uploader_unit and "IPAddressDeny=any\n" in uploader_unit and "IPAddressAllow=93.184.216.34/32\n" in uploader_unit, "UPLOADER_ISOLATION")
-    effective_collector = run("/usr/bin/systemctl", "show", "--property=PrivateNetwork", "--property=RootDirectory", "--property=BindPaths", "--property=LoadCredential", "--property=NoNewPrivileges", units[0])
-    effective_uploader = run("/usr/bin/systemctl", "show", "--property=RootDirectory", "--property=BindPaths", "--property=BindReadOnlyPaths", "--property=LoadCredential", "--property=NoNewPrivileges", "--property=IPAddressDeny", units[1])
-    need("PrivateNetwork=yes\n" in effective_collector and "RootDirectory=\n" in effective_collector and "LoadCredential=\n" in effective_collector and "BindPaths=\n" in effective_collector and "NoNewPrivileges=yes\n" in effective_collector, "COLLECTOR_EFFECTIVE")
-    need("RootDirectory=" + str(STATE / "uploader-root") in effective_uploader and "connector.json" in effective_uploader and str(STATE / "ledger") in effective_uploader and "NoNewPrivileges=yes\n" in effective_uploader and "IPAddressDeny=any\n" in effective_uploader, "UPLOADER_EFFECTIVE")
+    # systemd 255 renders LoadCredential as [unprintable], including when empty.
+    # Exact unit bytes plus the effective fragment path and no drop-ins prove
+    # the credential directives; printable properties prove the remaining policy.
+    collector_properties = unit_properties(units[0], ("FragmentPath", "DropInPaths",
+        "PrivateNetwork", "RootDirectory", "BindPaths", "NoNewPrivileges"))
+    uploader_properties = unit_properties(units[1], ("FragmentPath", "DropInPaths",
+        "RootDirectory", "BindPaths", "BindReadOnlyPaths", "NoNewPrivileges", "IPAddressDeny"))
+    need(collector_properties == {
+        "FragmentPath": "/etc/systemd/system/" + units[0], "DropInPaths": "",
+        "PrivateNetwork": "yes", "RootDirectory": "", "BindPaths": "",
+        "NoNewPrivileges": "yes",
+    }, "COLLECTOR_EFFECTIVE")
+    need(uploader_properties["FragmentPath"] == "/etc/systemd/system/" + units[1]
+         and uploader_properties["DropInPaths"] == ""
+         and uploader_properties["RootDirectory"] == str(STATE / "uploader-root")
+         and str(STATE / "ledger") in uploader_properties["BindPaths"]
+         and str(release) in uploader_properties["BindReadOnlyPaths"]
+         and uploader_properties["NoNewPrivileges"] == "yes"
+         and uploader_properties["IPAddressDeny"] == "0.0.0.0/0 ::/0",
+         "UPLOADER_EFFECTIVE")
     transient = run("/usr/bin/systemctl", "show", "--property=LoadState", "--property=ActiveState", "--property=Transient", "--property=FragmentPath", "home-lab-observer-connected-enrollment.service")
     need("LoadState=not-found\n" in transient and "ActiveState=inactive\n" in transient and "Transient=no\n" in transient and "FragmentPath=\n" in transient, "TRANSIENT_RETAINED")
     return {"installed": [installed_stat.st_ino, installed_stat.st_size, digest(installed)],

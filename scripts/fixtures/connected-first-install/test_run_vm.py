@@ -74,6 +74,19 @@ class HarnessAdmissionTest(unittest.TestCase):
                     assert_guest.systemd_root_scaffold(root)
                 self.assertNotIn("foreign-member", str(error.exception))
 
+    def test_effective_systemd_properties_are_exact_and_bounded(self):
+        fields = ("FragmentPath", "DropInPaths")
+        with mock.patch.object(assert_guest, "run", return_value="DropInPaths=\nFragmentPath=/etc/systemd/system/example.service\n"):
+            self.assertEqual(assert_guest.unit_properties("example.service", fields), {
+                "FragmentPath": "/etc/systemd/system/example.service", "DropInPaths": ""})
+        for output in ("FragmentPath=/etc/systemd/system/example.service\n",
+                       "FragmentPath=/etc/systemd/system/example.service\nDropInPaths=\nDropInPaths=/etc/override.conf\n",
+                       "FragmentPath=/etc/systemd/system/example.service\nDropInPaths=\nForeign=private\n",
+                       "x" * 4097):
+            with mock.patch.object(assert_guest, "run", return_value=output):
+                with self.assertRaisesRegex(AssertionError, "^SYSTEMD_PROPERTY_OUTPUT$"):
+                    assert_guest.unit_properties("example.service", fields)
+
     def test_driver_diagnostic_is_allowlisted_and_redacted(self):
         for label, phase in drive_pty.PHASE_LABELS:
             self.assertEqual(drive_pty.classify_failure(b"prefix " + label + b" fixed text"), phase)

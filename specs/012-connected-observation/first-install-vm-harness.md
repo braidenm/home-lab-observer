@@ -88,6 +88,13 @@ The executable three-case harness is a prerequisite but not a claim of full acce
 manual inventory additionally calls for hostile pre-publish targets, fault injection and runtime
 worker isolation. Exact guest unit fragments, effective systemd properties, no-ACL ownership and
 unknown-member checks narrow that gap; any unexecuted item must still be reported as unexecuted.
+On systemd 255, `systemctl show` does not render `LoadCredential` as text (it
+reports `[unprintable]` even for an empty value), and normalizes
+`IPAddressDeny=any` to both IPv4 and IPv6 default-route ranges. The guest
+therefore proves credential policy from exact unit bytes, the effective
+`FragmentPath` and an empty `DropInPaths`, then checks printable effective
+network and namespace properties separately. It must not treat `[unprintable]`
+as evidence that a credential is absent.
 
 The host bounds every QEMU process by timeout and PID, holds an exclusive fixture lease, and prints
 fixed redacted PASS/FAIL case identifiers. It preserves evidence on failure. On success, an explicit
