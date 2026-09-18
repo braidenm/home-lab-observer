@@ -246,3 +246,30 @@ func TestCanceledStartupWaitPersistsStoppedStatus(t *testing.T) {
 		t.Fatal("status write failure was hidden")
 	}
 }
+
+func TestPreflightStatusClearsRetainedFreshAck(t *testing.T) {
+	dir := t.TempDir()
+	if os.Chmod(dir, 0700) != nil {
+		t.Fatal("chmod")
+	}
+	status, err := connectedstatus.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	previous := connectedstatus.Record{Version: "observer-connected-status/v1", State: "ACKNOWLEDGED_FRESH", UpdatedAt: now, CollectedAt: now, AcknowledgedAt: now, Acknowledgements: 1}
+	if status.Write(previous) != nil || publishPreflightStatus(status, "") != nil {
+		t.Fatal("preflight did not clear prior fresh status")
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "status.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := connectedstatus.Decode(data)
+	if err != nil || got.State != "STOPPED" || got.Acknowledgements != 0 || !got.AcknowledgedAt.IsZero() || got.UpdatedAt.Before(now) {
+		t.Fatal("preflight retained stale acknowledgement")
+	}
+	if status.Close() != nil || publishPreflightStatus(status, "") == nil {
+		t.Fatal("failed preflight status write was admitted")
+	}
+}

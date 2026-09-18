@@ -94,6 +94,9 @@ func run(ctx context.Context) (code int) {
 			code = 22
 		}
 	}()
+	if publishPreflightStatus(status, os.Getenv("INVOCATION_ID")) != nil {
+		return 22
+	}
 	if connectedstartup.Run(ctx, c, status) != nil {
 		return 22
 	}
@@ -145,6 +148,13 @@ func run(ctx context.Context) (code int) {
 		return 22
 	}
 	return finishUpload(result, status, wrapper.record)
+}
+
+// No upload loop is admitted until the same-process startup check and private
+// dependencies succeed. Overwrite any previous fresh ACK as soon as this
+// process owns the status lease. Manager liveness remains authoritative.
+func publishPreflightStatus(status *connectedstatus.Writer, invocation string) error {
+	return status.Write(connectedstatus.Record{Version: "observer-connected-status/v1", InvocationID: invocation, State: "STOPPED", UpdatedAt: time.Now().UTC()})
 }
 
 // A canceled pacing wait does not call Step, so persist STOPPED here as well.
