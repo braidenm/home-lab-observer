@@ -9,8 +9,6 @@ import (
 	"syscall"
 
 	"golang.org/x/sys/unix"
-
-	"github.com/braidenm/home-lab-observer/internal/connectedactivation"
 )
 
 type Writer struct {
@@ -109,17 +107,15 @@ func (w *Writer) Write(r Record) error {
 	return w.writeFixed(".status-next", "status.json", b)
 }
 
-// WriteActivationResponse publishes only a canonical closed response in the
-// fixed private slot. A valid response remains diagnostic, not activation
-// authority; the manager and worker must match their own live invocation.
+// WriteActivationResponse publishes a bounded private response slot. The
+// uploader must encode its closed protocol first; importing that protocol
+// here would pull activation code into the collector's dependency closure.
+// This opaque slot is diagnostic, never activation authority.
 func (w *Writer) WriteActivationResponse(data []byte) error {
-	if len(data) == 0 || len(data) > connectedactivation.MaxBytes {
+	if len(data) == 0 || len(data) > 2048 {
 		return ErrUnsafe
 	}
 	closed := append([]byte(nil), data...)
-	if _, err := connectedactivation.DecodeResponse(closed); err != nil {
-		return ErrUnsafe
-	}
 	return w.writeFixed(".activation-next", "activation-response.json", closed)
 }
 
