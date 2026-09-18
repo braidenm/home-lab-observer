@@ -16,13 +16,21 @@
 - [ ] Specify and review credential lifecycle and OS isolation; implement without observation/control authority mixing.
 - [ ] Implement private handoff, bounded uploader and connection health with failure tests.
 - [ ] Integrate catalog, enrollment, OS-aware installation and authorized hosted views.
+  - [x] Implement a stopped-first Linux installer and synthetic packaged fixture locally; this is not a published or owner-installed connected release.
+  - [ ] Finish review and installed acceptance before making the connected package downloadable or enrolling the owner server.
+  - [ ] Show the registered owner server in Platform Demo and verify owner-controlled read/write sharing without granting global administration.
 - [ ] Verify packaged platforms, migration/rollback and an explicitly authorized owner canary.
   - [x] Implement and locally test the bounded [existing-ledger witness](used-ledger-witness.md); no activation or rollback authority.
   - [x] Integrate the separately named [offline existing-ledger command](existing-ledger-offline-mode.md), private binding-checked result and exact confinement policy with local focused tests.
   - [ ] Prove cross-version packaged compatibility; local command/policy tests do not establish this gate.
+  - [x] Merge pure ext4 identity, installed-profile, transition-record and recovery-classifier foundations (PRs 50-53); none authorizes activation.
+  - [ ] Integrate the bounded preparation witness, exact predecessor/staging retention and forward-only interrupted transition recovery.
+  - [ ] Prove compatible code selection and rollback across two packaged releases without restoring or changing the used ledger.
 - [ ] Review and implement [activation evidence](activation-design.md), including bounded same-process checks and the parent/worker enforcement rendezvous; no manual bypass.
   - [x] Implement bounded root request/response file helpers, closed manager-property parsing, dual-stack owned baseline fixtures, and internal transaction composition.
   - [x] Exercise malformed manager evidence, record metadata/size/link refusals, unexpected fixture traffic, cancellation, and uncertain-start identity capture in repeated Linux tests.
-  - [ ] Integrate the principal audit and public start/restart entry points; complete transaction-wide fault injection and independent review.
-  - [ ] Prove the exact packaged transaction in a disposable supported VM before any live activation. Helper tests are not this acceptance evidence.
+  - [x] Integrate the principal audit and public start/restart entry points locally; these remain unreleased and acceptance-gated.
+  - [ ] Complete transaction-wide fault injection and independent security review.
+  - [x] Run the packaged stopped synthetic VM subset and its reboot/abrupt-power-off identity witness.
+  - [ ] Prove the full packaged installed-principal, egress, TLS, enrollment and running-uploader transaction, including in-flight interruption recovery, in a disposable supported VM before live activation.
 - [ ] Specify richer remote quality-aware read models; keep Kubernetes deferred and actions in Spec 011.
