@@ -12,6 +12,10 @@ import (
 	"syscall"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
+	"github.com/braidenm/home-lab-observer/internal/connectedtransition"
+	"github.com/braidenm/home-lab-observer/internal/connectedunits"
 )
 
 // replaceTransitionAt is a private filesystem primitive, not an installer
@@ -30,9 +34,9 @@ func replaceTransitionAt(
 	after func(string) error,
 ) error {
 	if ctx == nil || ctx.Err() != nil || parent == nil || os.Getuid() != 0 || os.Geteuid() != 0 ||
-		!transitionRole(role, target) || len(proposal) == 0 || len(proposal) > 16<<10 ||
+		!transitionRole(role, target, mode, limit) || len(proposal) == 0 || len(proposal) > 16<<10 ||
 		len(previous) == 0 || len(previous) > limit || len(next) == 0 || len(next) > limit ||
-		(mode != 0600 && mode != 0644) || limit <= 0 || limit > 1<<20 {
+		limit <= 0 || limit > 1<<20 {
 		return ErrUnsafe
 	}
 	var fs unix.Statfs_t
@@ -109,18 +113,21 @@ func replaceTransitionAt(
 	return nil
 }
 
-func transitionRole(role, target string) bool {
+func transitionRole(role, target string, mode os.FileMode, limit int) bool {
+	if mode != 0644 {
+		return false
+	}
 	switch role {
 	case "ca":
-		return target == "ca-certificates.crt"
+		return target == "ca-certificates.crt" && limit == connectedtransition.MaxCABytes
 	case "hosts":
-		return target == "hosts"
+		return target == "hosts" && limit == 4096
 	case "collector":
-		return target == collectorUnit
+		return target == collectorUnit && limit == connectedunits.MaxRenderedBytes
 	case "uploader":
-		return target == uploaderUnit
+		return target == uploaderUnit && limit == connectedunits.MaxRenderedBytes
 	case "config":
-		return target == "installed.json"
+		return target == "installed.json" && limit == connectedprofile.MaxConfigBytes
 	}
 	return false
 }

@@ -42,7 +42,7 @@ func TestOwnedTransitionReplacementFixture(t *testing.T) {
 		"rename-interruption", "parent-sync-interruption", "already-next-sync-interruption",
 		"foreign-target", "linked-temp", "broad-temp",
 		"foreign-temp", "hardlink-temp", "oversized-temp", "broad-target",
-		"symlink-target", "canceled", "unknown-role",
+		"symlink-target", "canceled", "unknown-role", "wrong-mode", "wrong-limit",
 	} {
 		t.Run(scenario, func(t *testing.T) {
 			path := t.TempDir()
@@ -130,7 +130,14 @@ func TestOwnedTransitionReplacementFixture(t *testing.T) {
 					return nil
 				}
 			}
-			err = replaceTransitionAt(ctx, parent, "installed.json", role, proposal, previous, next, 0644, 4096, hook)
+			mode, limit := os.FileMode(0644), 4096
+			if scenario == "wrong-mode" {
+				mode = 0600
+			}
+			if scenario == "wrong-limit" {
+				limit = 8192
+			}
+			err = replaceTransitionAt(ctx, parent, "installed.json", role, proposal, previous, next, mode, limit, hook)
 			switch scenario {
 			case "replace", "already-next", "partial-temp":
 				if err != nil {
@@ -143,7 +150,7 @@ func TestOwnedTransitionReplacementFixture(t *testing.T) {
 				if err := replaceTransitionAt(context.Background(), parent, "installed.json", "config", proposal, previous, next, 0644, 4096, nil); err != nil {
 					t.Fatal("exact forward retry refused", err)
 				}
-			case "canceled", "unknown-role":
+			case "canceled", "unknown-role", "wrong-mode", "wrong-limit":
 				if err != ErrUnsafe {
 					t.Fatal("invalid replacement request accepted")
 				}
