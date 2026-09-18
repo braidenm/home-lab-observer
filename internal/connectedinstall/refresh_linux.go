@@ -50,7 +50,8 @@ func completion(data []byte) []byte {
 }
 
 // refreshState returns the last closed journal only when completion and current
-// installed identity agree. A missing journal is valid only without a receipt.
+// installed identity agree. Missing evidence is valid only for the initial
+// generation, before any refresh could have completed.
 func refreshState(c connectedprofile.Config) ([]byte, []byte, error) {
 	return refreshStateAt(c, connectedprofile.ConfigDirectory+"/refresh.json", connectedprofile.ConfigDirectory+"/refresh-complete")
 }
