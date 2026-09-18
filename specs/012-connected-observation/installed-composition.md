@@ -182,8 +182,14 @@ remains working and is neither overwritten nor retired by the canary.
 
 ## Implementation and evidence gates
 
-Deliver one coherent installed-profile PR with command composition, installer transaction, unit templates, operator
-instructions and synthetic fixtures, split into reviewable commits. Do not declare it done at command compilation.
+Deliver the installed profile in reviewable, independently tested primitive PRs,
+followed by one coherent composition PR for commands, installer transaction,
+unit templates, operator instructions and synthetic fixtures. A primitive does
+not authorize installation or activation. This first focused slice provides
+canonical non-secret installed config, fixed root-owned file reading, worker
+identity/environment checks and process-local secret hardening. It is unused by
+the standalone preview and does not create an account, unit or credential. Do
+not declare the profile done at command compilation.
 
 1. PR tests: dependency allowlists, typed config and grant handling, promotion crash boundaries/foreign principal/
    collision/partial-state refusal, same-inode ledger preservation, bounded diagnostics, serial cancellation and fixed
