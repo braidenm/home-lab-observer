@@ -2,6 +2,7 @@ package connectedtransition
 
 import (
 	"bytes"
+	"encoding/json"
 	"testing"
 
 	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
@@ -10,6 +11,7 @@ import (
 func stageFixture(t *testing.T, operation string) (Record, []byte, map[string][]byte) {
 	t.Helper()
 	record := sampleRecord(operation)
+	record.PredecessorFormat = PredecessorNone
 	record.PredecessorCompletionSHA = ""
 	oldCA := []byte("synthetic old CA\n")
 	newCA := []byte("synthetic new CA\n")
@@ -93,6 +95,7 @@ func chainedStageFixture(t *testing.T) (Record, []byte, map[string][]byte) {
 	nextConfig, _ := connectedprofile.Encode(record.Next)
 	record.NextResources.InstalledConfig = hash(nextConfig)
 	record.PredecessorCompletionSHA = hash(predecessorCompletion)
+	record.PredecessorFormat = PredecessorTransition
 	record.PreviousCodeBefore = predecessor.PreviousCodeAfter
 	record.PreviousCodeAfter = predecessor.PreviousCodeAfter
 	proposal, err := Encode(record)
@@ -115,6 +118,89 @@ func chainedStageFixture(t *testing.T) (Record, []byte, map[string][]byte) {
 		StagePredecessorCompletionName: predecessorCompletion,
 	}
 	return record, preparation, files
+}
+
+func legacyStageFixture(t *testing.T) (Record, []byte, map[string][]byte) {
+	t.Helper()
+	record, _, files := chainedStageFixture(t)
+	legacyJournal, legacyReceipt, legacy := legacyFixture(t)
+	previous, _ := connectedprofile.Encode(record.Previous)
+	legacyNext, _ := connectedprofile.Encode(legacy.Next)
+	if !bytes.Equal(previous, legacyNext) {
+		t.Fatal("legacy fixture does not lead to proposed previous state")
+	}
+	record.PredecessorFormat = PredecessorLegacy
+	record.PredecessorCompletionSHA = hash(legacyReceipt)
+	proposal, err := Encode(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	witness, err := Prepare(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preparation, err := EncodePreparation(witness)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files[StageProposalName] = proposal
+	files[StagePredecessorName] = legacyJournal
+	files[StagePredecessorCompletionName] = legacyReceipt
+	return record, preparation, files
+}
+
+func TestStageAdmissionBindsCompletedLegacyPredecessor(t *testing.T) {
+	record, preparation, files := legacyStageFixture(t)
+	if got, err := ValidateStage(preparation, files); err != nil || got.PredecessorFormat != PredecessorLegacy {
+		t.Fatal("exact legacy predecessor refused", err)
+	}
+	for name, mutate := range map[string]func(map[string][]byte){
+		"missing journal": func(f map[string][]byte) { delete(f, StagePredecessorName) },
+		"missing receipt": func(f map[string][]byte) { delete(f, StagePredecessorCompletionName) },
+		"changed journal": func(f map[string][]byte) { f[StagePredecessorName] = append(f[StagePredecessorName], '\n') },
+		"changed receipt": func(f map[string][]byte) { f[StagePredecessorCompletionName] = append(f[StagePredecessorCompletionName], '\n') },
+	} {
+		changed := cloneStage(files)
+		mutate(changed)
+		if _, err := ValidateStage(preparation, changed); err == nil {
+			t.Fatal(name, "legacy predecessor admitted")
+		}
+	}
+	wrong := record
+	wrong.PredecessorFormat = PredecessorTransition
+	wrongProposal, err := Encode(wrong)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrongWitness, _ := Prepare(wrong)
+	wrongPreparation, _ := EncodePreparation(wrongWitness)
+	wrongFiles := cloneStage(files)
+	wrongFiles[StageProposalName] = wrongProposal
+	if _, err := ValidateStage(wrongPreparation, wrongFiles); err == nil {
+		t.Fatal("legacy journal decoded as new-format predecessor")
+	}
+	_, _, unrelated := legacyFixture(t)
+	unrelated.Next.Addresses = []string{"9.9.9.9"}
+	unrelatedJournal, err := json.Marshal(unrelated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unrelatedReceipt := []byte("observer-connected-refresh-complete/v1\n" + hash(unrelatedJournal) + "\n")
+	wrong = record
+	wrong.PredecessorCompletionSHA = hash(unrelatedReceipt)
+	wrongProposal, err = Encode(wrong)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrongWitness, _ = Prepare(wrong)
+	wrongPreparation, _ = EncodePreparation(wrongWitness)
+	wrongFiles = cloneStage(files)
+	wrongFiles[StageProposalName] = wrongProposal
+	wrongFiles[StagePredecessorName] = unrelatedJournal
+	wrongFiles[StagePredecessorCompletionName] = unrelatedReceipt
+	if _, err := ValidateStage(wrongPreparation, wrongFiles); err == nil {
+		t.Fatal("valid but unrelated legacy completion admitted")
+	}
 }
 
 func TestStageAdmissionBindsExactPredecessor(t *testing.T) {

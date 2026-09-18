@@ -43,6 +43,7 @@ func transitionViewFixture(t *testing.T) (connectedstagefs.Snapshot, connectedre
 	oldSet, newSet := set(previous, "old synthetic CA\n"), set(next, "new synthetic CA\n")
 	record := connectedtransition.Record{
 		Version: connectedtransition.Version, Operation: "refresh", Previous: previous, Next: next,
+		PredecessorFormat: connectedtransition.PredecessorNone,
 		ContractSHA256: strings.Repeat("d", 64),
 		PreviousResources: connectedresources.Hash(oldSet), NextResources: connectedresources.Hash(newSet),
 		Ledger: connectedtransition.Ledger{
