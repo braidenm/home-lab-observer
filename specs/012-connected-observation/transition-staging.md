@@ -17,6 +17,15 @@ oversized entries refuse. This check does not establish file ownership,
 durability, legacy-journal migration, ledger identity or worker state; the
 installer must prove those separately from anchored descriptors.
 
+The next read-only Linux inspector must open the fixed stage beneath the
+trusted root-owned config directory through no-follow descriptors, require a
+0700 root-owned stage on the same ext4 device, and require exactly the fixed
+0600 root-owned regular-file members with one link, no ACL and bounded bytes.
+The preparation witness is a separate 0600 config-root file. Only after these
+checks may it call the pure stage validator. A synthetic root fixture on a
+GitHub-hosted runner must exercise wrong mode, symlink, extra entry, byte
+substitution and missing member; this does not prove writes or crash recovery.
+
 ## Fixed evidence
 
 - `transition-preparing.json` in the root-owned config directory contains
