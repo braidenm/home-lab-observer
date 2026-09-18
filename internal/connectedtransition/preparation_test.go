@@ -61,6 +61,7 @@ func TestPreparationRejectsInvalidIntent(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, mutate := range map[string]func(*Preparation){
+		"format":         func(p *Preparation) { p.PredecessorFormat = "auto" },
 		"version":        func(p *Preparation) { p.Version = "observer-connected-transition-preparing/v2" },
 		"transition":     func(p *Preparation) { p.TransitionSHA256 = "not-a-hash" },
 		"predecessor":    func(p *Preparation) { p.PredecessorCompletionSHA = "ABC" },

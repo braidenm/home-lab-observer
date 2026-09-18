@@ -18,6 +18,7 @@ type Preparation struct {
 	TransitionSHA256         string                  `json:"transition_sha256"`
 	Previous                 connectedprofile.Config `json:"previous"`
 	PreviousResources        Resources               `json:"previous_resources"`
+	PredecessorFormat        PredecessorFormat       `json:"predecessor_format"`
 	PredecessorCompletionSHA string                  `json:"predecessor_completion_sha256"`
 	Ledger                   Ledger                  `json:"ledger"`
 }
@@ -32,6 +33,7 @@ func Prepare(record Record) (Preparation, error) {
 	return Preparation{
 		Version: PreparationVersion, TransitionSHA256: hash(encoded),
 		Previous: record.Previous, PreviousResources: record.PreviousResources,
+		PredecessorFormat:        record.PredecessorFormat,
 		PredecessorCompletionSHA: record.PredecessorCompletionSHA,
 		Ledger:                   record.Ledger,
 	}, nil
@@ -41,7 +43,8 @@ func (p Preparation) Validate() error {
 	previous, err := connectedprofile.Encode(p.Previous)
 	if err != nil || p.Version != PreparationVersion ||
 		!digest(p.TransitionSHA256, false) ||
-		!digest(p.PredecessorCompletionSHA, true) ||
+		!validPredecessor(p.PredecessorFormat, p.PredecessorCompletionSHA) ||
+		(p.PredecessorFormat == PredecessorNone && p.Previous.PolicyGeneration != 1) ||
 		!p.PreviousResources.valid() ||
 		p.PreviousResources.InstalledConfig != hash(previous) ||
 		p.PreviousResources.Hosts != hosts(p.Previous.Addresses) ||

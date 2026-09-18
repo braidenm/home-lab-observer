@@ -19,6 +19,14 @@ import (
 const Version = "observer-connected-transition/v1"
 const MaxRecordBytes = 16 << 10
 
+type PredecessorFormat string
+
+const (
+	PredecessorNone       PredecessorFormat = "none"
+	PredecessorLegacy     PredecessorFormat = "legacy-refresh-v1"
+	PredecessorTransition PredecessorFormat = "transition-v1"
+)
+
 var ErrInvalid = errors.New("connected_transition_invalid")
 
 type Resources struct {
@@ -60,6 +68,7 @@ type Record struct {
 	Operation                string                  `json:"operation"`
 	Previous                 connectedprofile.Config `json:"previous"`
 	Next                     connectedprofile.Config `json:"next"`
+	PredecessorFormat        PredecessorFormat       `json:"predecessor_format"`
 	PredecessorCompletionSHA string                  `json:"predecessor_completion_sha256"`
 	PreviousCodeBefore       string                  `json:"previous_code_before"`
 	PreviousCodeAfter        string                  `json:"previous_code_after"`
@@ -105,7 +114,9 @@ func hosts(addresses []string) string {
 func (r Record) Validate() error {
 	if r.Version != Version || r.Previous.Validate() != nil || r.Next.Validate() != nil ||
 		r.Previous.PolicyGeneration == math.MaxUint64 || r.Next.PolicyGeneration != r.Previous.PolicyGeneration+1 ||
-		!digest(r.PredecessorCompletionSHA, true) || !digest(r.PreviousCodeBefore, true) || !digest(r.PreviousCodeAfter, true) ||
+		!validPredecessor(r.PredecessorFormat, r.PredecessorCompletionSHA) ||
+		(r.PredecessorFormat == PredecessorNone && r.Previous.PolicyGeneration != 1) ||
+		!digest(r.PreviousCodeBefore, true) || !digest(r.PreviousCodeAfter, true) ||
 		!digest(r.ContractSHA256, false) || !r.PreviousResources.valid() || !r.NextResources.valid() ||
 		!digest(r.Ledger.LogicalSHA256, false) || ledgeridentity.Validate(r.Ledger.Physical.witness()) != nil {
 		return ErrInvalid
@@ -137,6 +148,17 @@ func (r Record) Validate() error {
 		return ErrInvalid
 	}
 	return nil
+}
+
+func validPredecessor(format PredecessorFormat, receiptSHA string) bool {
+	switch format {
+	case PredecessorNone:
+		return receiptSHA == ""
+	case PredecessorLegacy, PredecessorTransition:
+		return digest(receiptSHA, false)
+	default:
+		return false
+	}
 }
 
 func Encode(r Record) ([]byte, error) {

@@ -48,9 +48,10 @@ The [staging design](../../specs/012-connected-observation/transition-staging.md
 requires a closed predecessor format before the first new-format transition:
 none, exact legacy refresh, or exact new-format transition. A completed legacy
 receipt is retained and digest-bound in the stage, while the new-format
-authoritative names remain absent until publication. The current pure stage
-classifier does not implement this migration gate; it must not equate legacy
-evidence with an initial installation.
+authoritative names remain absent until publication. The pure stage classifier
+now admits the exact legacy bytes, but the installer has not proven the fixed
+installed legacy files match those staged copies or completed VM migration
+acceptance. It must not equate legacy evidence with an initial installation.
 ADR 020 remains authoritative on isolation and ledger preservation; this proposal
 supersedes no accepted ADR until reviewed and implemented.
 

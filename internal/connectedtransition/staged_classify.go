@@ -31,17 +31,17 @@ func ClassifyStaged(preparation []byte, files map[string][]byte, observed Staged
 		return "", ErrInvalid
 	}
 	proposal := files[StageProposalName]
-	predecessor, hasPredecessor := files[StagePredecessorName]
+	predecessor := files[StagePredecessorName]
 	predecessorReceipt := files[StagePredecessorCompletionName]
 
-	if hasPredecessor && observed.Journal != nil && bytes.Equal(observed.Journal, predecessor) {
+	if record.PredecessorFormat == PredecessorTransition && observed.Journal != nil && bytes.Equal(observed.Journal, predecessor) {
 		if observed.Receipt == nil || !bytes.Equal(observed.Receipt, predecessorReceipt) ||
 			observed.Resources != record.PreviousResources {
 			return "", ErrInvalid
 		}
 		return StagedPreparationPending, nil
 	}
-	if !hasPredecessor && observed.Journal == nil {
+	if record.PredecessorFormat != PredecessorTransition && observed.Journal == nil {
 		if observed.Receipt != nil || observed.Resources != record.PreviousResources {
 			return "", ErrInvalid
 		}
@@ -51,10 +51,10 @@ func ClassifyStaged(preparation []byte, files map[string][]byte, observed Staged
 		return "", ErrInvalid
 	}
 	receipt := observed.Receipt
-	if hasPredecessor && receipt == nil {
+	if record.PredecessorFormat == PredecessorTransition && receipt == nil {
 		return "", ErrInvalid
 	}
-	if hasPredecessor && receipt != nil && bytes.Equal(receipt, predecessorReceipt) {
+	if record.PredecessorFormat == PredecessorTransition && receipt != nil && bytes.Equal(receipt, predecessorReceipt) {
 		receipt = nil // Retained old receipt is not completion of this proposal.
 	}
 	result, err := Classify(record, Observed{Resources: observed.Resources, Ledger: observed.Ledger, Receipt: receipt})

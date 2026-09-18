@@ -39,7 +39,7 @@ func sampleRecord(operation string) Record {
 	}
 	return Record{
 		Version: Version, Operation: operation, Previous: c, Next: next,
-		PredecessorCompletionSHA: hexByte("c"), PreviousCodeBefore: "", PreviousCodeAfter: previousCode,
+		PredecessorFormat: PredecessorTransition, PredecessorCompletionSHA: hexByte("c"), PreviousCodeBefore: "", PreviousCodeAfter: previousCode,
 		ContractSHA256: hexByte("d"), PreviousResources: previousResources, NextResources: nextResources,
 		Ledger: Ledger{LogicalSHA256: hexByte("e"), Physical: FromWitness(ledgeridentity.Witness{
 			FilesystemUUID: strings.Repeat("1", 32),
@@ -83,6 +83,7 @@ func TestCanonicalRecordAndCompletion(t *testing.T) {
 
 func TestOperationAndWitnessRefusals(t *testing.T) {
 	legacyPredecessor := sampleRecord("refresh")
+	legacyPredecessor.PredecessorFormat = PredecessorNone
 	legacyPredecessor.PredecessorCompletionSHA = ""
 	legacyPredecessor.PreviousCodeBefore = hexByte("f")
 	legacyPredecessor.PreviousCodeAfter = legacyPredecessor.PreviousCodeBefore
@@ -90,6 +91,8 @@ func TestOperationAndWitnessRefusals(t *testing.T) {
 		t.Fatal("optional predecessor or retained code history refused", err)
 	}
 	for name, mutate := range map[string]func(*Record){
+		"unknown predecessor format": func(r *Record) { r.PredecessorFormat = "auto" },
+		"missing predecessor hash": func(r *Record) { r.PredecessorCompletionSHA = "" },
 		"unknown operation":         func(r *Record) { r.Operation = "restore" },
 		"generation gap":            func(r *Record) { r.Next.PolicyGeneration++ },
 		"foreign owner":             func(r *Record) { r.Next.ServerID = "srv_" + strings.Repeat("c", 32) },
