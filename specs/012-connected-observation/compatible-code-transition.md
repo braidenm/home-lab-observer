@@ -179,6 +179,17 @@ files are only retained evidence, not a second current-state predicate. A legacy
 manifest without the known compatibility contract still refuses code selection;
 journal migration alone does not upgrade executable compatibility.
 
+The pure migration-admission slice implements only the byte-level legacy
+`observer-connected-refresh/v1` record/receipt check. It admits both exact
+canonical bytes together when the record's next configuration equals a valid
+caller-supplied installed configuration, and returns the SHA-256 of the exact
+legacy completion as the proposed predecessor link. It rejects missing,
+extra, malformed, conflicting or mixed-generation bytes. It performs no
+filesystem I/O and cannot prove root ownership, durable synchronization,
+worker stoppage or current package compatibility; the installer must establish
+those before using the result. No transition or activation command is wired by
+this slice.
+
 For refresh, stage the exact bounded new CA bytes before publishing the journal;
 the journal binds their hash. No mutable host-CA reread or fresh DNS result can
 change a resumed transition. Exact journal-owned staging is bounded to one pending
