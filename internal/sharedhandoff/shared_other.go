@@ -15,6 +15,9 @@ type Reader struct{}
 func OpenWriter(string, Policy) (*Writer, error)                              { return nil, ErrUnsupported }
 func OpenReader(string, Policy) (*Reader, error)                              { return nil, ErrUnsupported }
 func (*Writer) Publish(observation.Snapshot, remoteprojection.Identity) error { return ErrUnsupported }
-func (*Reader) Read(context.Context, string) ([]byte, error)                  { return nil, ErrUnsupported }
-func (*Writer) Close() error                                                  { return nil }
-func (*Reader) Close() error                                                  { return nil }
+func (*Writer) PublishNative(observation.Snapshot, remoteprojection.Identity) error {
+	return ErrUnsupported
+}
+func (*Reader) Read(context.Context, string) ([]byte, error) { return nil, ErrUnsupported }
+func (*Writer) Close() error                                 { return nil }
+func (*Reader) Close() error                                 { return nil }

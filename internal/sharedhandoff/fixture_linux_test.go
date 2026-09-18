@@ -98,6 +98,9 @@ func TestOwnedCrossPrincipalFixture(t *testing.T) {
 	for _, role := range []string{"reader-missing", "publish", "read-denials", "third", "wrong-reader", "wrong-group", "writer-wrong-group", "writer-tests"} {
 		runOwned(t, root, role)
 	}
+	for _, role := range []string{"publish-native", "read-native", "publish"} {
+		runOwned(t, root, role)
+	}
 	runConcurrent(t, root)
 	// All mutations below affect only synthetic files in this owned chroot.
 	for _, kind := range []string{"access", "default"} {
@@ -170,7 +173,7 @@ func runOwned(t *testing.T, root, role string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	uid, gid, groups := fixturePolicy.CollectorUID, fixturePolicy.SharedGID, []uint32{}
-	if role == "read-denials" || role == "reject-directory" || role == "reject-file" || role == "read-loop" || role == "reader-missing" || role == "read-invalid" {
+	if role == "read-denials" || role == "read-native" || role == "reject-directory" || role == "reject-file" || role == "read-loop" || role == "reader-missing" || role == "read-invalid" {
 		uid, gid, groups = fixturePolicy.UploaderUID, 61012, []uint32{fixturePolicy.SharedGID}
 	}
 	if role == "third" || role == "wrong-reader" {
@@ -215,6 +218,28 @@ func runChild(t *testing.T, role string) {
 	}
 	p := fixturePolicy
 	switch role {
+	case "publish-native":
+		w, err := OpenWriter("/handoff", p)
+		if err != nil {
+			t.Fatal("native writer open failed")
+		}
+		defer w.Close()
+		raw, id := sample()
+		raw.CPU = observation.Section[observation.CPU]{State: observation.Available, Data: &observation.CPU{LogicalCPUs: 4, UsagePercent: 12}}
+		raw.Memory.State, raw.Uptime.State, raw.Filesystems.State = observation.Unknown, observation.Unknown, observation.Unknown
+		if w.PublishNative(raw, id) != nil {
+			t.Fatal("native publish failed")
+		}
+	case "read-native":
+		r, err := OpenReader("/handoff", p)
+		if err != nil {
+			t.Fatal("native reader open failed")
+		}
+		defer r.Close()
+		data, err := r.Read(context.Background(), p.ServerID)
+		if err != nil || remoteprojection.ValidateNative(data, p.ServerID) != nil || remoteprojection.Validate(data, p.ServerID) == nil {
+			t.Fatal("quality-aware native contract lost at shared handoff")
+		}
 	case "publish":
 		w, err := OpenWriter("/handoff", p)
 		if err != nil {

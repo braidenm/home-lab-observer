@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"math"
 	"regexp"
@@ -263,16 +262,7 @@ func validBinding(b Binding) bool {
 	return serverPattern.MatchString(b.ServerID) && connectorPattern.MatchString(b.ConnectorID)
 }
 func collectionTime(body []byte, server string) (time.Time, bool) {
-	if remoteprojection.Validate(body, server) != nil {
-		return time.Time{}, false
-	}
-	var doc struct {
-		CollectedAt string `json:"collected_at"`
-	}
-	if json.Unmarshal(body, &doc) != nil {
-		return time.Time{}, false
-	}
-	at, err := time.Parse(time.RFC3339Nano, doc.CollectedAt)
+	at, err := remoteprojection.UploadCollectionTime(body, server)
 	return at, err == nil
 }
 
