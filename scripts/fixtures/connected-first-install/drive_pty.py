@@ -60,7 +60,7 @@ def main() -> int:
                     print("FIXTURE_DRIVER_PHASE_REFUSED", flush=True)
                     return 1
                 os.sync()
-                print("POWER_CUT_READY", flush=True)
+                print("HLO_VM_POWER_CUT_READY", flush=True)
                 while True:
                     time.sleep(60)
             ready, _, _ = select.select([terminal], [], [], 0.01)
