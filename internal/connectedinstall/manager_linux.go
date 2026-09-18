@@ -7,14 +7,18 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 	"os/exec"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/braidenm/home-lab-observer/internal/connectedenroll"
 	"github.com/braidenm/home-lab-observer/internal/connectedpolicy"
 	"github.com/braidenm/home-lab-observer/internal/connectedunits"
+	"github.com/braidenm/home-lab-observer/internal/ledgerwitness"
+	"github.com/braidenm/home-lab-observer/internal/uploadstate"
 )
 
 const collectorUnit = "home-lab-observer-connected-collector.service"
@@ -67,10 +71,31 @@ func service(ctx context.Context, verb, unit string) error {
 }
 
 func runEnrollment(ctx context.Context, properties []string, executable, mode string, input []byte, policy connectedunits.EnrollmentInput) ([]byte, error) {
-	if executable != "/bin/observer-connected-uploader" || (mode != "enroll" && mode != "validate-enrollment" && mode != "validate-ledger") || len(properties) > 64 || len(input) > 512 {
+	return runEnrollmentWithPreflight(ctx, properties, executable, mode, input, policy, enrollmentState)
+}
+
+// The private reader seam proves invalid requests are rejected before querying
+// the manager. Production always supplies the fixed enrollmentState reader.
+func runEnrollmentWithPreflight(ctx context.Context, properties []string, executable, mode string, input []byte, policy connectedunits.EnrollmentInput, beforeState func(context.Context) (map[string]string, error)) ([]byte, error) {
+	if executable != "/bin/observer-connected-uploader" || (mode != "enroll" && mode != "validate-enrollment" && mode != "validate-ledger" && mode != "validate-existing-ledger") || len(properties) > 64 || len(input) > 512 {
 		return nil, ErrUnsafe
 	}
-	before, err := enrollmentState(ctx)
+	var existingBinding uploadstate.Binding
+	if mode == "validate-existing-ledger" {
+		var expected connectedenroll.ValidationInput
+		if json.Unmarshal(input, &expected) != nil {
+			return nil, ErrUnsafe
+		}
+		canonical, _ := json.Marshal(expected)
+		if !bytes.Equal(input, canonical) || expected.UploaderUID != policy.UploaderUID || expected.UploaderGID != policy.UploaderGID || expected.SharedGID != policy.SharedGID {
+			return nil, ErrUnsafe
+		}
+		existingBinding = uploadstate.Binding{ServerID: expected.ServerID, ConnectorID: expected.ConnectorID}
+		if uploadstate.ValidateRecord(uploadstate.Record{Binding: existingBinding}, existingBinding) != nil {
+			return nil, ErrUnsafe
+		}
+	}
+	before, err := beforeState(ctx)
 	if err != nil || before["LoadState"] != "not-found" {
 		return nil, ErrUnsafe
 	}
@@ -107,7 +132,7 @@ func runEnrollment(ctx context.Context, properties []string, executable, mode st
 	go func() { done <- c.Wait() }()
 	invocation, err := awaitEnrollment(child, marker)
 	if err == nil {
-		if mode == "validate-ledger" || mode == "validate-enrollment" {
+		if mode == "validate-ledger" || mode == "validate-enrollment" || mode == "validate-existing-ledger" {
 			err = connectedpolicy.ValidateOffline(child, enrollmentUnit, connectedpolicy.OfflineExpectation{UploaderUID: policy.UploaderUID, UploaderGID: policy.UploaderGID, SharedGID: policy.SharedGID, ArtifactSHA256: policy.ArtifactSHA256, Mode: mode})
 		} else {
 			err = connectedpolicy.ValidateEffective(child, enrollmentUnit, policy.Addresses)
@@ -141,6 +166,12 @@ func runEnrollment(ctx context.Context, properties []string, executable, mode st
 			return nil, ErrRecovery
 		}
 		return nil, ErrRecovery
+	}
+	if mode == "validate-existing-ledger" {
+		if _, err := ledgerwitness.DecodeResult(output.data, existingBinding); err != nil {
+			clear(output.data)
+			return nil, ErrRecovery
+		}
 	}
 	return output.data, nil
 }

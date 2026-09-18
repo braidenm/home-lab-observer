@@ -36,6 +36,7 @@ type EnrollmentMode string
 const Enroll EnrollmentMode = "enroll"
 const ValidateEnrollment EnrollmentMode = "validate-enrollment"
 const ValidateLedger EnrollmentMode = "validate-ledger"
+const ValidateExistingLedger EnrollmentMode = "validate-existing-ledger"
 
 type EnrollmentCommand struct {
 	Properties []string
@@ -118,7 +119,7 @@ func RenderUnits(c connectedprofile.Config) (Units, error) {
 // StandardInput/Output must remain those private inherited pipes; stderr must be
 // discarded by the root parent. No secret enters properties or arguments.
 func RenderEnrollmentProperties(c EnrollmentInput, mode EnrollmentMode) (EnrollmentCommand, error) {
-	if (mode != Enroll && mode != ValidateEnrollment && mode != ValidateLedger) || !validID(c.UploaderUID) || !validID(c.UploaderGID) || !validID(c.SharedGID) || c.UploaderGID == c.SharedGID || !digestPattern.MatchString(c.ArtifactSHA256) {
+	if (mode != Enroll && mode != ValidateEnrollment && mode != ValidateLedger && mode != ValidateExistingLedger) || !validID(c.UploaderUID) || !validID(c.UploaderGID) || !validID(c.SharedGID) || c.UploaderGID == c.SharedGID || !digestPattern.MatchString(c.ArtifactSHA256) {
 		return EnrollmentCommand{}, ErrInvalid
 	}
 	addresses, err := rules(c.Addresses)
@@ -132,7 +133,7 @@ func RenderEnrollmentProperties(c EnrollmentInput, mode EnrollmentMode) (Enrollm
 		d.SocketDeny = " socket"
 		d.PrivateNetwork = "yes"
 	}
-	if mode == ValidateLedger {
+	if mode == ValidateLedger || mode == ValidateExistingLedger {
 		d.StateBind = "/var/lib/home-lab-observer-connected/ledger:/state/ledger"
 		d.StateWrite = "/state/ledger"
 	}

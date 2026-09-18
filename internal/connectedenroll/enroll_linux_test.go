@@ -25,7 +25,7 @@ func TestPrivateInputIsCanonicalBoundedAndClosed(t *testing.T) {
 }
 
 func TestModeAndPrincipalRefusalBeforeStoreMutation(t *testing.T) {
-	for _, mode := range []string{"enroll", "validate-enrollment", "validate-ledger", "unknown"} {
+	for _, mode := range []string{"enroll", "validate-enrollment", "validate-ledger", "validate-existing-ledger", "unknown"} {
 		var output bytes.Buffer
 		// Empty/zero principal is rejected before any fixed state path or transport
 		// is opened. This test never invokes a live enrollment or manager unit.

@@ -7,7 +7,7 @@ import (
 )
 
 // OfflineExpectation is installer-owned identity, not data from the worker pipe.
-// The two modes intentionally mount different single private state directories.
+// Enrollment and ledger modes intentionally mount different private directories.
 type OfflineExpectation struct {
 	UploaderUID, UploaderGID, SharedGID uint32
 	ArtifactSHA256                      string
@@ -39,7 +39,7 @@ func offlineExpected(e OfflineExpectation) (map[string]string, error) {
 		return nil, ErrUnsafe
 	}
 	state := "enrollment"
-	if e.Mode == "validate-ledger" {
+	if e.Mode == "validate-ledger" || e.Mode == "validate-existing-ledger" {
 		state = "ledger"
 	} else if e.Mode != "validate-enrollment" {
 		return nil, ErrUnsafe

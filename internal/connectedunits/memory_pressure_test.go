@@ -13,7 +13,7 @@ func TestEveryOwnedProfileSkipsMemoryPressureEnvironment(t *testing.T) {
 	}
 	profiles := []string{string(u.Collector), string(u.Uploader)}
 	input := EnrollmentInput{c.UploaderUID, c.UploaderGID, c.SharedGID, c.ArtifactSHA256, c.Addresses}
-	for _, mode := range []EnrollmentMode{Enroll, ValidateEnrollment, ValidateLedger} {
+	for _, mode := range []EnrollmentMode{Enroll, ValidateEnrollment, ValidateLedger, ValidateExistingLedger} {
 		command, err := RenderEnrollmentProperties(input, mode)
 		if err != nil {
 			t.Fatal(err)

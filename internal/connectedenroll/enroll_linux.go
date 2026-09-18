@@ -92,6 +92,9 @@ func Run(ctx context.Context, mode string, in io.Reader, out io.Writer) int {
 	if mode == "validate-ledger" {
 		return validateLedger(ctx, in, out)
 	}
+	if mode == "validate-existing-ledger" {
+		return validateExistingLedger(ctx, in, out)
+	}
 	if mode != "enroll" {
 		return 22
 	}

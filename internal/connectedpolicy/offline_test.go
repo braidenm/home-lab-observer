@@ -31,7 +31,7 @@ func offlineBytes(m map[string]string) []byte {
 	return []byte(b.String())
 }
 func TestOfflineModesAndActualManagerNormalization(t *testing.T) {
-	for _, mode := range []string{"validate-enrollment", "validate-ledger"} {
+	for _, mode := range []string{"validate-enrollment", "validate-ledger", "validate-existing-ledger"} {
 		e, m := offlineSample(t, mode)
 		if validateOffline(offlineBytes(m), e) != nil {
 			t.Fatal("normalized offline policy refused")
@@ -102,6 +102,16 @@ func TestOfflineRejectsIncompleteAmbiguousInputs(t *testing.T) {
 		mutate(&bad)
 		if validateOffline(data, bad) != ErrUnsafe {
 			t.Fatal("invalid expected authority accepted")
+		}
+	}
+}
+
+func TestExistingLedgerRejectsEnrollmentAndAdditionalState(t *testing.T) {
+	for _, bind := range []string{"/var/lib/home-lab-observer-connected/enrollment:/state/enrollment:rbind", "/var/lib/home-lab-observer-connected/ledger:/state/ledger:rbind /var/lib/home-lab-observer-connected/enrollment:/state/enrollment:rbind"} {
+		e, m := offlineSample(t, "validate-existing-ledger")
+		m["BindPaths"] = bind
+		if validateOffline(offlineBytes(m), e) != ErrUnsafe {
+			t.Fatal("existing validation acquired unrelated state")
 		}
 	}
 }

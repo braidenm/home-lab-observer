@@ -36,8 +36,8 @@ lengths are big-endian. C1 validation precedes encoding; field bounds remain C1'
 - Test real D1 pristine/acknowledged/pending/terminal/exhausted states; preserve
   directory/database identity and logical data across inspection. Reject missing,
   busy, corrupt, unsupported and wrong-binding state, plus cancellation.
-- Keep pristine enrollment validation unchanged. Add the separately named offline
-  command and exact policy only in the following reviewed integration slice.
+- Keep pristine enrollment validation unchanged. The separately named offline
+  command and exact policy are integrated in the [following bounded slice](existing-ledger-offline-mode.md).
 - Independent review before integration. The transition journal, compiled
   compatibility contract, cross-version fixtures and VM recovery gates remain open.
 

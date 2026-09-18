@@ -17,7 +17,7 @@ func TestSeparateInstalledWorkerDependencyBoundaries(t *testing.T) {
 	}
 	for role, modules := range map[string]string{
 		"collector": "connectedidentity connectedprocess connectedprofile connectedruntime connectedstatus observation numerichost remoteprojection ownerfs sharedhandoff",
-		"uploader":  "connectedcredential connectedprofile connectedactivation connectedruntime connectedstartup observation remoteprojection uploadstate enrollmentcoord ownerfs uploadledger enrollmentstore platformtransport connectedenroll connectedidentity connectedstatus sharedhandoff uploadloop",
+		"uploader":  "connectedcredential connectedprofile connectedactivation connectedruntime connectedstartup observation remoteprojection uploadstate enrollmentcoord ownerfs uploadledger ledgerwitness enrollmentstore platformtransport connectedenroll connectedidentity connectedstatus sharedhandoff uploadloop",
 	} {
 		t.Run(role, func(t *testing.T) {
 			allowed := map[string]bool{}

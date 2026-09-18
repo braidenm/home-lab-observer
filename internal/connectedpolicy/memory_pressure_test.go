@@ -3,7 +3,7 @@ package connectedpolicy
 import "testing"
 
 func TestOfflineMemoryPressurePolicy(t *testing.T) {
-	for _, mode := range []string{"validate-enrollment", "validate-ledger"} {
+	for _, mode := range []string{"validate-enrollment", "validate-ledger", "validate-existing-ledger"} {
 		for _, value := range []string{"skip", "off", "on", "auto", "unknown", "", "SKIP"} {
 			e, m := offlineSample(t, mode)
 			m["MemoryPressureWatch"] = value
