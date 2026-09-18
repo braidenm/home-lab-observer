@@ -68,6 +68,13 @@ forward recovery required or
 completion cleanup pending. None of these is a worker startup, abort or cleanup
 permit; filesystem ownership, sync and stopped-worker proofs are external.
 
+The same anchored ext4 config-directory policy now reads the two fixed legacy
+refresh names independently, with exact root ownership, 0600 mode, no links or
+ACLs and protocol byte bounds. Absent, journal-only and receipt-only states
+remain distinct detached evidence. The read does not establish a completed
+pair or compare it to the stage; those admission checks remain separate and
+must precede any transition publication or recovery.
+
 A read-only composition now requires the stage's decoded record to equal its
 exact canonical proposal, re-derives code-owned previous/next resource bytes,
 rejects active bytes outside those sets, and joins the fixed journal/receipt
