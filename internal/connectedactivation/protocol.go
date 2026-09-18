@@ -158,4 +158,3 @@ func MatchCommit(r Request, retained Response, commit Commit) bool {
 	}
 	return commit.RequestSHA256 == retained.RequestSHA256 && commit.InvocationID == retained.InvocationID && commit.Challenge == retained.Challenge
 }
-

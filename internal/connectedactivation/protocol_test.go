@@ -157,4 +157,3 @@ func TestDecodersRequireClosedCanonicalBoundedRecords(t *testing.T) {
 		t.Fatal("generation overflow accepted")
 	}
 }
-
