@@ -124,13 +124,13 @@ Each of the five fixed active resources needs a proposal-bound, role-specific
 temporary name in its own parent directory:
 `.observer-transition-<role>-<full lowercase SHA-256 of proposal bytes>`,
 where `<role>` is one of `ca`, `hosts`, `collector`, `uploader`, or `config`.
-The old generic `.install-next`
-slot is not transition evidence and must never be silently adopted. Create
-the temporary file exclusively through an anchored descriptor, with the exact
-root owner, mode, no ACL and one link. Write only the code-derived next bytes,
-sync the file, verify the active target is still exactly previous or next and
-the same no-follow inode immediately before replacement,
-rename over the previous target when needed, then sync the parent directory.
+The old generic `.install-next` slot is not transition evidence and must never
+be silently adopted. Create the temporary file exclusively through an
+anchored descriptor, with exact root ownership, mode, no ACL and one link.
+Write only the code-derived next bytes and sync the file. Then verify that the
+active target is still exactly previous or next
+and retains the same no-follow inode immediately before replacement. Rename
+over the previous target when needed, then sync the parent directory.
 Do not treat file sync as directory-entry durability; Linux documents that
 the containing directory also needs an explicit sync
 ([fsync(2)](https://man7.org/linux/man-pages/man2/fsync.2.html)).

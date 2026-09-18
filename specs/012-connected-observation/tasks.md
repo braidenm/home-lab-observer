@@ -43,6 +43,7 @@
   - [x] Classify complete staged evidence without treating a retained predecessor receipt as new completion; this does not permit abort, cleanup or worker startup.
   - [x] Derive exact previous/next config, hosts and reviewed unit bytes from the record and stage CA; active filesystem verification and writes remain open.
   - [x] Read the five fixed root-owned active paths and reject bytes outside the exact previous/next sets; stopped-worker and writable-mode proofs remain open.
+  - [ ] Implement proposal-bound active-file replacement with exact residue admission, sync fault injection, and forward-only recovery.
   - [x] Add independent anchored ext4 stage inspection and exclusive publication primitives with root synthetic interruption tests; not wired to installer commands.
   - [x] Read the fixed authoritative transition journal/receipt names under the anchored ext4 config directory; classification and writes remain separate.
   - [x] Fence normal start/restart/refresh on fixed staging residue; no abort, cleanup or forward recovery operation yet.
