@@ -19,3 +19,12 @@ The log summary contract exposes fixed source/severity dimensions and explicit h
 event codes, identities, paths, native payloads, or arbitrary query dimensions.
 
 Run `npm test` from the repository root. Fixtures contain reserved domains and synthetic identifiers only.
+
+Connected host-only projection fixtures live under `remote/fixtures/`. Legacy
+`numeric-host/v1` remains unchanged; `home-lab-native-host-metrics/v1` represents
+CPU, memory, uptime and filesystem quality independently. Complete and partial
+producer fixtures are shared byte-for-byte with the Platform Demo parser tests.
+See the [quality-aware producer specification](../specs/012-connected-observation/quality-aware-producer.md)
+for privacy limits, schema dispatch, receiver evidence and remaining activation
+gates. These contracts do not enable a connected installer or add remote logs,
+processes, containers or control permissions.

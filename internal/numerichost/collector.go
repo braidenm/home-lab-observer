@@ -135,11 +135,22 @@ func (c *Collector) Filesystems(ctx context.Context) observation.Section[[]obser
 	}
 	sort.Slice(ps, func(i, j int) bool { return ps[i].Mountpoint < ps[j].Mountpoint })
 	total := len(ps)
+	truncated := total > c.config.MaxFilesystems
 	if len(ps) > c.config.MaxFilesystems {
 		ps = ps[:c.config.MaxFilesystems]
 	}
 	out := make([]observation.Filesystem, 0, len(ps))
 	errs := 0
+	failedState, failedReason := observation.Unavailable, observation.ReasonCollectionFailed
+	recordFailure := func(err error) {
+		state, reason := classify(err)
+		if errs == 0 {
+			failedState, failedReason = state, reason
+		} else if state != failedState || reason != failedReason {
+			failedState, failedReason = observation.Unavailable, observation.ReasonCollectionFailed
+		}
+		errs++
+	}
 	seen := map[string]bool{}
 	for _, p := range ps {
 		if seen[p.Mountpoint] {
@@ -147,35 +158,34 @@ func (c *Collector) Filesystems(ctx context.Context) observation.Section[[]obser
 		}
 		seen[p.Mountpoint] = true
 		if ctx.Err() != nil {
-			errs++
+			recordFailure(ctx.Err())
 			break
 		}
 		u, e := c.provider.Usage(ctx, p.Mountpoint)
 		if e != nil || !percent(u.UsedPercent) {
-			errs++
+			recordFailure(e)
 			continue
 		}
 		i := len(out) + 1
 		out = append(out, observation.Filesystem{ID: formatID("filesystem", i), DisplayName: formatName("Filesystem", i), Type: safeToken(p.Type, "unknown", 32), TotalBytes: u.Total, UsedBytes: u.Used, FreeBytes: u.Free, UsagePercent: u.UsedPercent})
 	}
 	if len(out) == 0 {
+		q := sq(c.clock.Now().Sub(start), 0, errs)
+		q.Total, q.Truncated = total, truncated
 		if errs == 0 {
-			return observation.Section[[]observation.Filesystem]{State: observation.Unavailable, ReasonCode: observation.ReasonNoData, Quality: sq(c.clock.Now().Sub(start), 0, 0)}
+			return observation.Section[[]observation.Filesystem]{State: observation.Unavailable, ReasonCode: observation.ReasonNoData, Quality: q}
 		}
-		st, r := classify(e)
-		if errs > 0 && e == nil {
-			st = observation.Unavailable
-			r = observation.ReasonCollectionFailed
-		}
-		return observation.Section[[]observation.Filesystem]{State: st, ReasonCode: r, Quality: sq(c.clock.Now().Sub(start), 0, errs)}
+		return observation.Section[[]observation.Filesystem]{State: failedState, ReasonCode: failedReason, Quality: q}
 	}
 	st, r := observation.Available, observation.ReasonCode("")
-	if errs > 0 || !c.config.FilesystemCoverageVerified {
+	if errs > 0 || truncated || !c.config.FilesystemCoverageVerified {
 		st = observation.Degraded
 		r = observation.ReasonPartialCollection
 	}
 	q := sq(c.clock.Now().Sub(start), len(out), errs)
-	q.Total, q.Truncated = total, total > len(out)
+	// A failed selected row is incomplete collection, not output-cap truncation.
+	// Total describes this namespace's enumeration, not a proved host-wide total.
+	q.Total, q.Truncated = total, truncated
 	return observation.Section[[]observation.Filesystem]{State: st, ReasonCode: r, Quality: q, Data: &out}
 }
 func (c *Collector) Uptime(ctx context.Context) observation.Section[observation.Uptime] {

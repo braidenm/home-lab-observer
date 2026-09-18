@@ -108,7 +108,7 @@ func (t *Transport) Send(ctx context.Context, request uploadstate.Request) (uplo
 		return uploadstate.Response{}, ErrRequest
 	}
 	request.Body = bytes.Clone(request.Body)
-	if remoteprojection.Validate(request.Body, request.Binding.ServerID) != nil {
+	if remoteprojection.ValidateUpload(request.Body, request.Binding.ServerID) != nil {
 		return uploadstate.Response{}, ErrRequest
 	}
 	requestContext, cancel := context.WithTimeout(ctx, SendTimeout)

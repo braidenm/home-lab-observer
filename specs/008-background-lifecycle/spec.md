@@ -48,6 +48,12 @@ native installer remains side-effect-free: downloading or installing never enabl
   refusal, and diagnostics rotation/age/permissions/failure/secret canaries. Native CI validates platform syntax and
   uses isolated test registrations only where a real user manager is available. Never infer login/reboot behavior from
   a unit test or modify the developer's real startup configuration while testing.
+- B11: A failed hosted Windows manager smoke may report at most the last eight
+  code-owned runtime event/result pairs from its own temporary diagnostics file.
+  Bound reading to 64 KiB, reject links/nonregular files and malformed records,
+  and never print timestamps, versions, paths, nonces, raw text or parse errors.
+  This is test-only failure evidence, not a new product file-read surface or a
+  reason to relax graceful-stop behavior.
 
 ## Boundaries
 

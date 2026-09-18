@@ -186,6 +186,15 @@ func (s *slot) openFile(name string, flags int, limit int64, modes ...os.FileMod
 }
 
 func (w *Writer) Publish(raw observation.Snapshot, id remoteprojection.Identity) error {
+	return w.publish(raw, id, remoteprojection.Encode)
+}
+
+// PublishNative explicitly selects the quality-aware host-only wire contract.
+func (w *Writer) PublishNative(raw observation.Snapshot, id remoteprojection.Identity) error {
+	return w.publish(raw, id, remoteprojection.EncodeNative)
+}
+
+func (w *Writer) publish(raw observation.Snapshot, id remoteprojection.Identity, encode func(observation.Snapshot, remoteprojection.Identity) ([]byte, error)) error {
 	s := w.s
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -198,7 +207,7 @@ func (w *Writer) Publish(raw observation.Snapshot, id remoteprojection.Identity)
 	if id.SourceID != s.policy.ServerID {
 		return ErrInvalid
 	}
-	data, err := remoteprojection.Encode(raw, id)
+	data, err := encode(raw, id)
 	if err != nil {
 		return ErrInvalid
 	}
@@ -270,7 +279,7 @@ func (r *Reader) Read(ctx context.Context, expected string) ([]byte, error) {
 	if err != nil || ctx.Err() != nil {
 		return nil, ErrUnavailable
 	}
-	if len(data) > remoteprojection.MaxBytes || remoteprojection.Validate(data, expected) != nil {
+	if len(data) > remoteprojection.MaxBytes || remoteprojection.ValidateUpload(data, expected) != nil {
 		return nil, ErrInvalid
 	}
 	if err := checkHandle(f, s.policy, false, 0o640); err != nil {
