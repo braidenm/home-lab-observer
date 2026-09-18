@@ -46,6 +46,11 @@ the same fixture-only probe separates bounded root CA validation, Go absolute
 hostname resolution, the exact public-address predicate, Go TLS and final
 `Resolve` parity into fixed diagnostic categories. No raw DNS answer, TLS error,
 certificate, HTTP body or host property enters serial evidence.
+The guest DNS diagnostic further distinguishes an empty/oversized answer, an
+IPv4-mapped result, a nonpublic result, an unexpected public result, and an
+invalid fixed alias using only allowlisted categories. It requires the guest's
+synthetic loopback alias before dialing, but does not weaken or replace the
+production resolver or installer admission decision.
 
 The minimum matrix is: refused preflight without grant; successful stopped install and exact unit,
 principal, ledger and filesystem assertions; normal reboot and stopped retry refusal; abrupt QEMU
