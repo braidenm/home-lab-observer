@@ -17,6 +17,7 @@
   - [x] Specify and test fixed installed-credential decoding and Linux systemd ACL admission as an unused library; packaged mount acceptance remains open.
   - [x] Render reviewed fixed systemd worker and transient enrollment templates as an unused library; actual installed enforcement is still unproved.
   - [x] Validate exact loaded offline enrollment/ledger confinement and empty typed credential arrays as an unused library; installed manager acceptance remains open.
+  - [x] Compose the fixed four-mode enrollment worker as an unused Linux library; actual grant exchange and promotion remain acceptance gates.
 - [ ] Implement private handoff, bounded uploader and connection health with failure tests.
   - [x] Define bounded disposable operational status and its private single-slot Linux writer; not upload or activation authority.
 - [x] Add fixed-host endpoint resolution and exact loaded-systemd IP-policy admission as an unused library; kernel enforcement and installed startup remain acceptance gates.
