@@ -11,6 +11,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import Ajv from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { waitForProcessExit as waitForExit } from "./wait-for-process-exit.mjs";
+import { retryableSmokePollError } from "./smoke-poll-error.mjs";
 
 const root = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const createdTemporary = await mkdtemp(path.join(os.tmpdir(), "observer-background-smoke-"));
@@ -166,7 +167,7 @@ async function until(test, processHandle, timeoutMilliseconds) {
     try {
       if (await test()) return;
     } catch (error) {
-      if (error?.code !== "ECONNREFUSED" && error?.name !== "TypeError") throw error;
+      if (!retryableSmokePollError(error)) throw error;
     }
     await delay(100);
   }

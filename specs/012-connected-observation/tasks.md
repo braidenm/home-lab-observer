@@ -45,11 +45,13 @@
   - [x] Read the five fixed root-owned active paths and reject bytes outside the exact previous/next sets; stopped-worker and write-durability proofs remain open.
   - [x] Require exact 0644 mode for each fixed active resource and prove mode/link refusals in a root-owned fixture; ext4 durability and stopped workers remain separate gates.
   - [ ] Implement proposal-bound active-file replacement with exact residue admission, sync fault injection, and forward-only recovery.
+  - [ ] Publish the authoritative journal through its own proposal-bound temporary role, directory sync and exact old/proposed reclassification; no automatic abort after a complete stage.
   - [x] Add independent anchored ext4 stage inspection and exclusive publication primitives with root synthetic interruption tests; not wired to installer commands.
   - [x] Read the fixed authoritative transition journal/receipt names under the anchored ext4 config directory; classification and writes remain separate.
+  - [x] Read both fixed legacy refresh names as separate anchored ext4 evidence with a privileged refusal fixture; stage comparison is a separate check.
   - [x] Compose only read-only staged/active/ledger evidence into a diagnostic phase; it grants no replacement, cleanup or worker start.
   - [x] Add closed none/legacy/new-format predecessor byte admission and pure phase classification; no installed legacy-file provenance is inferred.
-  - [ ] Independently anchor and compare installed legacy refresh files to the staged predecessor before publication or recovery is enabled.
+  - [x] Independently anchor and compare installed legacy refresh files to a complete staged first predecessor; the lease, stopped workers and durable publication remain open.
   - [x] Fence normal start/restart/refresh on fixed staging residue; no abort, cleanup or forward recovery operation yet.
   - [x] Show fixed transition residue as recovery-required in installer status without treating it as a completed refresh or making a recovery decision.
   - [ ] Integrate the bounded preparation witness, exact predecessor/staging retention and forward-only interrupted transition recovery.

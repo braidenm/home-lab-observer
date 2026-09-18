@@ -12,6 +12,8 @@ import (
 
 const JournalName = "transition.json"
 const CompletionName = "transition-complete"
+const LegacyJournalName = "refresh.json"
+const LegacyCompletionName = "refresh-complete"
 
 // Authority is a detached read of the two fixed authoritative names. Nil
 // means absent; a present empty, linked, broad or foreign file is refused.
@@ -24,11 +26,7 @@ type Authority struct {
 // directory. The caller holds the installation lease and proves both owned
 // workers are stopped before interpreting the returned bytes.
 func ReadAuthorityAt(config *os.File) (Authority, error) {
-	if config == nil || os.Getuid() != 0 || os.Geteuid() != 0 || !fixedRootDirectory(config, 0755) {
-		return Authority{}, ErrUnsafe
-	}
-	var fs unix.Statfs_t
-	if unix.Fstatfs(int(config.Fd()), &fs) != nil || fs.Type != unix.EXT4_SUPER_MAGIC {
+	if !fixedAuthorityParent(config) {
 		return Authority{}, ErrUnsafe
 	}
 	journal, err := readOptionalAuthority(config, JournalName, connectedtransition.MaxRecordBytes)
@@ -40,6 +38,38 @@ func ReadAuthorityAt(config *os.File) (Authority, error) {
 		return Authority{}, ErrRecovery
 	}
 	return Authority{Journal: journal, Completion: completion}, nil
+}
+
+// LegacyAuthority is the detached read of the two fixed old refresh names.
+// Pair coherence and comparison with staged predecessor bytes are separate
+// admission steps; absence of these names never proves an initial install.
+type LegacyAuthority struct {
+	Journal, Completion []byte
+}
+
+// ReadLegacyAt preserves absence separately for each name and refuses an
+// unsafe present file. It never writes, repairs, or chooses a recovery phase.
+func ReadLegacyAt(config *os.File) (LegacyAuthority, error) {
+	if !fixedAuthorityParent(config) {
+		return LegacyAuthority{}, ErrUnsafe
+	}
+	journal, err := readOptionalAuthority(config, LegacyJournalName, 8<<10)
+	if err != nil {
+		return LegacyAuthority{}, ErrRecovery
+	}
+	completion, err := readOptionalAuthority(config, LegacyCompletionName, 256)
+	if err != nil {
+		return LegacyAuthority{}, ErrRecovery
+	}
+	return LegacyAuthority{Journal: journal, Completion: completion}, nil
+}
+
+func fixedAuthorityParent(config *os.File) bool {
+	if config == nil || os.Getuid() != 0 || os.Geteuid() != 0 || !fixedRootDirectory(config, 0755) {
+		return false
+	}
+	var fs unix.Statfs_t
+	return unix.Fstatfs(int(config.Fd()), &fs) == nil && fs.Type == unix.EXT4_SUPER_MAGIC
 }
 
 func readOptionalAuthority(config *os.File, name string, limit int) ([]byte, error) {

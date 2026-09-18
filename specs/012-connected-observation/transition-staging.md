@@ -74,6 +74,21 @@ forward recovery required or
 completion cleanup pending. None of these is a worker startup, abort or cleanup
  permit; filesystem ownership, sync and stopped-worker proofs are external.
 
+The same anchored ext4 config-directory policy now reads the two fixed legacy
+refresh names independently, with exact root ownership, 0600 mode, no links or
+ACLs and protocol byte bounds. Absent, journal-only and receipt-only states
+remain distinct detached evidence. The read does not establish a completed
+pair or compare it to the stage; those admission checks remain separate and
+must precede any transition publication or recovery.
+
+A separate read-only first-predecessor inspection now reopens a complete
+anchored stage, then requires both installed legacy names absent for `none` or
+byte-for-byte equal to the staged legacy journal and receipt for
+`legacy-refresh-v1`. It refuses new-format predecessors, partial legacy pairs
+and substituted installed bytes. The installation lease, stopped-worker and
+private-ledger proofs remain the caller's responsibility; this inspection is
+not publication or recovery authority.
+
 A read-only composition now requires the stage's decoded record to equal its
 exact canonical proposal, re-derives code-owned previous/next resource bytes,
 rejects active bytes outside those sets, and joins the fixed journal/receipt
@@ -170,6 +185,43 @@ until those tests and independent review pass.
    `COMPLETE_CLEANUP_PENDING` and blocks another transition; it is not
    permission to repeat the transition or start workers.
 
+### Authoritative journal publication boundary
+
+The first write to `transition.json` uses an exact root-owned temporary name
+in the anchored config directory:
+`.observer-transition-journal-<full lowercase SHA-256 of canonical proposal>`.
+It is distinct from the five active-resource temporary roles. A complete,
+reopened stage, exact predecessor authority (or absence for `none` and legacy),
+anchored installed legacy comparison when applicable, previous active bytes,
+stopped workers and unchanged private ledger are mandatory caller proofs.
+Neither the stage nor the temporary file is itself publication authority.
+
+Only the one proposal-bound journal temporary name may be adopted for cleanup.
+An unknown matching-prefix name, symlink, mount crossing, foreign owner,
+unexpected type/mode/ACL/link count or oversized file refuses while stopped.
+A correctly confined partial temporary file may be unlinked and its parent
+synced only after the complete stage and exact old-or-proposed authoritative
+journal/receipt state have been re-established. The old generic `.install-next`
+name never counts. Create the temporary file exclusively with mode 0600, write
+only the canonical proposal, sync the file, then recheck the old journal's
+exact bytes and no-follow inode (or continued absence) and retained receipt.
+Rename the temporary file over `transition.json`, sync the config directory,
+and reopen the exact journal and receipt. Do not remove or rewrite the old
+receipt at this boundary. For a first transition both new-format names were
+absent; for a new-format predecessor the old receipt remains and cannot close
+the new proposal.
+
+If an interrupted rename is retried and the proposal is already the journal,
+sync the config directory again and reopen exact bytes before reporting
+published. If the old journal remains, regenerate only from the retained
+stage. Unknown journal bytes or receipt state refuse. Any uncertain create,
+write, sync, rename or readback leaves the stage intact and workers stopped.
+Once a complete stage has been durably published, do not offer automatic
+`abort-preparation`: after a power loss, an old journal and absent temporary
+name cannot prove a rename was never attempted. Only an incomplete
+pre-stage preparation may be considered for separately proved abort. This
+conservative boundary avoids confusing a failed rename with safe rollback.
+
 ### Interrupted active-file replacement
 
 Each of the five fixed active resources needs a proposal-bound, role-specific
@@ -203,10 +255,11 @@ never assume that the rename persisted. After all resources
 match next, exact installed modes, loaded manager properties, package and
 private ledger witnesses must be rechecked before publishing completion.
 
-Before step 3, `abort-preparation` may clean only a verified preparation
-whose authoritative journal was never published, whose active resources and
-ledger still match the completed predecessor, and whose stage contains only
-known owned entries. It must never silently re-resolve DNS, reread host CA,
+Before the complete stage is durably published, `abort-preparation` may clean
+only a verified incomplete preparation whose authoritative journal was never
+published, whose stage directory name is absent, and whose active resources
+and ledger still match the completed
+predecessor. It must never silently re-resolve DNS, reread host CA,
 replace a proposal, restore a ledger or follow a symlink. A missing fixed
 entry is not reconstructed from the current host. Every uncertain sync,
 rename, manager reload or cleanup result stays stopped for explicit recovery.
