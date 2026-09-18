@@ -70,7 +70,7 @@ func run(ctx context.Context) (code int) {
 		if ctx.Err() != nil {
 			break
 		}
-		if w.Publish(snapshot, remoteprojection.Identity{SourceID: c.ServerID, Version: identity.Version, OS: "linux"}) != nil {
+		if w.PublishNative(snapshot, remoteprojection.Identity{SourceID: c.ServerID, Version: identity.Version, OS: "linux"}) != nil {
 			return 22
 		}
 		if status.Write(connectedstatus.Record{Version: "observer-connected-status/v1", InvocationID: os.Getenv("INVOCATION_ID"), State: "COLLECTING", UpdatedAt: time.Now().UTC()}) != nil {
