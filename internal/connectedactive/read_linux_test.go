@@ -5,6 +5,7 @@ package connectedactive
 import (
 	"bytes"
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/braidenm/home-lab-observer/internal/connectedresources"
@@ -13,15 +14,15 @@ import (
 
 func TestReadOnlyFixedActiveInventory(t *testing.T) {
 	seen := make(map[string]bool)
-	reader := func(path string, limit int64) ([]byte, error) {
+	reader := func(path string, limit int64, mode os.FileMode) ([]byte, error) {
 		if seen[path] {
 			t.Fatal("resource path read twice")
 		}
 		seen[path] = true
 		for _, item := range fixed {
 			if path == item.path {
-				if limit != item.limit {
-					t.Fatal("resource read limit drift")
+				if limit != item.limit || mode != item.mode || mode != 0644 {
+					t.Fatal("resource read policy drift")
 				}
 				return []byte(path), nil
 			}
@@ -41,10 +42,10 @@ func TestReadOnlyFixedActiveInventory(t *testing.T) {
 	if _, err := readWith(nil); err != ErrUnavailable {
 		t.Fatal("missing reader accepted")
 	}
-	for _, failure := range []func(string, int64) ([]byte, error){
-		func(string, int64) ([]byte, error) { return nil, errors.New("synthetic") },
-		func(string, int64) ([]byte, error) { return nil, nil },
-		func(_ string, limit int64) ([]byte, error) { return bytes.Repeat([]byte("x"), int(limit)+1), nil },
+	for _, failure := range []func(string, int64, os.FileMode) ([]byte, error){
+		func(string, int64, os.FileMode) ([]byte, error) { return nil, errors.New("synthetic") },
+		func(string, int64, os.FileMode) ([]byte, error) { return nil, nil },
+		func(_ string, limit int64, _ os.FileMode) ([]byte, error) { return bytes.Repeat([]byte("x"), int(limit)+1), nil },
 	} {
 		if _, err := readWith(failure); err != ErrUnavailable {
 			t.Fatal("failed active resource read accepted")
@@ -52,7 +53,7 @@ func TestReadOnlyFixedActiveInventory(t *testing.T) {
 	}
 	for failAt := range fixed {
 		calls := 0
-		got, err := readWith(func(string, int64) ([]byte, error) {
+		got, err := readWith(func(string, int64, os.FileMode) ([]byte, error) {
 			index := calls
 			calls++
 			if index == failAt {
