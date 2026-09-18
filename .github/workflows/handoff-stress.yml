@@ -1,0 +1,30 @@
+name: Extended handoff publication stress
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: handoff-stress-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repeated-publication:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Repeat bounded handoff race fixture
+        run: go test ./internal/handoff -run TestConcurrentReaderNeverReturnsPartialDocument -count=1000 -timeout=10m
