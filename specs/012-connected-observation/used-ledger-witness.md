@@ -1,6 +1,6 @@
 # Existing-ledger witness primitive
 
-Status: authorized implementation slice under the compatible-code transition plan.
+Status: authorized implementation slice under the F1 installed-worker workstream.
 This is not rollback, installed activation or release approval.
 
 ## Scope and contract
@@ -37,7 +37,9 @@ lengths are big-endian. C1 validation precedes encoding; field bounds remain C1'
   directory/database identity and logical data across inspection. Reject missing,
   busy, corrupt, unsupported and wrong-binding state, plus cancellation.
 - Keep pristine enrollment validation unchanged. The separately named offline
-  command and exact policy are integrated in the [following bounded slice](existing-ledger-offline-mode.md).
+  command and exact policy are implemented on this integration branch in the
+  [following bounded slice](existing-ledger-offline-mode.md); PR 47 delivered only
+  the primitive, not that offline mode.
 - Independent review before integration. The transition journal, compiled
   compatibility contract, cross-version fixtures and VM recovery gates remain open.
 
@@ -59,3 +61,13 @@ lengths are big-endian. C1 validation precedes encoding; field bounds remain C1'
 
 These are local package tests, not release CI, a cross-version packaged test,
 power-loss evidence or live registration. No installed service is changed.
+
+## Delivery against current main
+
+Extracted without runtime wiring onto main `d7b857e` for a focused PR. Full Windows
+`go test ./...` and `go vet ./...` passed with pinned Go 1.27.1; Linux package vet
+and the compiled Linux/amd64 real-ledger suite under WSL passed three times.
+Existing preview executables do not import or invoke this primitive.
+Independent extraction review confirmed all four primitive files match the reviewed
+implementation. Its documentation finding (a premature integration claim/link) was
+corrected before delivery; no offline mode was included in PR 47, merged as `09acd5f`.
