@@ -16,9 +16,12 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/braidenm/home-lab-observer/internal/connectedenroll"
 	"github.com/braidenm/home-lab-observer/internal/connectedpolicy"
 	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
 	"github.com/braidenm/home-lab-observer/internal/connectedunits"
+	"github.com/braidenm/home-lab-observer/internal/ledgerwitness"
+	"github.com/braidenm/home-lab-observer/internal/uploadstate"
 )
 
 type refreshRecord struct {
@@ -92,6 +95,31 @@ func hostsBytes(addresses []string) []byte {
 	return []byte(b.String())
 }
 
+// Read the existing D1 state through the exact packaged uploader's confined
+// offline mode. The result is private comparison data, never an operator status.
+func existingLedgerFingerprint(ctx context.Context, c connectedprofile.Config) ([32]byte, error) {
+	var zero [32]byte
+	policy := connectedunits.EnrollmentInput{UploaderUID: c.UploaderUID, UploaderGID: c.UploaderGID, SharedGID: c.SharedGID, ArtifactSHA256: c.ArtifactSHA256, Addresses: c.Addresses}
+	invocation, err := connectedunits.RenderEnrollmentProperties(policy, "validate-existing-ledger")
+	if err != nil {
+		return zero, ErrUnsafe
+	}
+	input, err := json.Marshal(connectedenroll.ValidationInput{ServerID: c.ServerID, ConnectorID: c.ConnectorID, UploaderUID: c.UploaderUID, UploaderGID: c.UploaderGID, SharedGID: c.SharedGID})
+	if err != nil {
+		return zero, ErrUnsafe
+	}
+	result, err := runEnrollment(ctx, invocation.Properties, invocation.Executable, "validate-existing-ledger", input, policy)
+	defer clear(result)
+	if err != nil {
+		return zero, ErrRecovery
+	}
+	fingerprint, err := ledgerwitness.DecodeResult(result, uploadstate.Binding{ServerID: c.ServerID, ConnectorID: c.ConnectorID})
+	if err != nil {
+		return zero, ErrRecovery
+	}
+	return fingerprint, nil
+}
+
 // Refresh validates new fixed-host TLS endpoints before any mutation. It leaves
 // both services stopped and disabled; activation must separately pass the exact
 // packaged readiness gate. No failure restores old ledger/credentials or starts
@@ -161,6 +189,10 @@ func Refresh(ctx context.Context) error {
 			return ErrRecovery
 		}
 	}
+	beforeLedger, err := existingLedgerFingerprint(ctx, c)
+	if err != nil {
+		return err
+	}
 	// The journal is the forward-only publication boundary. Do not publish it
 	// while either owned worker might still be running: a failed stop must leave
 	// the completed predecessor as the only authoritative configuration.
@@ -187,6 +219,10 @@ func Refresh(ctx context.Context) error {
 		return ErrRecovery
 	}
 	if connectedpolicy.ValidateEffective(ctx, uploaderUnit, addresses) != nil {
+		return ErrRecovery
+	}
+	afterLedger, err := existingLedgerFingerprint(ctx, next)
+	if err != nil || afterLedger != beforeLedger {
 		return ErrRecovery
 	}
 	if err := putKnown(connectedprofile.ConfigDirectory+"/refresh-complete", oldReceipt, completion(journal), 0600, 256); err != nil {

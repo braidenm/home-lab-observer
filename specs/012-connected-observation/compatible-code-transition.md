@@ -13,6 +13,11 @@ The local interim refresh implementation stops and disables the owned workers
 before publishing its legacy journal, so a failed stop does not leave an
 uncompleted journal while workers may still run. This ordering correction does
 not provide resume, staged CA retention, or crash-safe mixed-generation recovery.
+It also runs the exact packaged `validate-existing-ledger` offline mode before
+publication and again before completion. A changed private logical fingerprint
+leaves refresh incomplete and the workers stopped; no pending request is decoded
+into logs or operator output. This interim comparison does not replace the
+required durable pre-transition witness, same-inode proof or recovery codec.
 Directory order, timestamps and version strings must not select a rollback target.
 Initial installation has no previous release to roll back to.
 
