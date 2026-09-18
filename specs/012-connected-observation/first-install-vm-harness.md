@@ -58,6 +58,10 @@ IPv4-mapped result, a nonpublic result, an unexpected public result, and an
 invalid fixed alias using only allowlisted categories. It requires the guest's
 synthetic loopback alias before dialing, but does not weaken or replace the
 production resolver or installer admission decision.
+The guest captures read-only preflight output in a private, size-bounded file
+and relays only an exact allowlisted failure marker to the serial console;
+empty, oversized, malformed and unexpected-exception output receives a fixed
+unknown category. A failed probe never enters enrollment.
 
 The minimum matrix is: refused preflight without grant; successful stopped install and exact unit,
 principal, ledger and filesystem assertions; normal reboot and stopped retry refusal; abrupt QEMU
