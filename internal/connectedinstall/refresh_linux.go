@@ -153,9 +153,6 @@ func Refresh(ctx context.Context) error {
 	if _, err := decodeRefresh(journal); err != nil {
 		return ErrUnsafe
 	}
-	if err := putKnown(connectedprofile.ConfigDirectory+"/refresh.json", oldJournal, journal, 0600, 8192); err != nil {
-		return err
-	}
 	if err := stopOwnedWorkers(ctx); err != nil {
 		return ErrRecovery
 	}
@@ -163,6 +160,12 @@ func Refresh(ctx context.Context) error {
 		if service(ctx, "disable", unit) != nil {
 			return ErrRecovery
 		}
+	}
+	// The journal is the forward-only publication boundary. Do not publish it
+	// while either owned worker might still be running: a failed stop must leave
+	// the completed predecessor as the only authoritative configuration.
+	if err := putKnown(connectedprofile.ConfigDirectory+"/refresh.json", oldJournal, journal, 0600, 8192); err != nil {
+		return err
 	}
 	for _, item := range []struct {
 		path      string

@@ -9,6 +9,10 @@ This completes neither [F1](installed-composition.md) nor its packaged acceptanc
 The installer retains verified immutable releases and pins one manifest digest in
 the installed configuration. This is a useful basis for code rollback, but there is
 no completed code-transition history identifying a previous compatible release.
+The local interim refresh implementation stops and disables the owned workers
+before publishing its legacy journal, so a failed stop does not leave an
+uncompleted journal while workers may still run. This ordering correction does
+not provide resume, staged CA retention, or crash-safe mixed-generation recovery.
 Directory order, timestamps and version strings must not select a rollback target.
 Initial installation has no previous release to roll back to.
 
