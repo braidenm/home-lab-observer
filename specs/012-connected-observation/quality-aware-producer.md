@@ -103,8 +103,11 @@ prerequisites. This document records pending work, not completed behavior.
   including an executed (not cached) `homeLabNativeMetricsContractTest` against
   the real database. It merged as `851f66082ed76bdd2bdb58ade7c1c867e2c2c7a4`.
   This proves authenticated upload/detail compatibility, not installed transport
-  or deployed receiver proof.
+  or installed transport proof. Platform Docker Publish run `35293688120` then
+  succeeded from exact source `851f66082ed76bdd2bdb58ade7c1c867e2c2c7a4`;
+  infrastructure Deploy Service run `35294425625` reported successful exact-source
+  reconciliation. This establishes deployed receiver bytes, not a connected
+  collector sending a live sample.
 
-Remaining: deployed first-party null-total/truncation compatibility,
-packaged activation/rollback acceptance and the owner canary. Do not advertise
+Remaining: packaged activation/rollback acceptance and the owner canary. Do not advertise
 the draft connected collector as a supported installed profile yet.
