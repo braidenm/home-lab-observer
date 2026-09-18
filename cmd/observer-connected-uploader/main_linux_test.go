@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"github.com/braidenm/home-lab-observer/internal/connectedcredential"
 	"github.com/braidenm/home-lab-observer/internal/connectedidentity"
 	"github.com/braidenm/home-lab-observer/internal/connectedstatus"
+	"github.com/braidenm/home-lab-observer/internal/uploadloop"
 	"github.com/braidenm/home-lab-observer/internal/uploadstate"
 )
 
@@ -38,6 +40,13 @@ type unusedTransport struct{ t *testing.T }
 func (t unusedTransport) Send(context.Context, uploadstate.Request) (uploadstate.Response, error) {
 	t.t.Fatal("unexpected request")
 	return uploadstate.Response{}, nil
+}
+
+type unexpectedStep struct{ t *testing.T }
+
+func (s unexpectedStep) Step(context.Context) (uploadstate.Outcome, error) {
+	s.t.Fatal("canceled startup wait called Step")
+	return "", nil
 }
 
 func TestUploaderLaunchAdmission(t *testing.T) {
@@ -168,5 +177,42 @@ func TestPollingIsNotCountedAsTransportAttempt(t *testing.T) {
 	}
 	if w.record.Steps != 1 || w.record.Attempts != 0 || w.record.Acknowledgements != 0 || w.record.State != "SOURCE_UNAVAILABLE" {
 		t.Fatal("poll incorrectly reported network or success")
+	}
+}
+
+func TestCanceledStartupWaitPersistsStoppedStatus(t *testing.T) {
+	loop, err := uploadloop.New(unexpectedStep{t})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	result, err := loop.Run(ctx)
+	if result != uploadloop.Canceled || !errors.Is(err, uploadloop.ErrCanceled) {
+		t.Fatal("canceled startup wait was not joined")
+	}
+	dir := t.TempDir()
+	if os.Chmod(dir, 0700) != nil {
+		t.Fatal("chmod")
+	}
+	status, err := connectedstatus.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	record := connectedstatus.Record{Version: "observer-connected-status/v1", State: "ACKNOWLEDGED_FRESH", UpdatedAt: now, CollectedAt: now, AcknowledgedAt: now, Acknowledgements: 1}
+	if status.Write(record) != nil || finishUpload(result, status, record) != 0 {
+		t.Fatal("cancellation did not publish stopped status")
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "status.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := connectedstatus.Decode(data)
+	if err != nil || got.State != "STOPPED" || got.Acknowledgements != 1 || !got.CollectedAt.Equal(now) || got.UpdatedAt.Before(now) {
+		t.Fatal("cancellation retained misleading live status")
+	}
+	if status.Close() != nil || finishUpload(result, status, record) != 22 {
+		t.Fatal("status write failure was hidden")
 	}
 }

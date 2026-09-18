@@ -144,8 +144,19 @@ func run(ctx context.Context) (code int) {
 	if wrapper.failed {
 		return 22
 	}
+	return finishUpload(result, status, wrapper.record)
+}
+
+// A canceled pacing wait does not call Step, so persist STOPPED here as well.
+// Keep the last acknowledged timestamps for diagnostics, not liveness authority.
+func finishUpload(result uploadloop.Result, status *connectedstatus.Writer, record connectedstatus.Record) int {
 	switch result {
 	case uploadloop.Canceled:
+		record.State = "STOPPED"
+		record.UpdatedAt = time.Now().UTC()
+		if status.Write(record) != nil {
+			return 22
+		}
 		return 0
 	case uploadloop.CredentialRejected:
 		return 20
