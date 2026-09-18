@@ -44,6 +44,7 @@
   - [ ] Publish the authoritative journal through its own proposal-bound temporary role, directory sync and exact old/proposed reclassification; no automatic abort after a complete stage.
   - [x] Add an unused first-transition journal publisher with exclusive rename, proposal-bound residue refusal and sync-interruption fixture; new-format predecessor replacement and installer wiring remain open.
   - [x] Add the unused fixed Linux installation lease with root-owned refusal and contention tests; holding it does not authorize transition or activation.
+  - [x] Add the unused typed first-install preparing marker publisher with root-owned residue/refusal tests; no installer command calls it.
   - [x] Add independent anchored ext4 stage inspection and exclusive publication primitives with root synthetic interruption tests; not wired to installer commands.
   - [x] Read the fixed authoritative transition journal/receipt names under the anchored ext4 config directory; classification and writes remain separate.
   - [x] Read both fixed legacy refresh names as separate anchored ext4 evidence with a privileged refusal fixture; stage comparison is a separate check.
