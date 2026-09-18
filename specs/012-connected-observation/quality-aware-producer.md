@@ -99,10 +99,12 @@ prerequisites. This document records pending work, not completed behavior.
   The 11 parser/schema tests pass, as do 10 focused first-party client/UI tests and
   typechecking. Fixture SHA-256 values are `150e1a1dae8b2e2da313b25fc2836b42e51d2550345e7c249291245e5b400961`
   and `73f1017cedd1c0d875772ae879b31df425e05812ddd5c12e25d5cadb8c85c40b`.
-  The database-backed upload/detail test compiles but awaits hosted CI; this is
-  not a claim of installed transport or deployed receiver proof.
+  Platform PR 372 subsequently passed required hosted CI run `35293008907`,
+  including an executed (not cached) `homeLabNativeMetricsContractTest` against
+  the real database. It merged as `851f66082ed76bdd2bdb58ade7c1c867e2c2c7a4`.
+  This proves authenticated upload/detail compatibility, not installed transport
+  or deployed receiver proof.
 
-Remaining: database-backed upload/detail proof, deployed first-party
-null-total/truncation compatibility, compiled installation compatibility identity,
+Remaining: deployed first-party null-total/truncation compatibility,
 packaged activation/rollback acceptance and the owner canary. Do not advertise
 the draft connected collector as a supported installed profile yet.
