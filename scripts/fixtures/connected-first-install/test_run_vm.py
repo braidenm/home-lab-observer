@@ -9,6 +9,11 @@ import assert_guest
 
 
 class HarnessAdmissionTest(unittest.TestCase):
+    def test_ext4_type_is_explicit_after_resolving_mke2fs(self):
+        command = run_vm.ext4_command(Path("/safe/payload"), Path("/safe/payload.ext4"))
+        self.assertEqual(command[:3], ("mkfs.ext4", "-t", "ext4"))
+        self.assertEqual(command[-2:], ("/safe/payload", "/safe/payload.ext4"))
+
     def test_guest_rejects_unknown_members_and_wrong_mode(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
