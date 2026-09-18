@@ -19,14 +19,17 @@ diagnostic state, not delivery, enrollment, or activation authority.
   Hold one nonblocking private lease. Accept only fixed regular 0600 files with
   one link; refuse unknown entries, links, foreign ownership and loose modes.
 - Keep one atomic, synchronized `status.json` slot and one
-  `activation-response.json` slot. A response must pass the canonical bounded
-  activation codec before publication. This sink may not hold arbitrary bytes.
-  Valid response syntax alone does not authorize a worker: the manager must
-  match the live request and invocation, and the worker its retained challenge.
+  `activation-response.json` slot. The uploader must encode the canonical
+  activation response before publication; the shared writer bounds and copies
+  opaque bytes without importing the uploader protocol into the collector.
+  A dependency-closure test enforces that separation.
+  The manager must still match the live request and invocation, and the worker
+  its retained challenge. Slot contents alone never authorize a worker.
 - On reopen, remove only validated disposable staging files left by an
   interrupted write. Repeated writes cannot grow an unbounded history.
 
-Tests cover canonical refusal, a locked concurrent writer, repeated bounded
-replacement, crash staging recovery, unsafe entries and unclosed activation
-responses. This package does not install units, select code, access the upload
-ledger or start services. Packaged VM acceptance remains an open gate.
+Tests cover canonical status refusal, a locked concurrent writer, repeated
+bounded replacement, crash staging recovery, unsafe entries and response-size
+limits. The uploader's activation tests cover the response schema. This
+package does not install units, select code, access the upload ledger or start
+services. Packaged VM acceptance remains an open gate.
