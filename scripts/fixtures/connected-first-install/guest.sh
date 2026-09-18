@@ -155,6 +155,7 @@ case "${1:-}" in
     [ "$preflight_status" -eq 22 ] && [[ "$preflight_result" == PREFLIGHT_REFUSED:* ]] || fail BAD_DIGEST_NOT_PREFLIGHT_REFUSED
     [ ! -e /etc/home-lab-observer-connected ] || fail PREFLIGHT_MUTATED
     install_reboot_assertion "$1"
+    python3 "$payload/preflight_probe.py" || fail PREFLIGHT_PROBE
     if [ "$1" != interrupt ]; then
       python3 "$payload/drive_pty.py" install "$bundle" "$digest" || fail INSTALL
       installed_assertions

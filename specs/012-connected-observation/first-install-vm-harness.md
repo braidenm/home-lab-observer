@@ -24,6 +24,14 @@ On an install failure, the PTY driver retains at most 8 KiB of output in memory
 and emits only an allowlisted phase enum, normalized numeric exit status and
 prompt-seen bit. Unknown or mixed output is `UNRECOGNIZED`; neither raw PTY
 bytes nor the synthetic grant or credential are emitted.
+Before the real-grant PTY path, a guest-only, read-only classifier checks the
+fixed host/NSS shape, absence of owned targets, synthetic DNS/TLS reachability,
+and parent-slice policy. It emits one fixed failure category, never command
+output, file contents or a grant. This classifier is diagnostic rather than
+installer authority: a pass does not replace `CheckRequest` or establish VM
+acceptance; the installed command still owns admission. Unknown and oversized
+manager output is a fixed refusal. A preflight refusal in the installer after
+classifier pass remains a hard no-go pending further diagnosis.
 
 The minimum matrix is: refused preflight without grant; successful stopped install and exact unit,
 principal, ledger and filesystem assertions; normal reboot and stopped retry refusal; abrupt QEMU

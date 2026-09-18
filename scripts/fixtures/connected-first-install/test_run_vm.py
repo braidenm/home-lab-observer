@@ -1,12 +1,18 @@
 import hashlib
+import contextlib
+import io
 import json
+import os
 from pathlib import Path
+import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import run_vm
 import assert_guest
 import drive_pty
+import preflight_probe
 
 
 class HarnessAdmissionTest(unittest.TestCase):
@@ -30,6 +36,39 @@ class HarnessAdmissionTest(unittest.TestCase):
         self.assertTrue(drive_pty.append_bounded(output, b"y"))
         self.assertEqual(len(output), drive_pty.MAX_OUTPUT)
         self.assertFalse(drive_pty.append_bounded(output, b"z"))
+
+    def test_preflight_classifier_never_echoes_unknown_or_oversized_output(self):
+        for private in (b"hle_" + b"A" * 43, b"hlc_" + b"B" * 43):
+            with self.assertRaises(preflight_probe.Refused):
+                preflight_probe.fields(b"Id=system.slice\nSecret=" + private + b"\n", {"Id"}, "PARENT")
+            self.assertEqual(preflight_probe.marker(private.decode()), "HLO_VM_FAIL_PREFLIGHT_UNKNOWN")
+        with self.assertRaises(preflight_probe.Refused):
+            preflight_probe.bounded(b"x" * (preflight_probe.MAX_OUTPUT + 1))
+        with self.assertRaises(preflight_probe.Refused):
+            preflight_probe.bounded(b"x" * 1025, 1024)
+        with self.assertRaises(preflight_probe.Refused):
+            preflight_probe.bounded(b"Id=system.slice\r\n")
+        self.assertEqual(preflight_probe.marker("NSS"), "HLO_VM_FAIL_PREFLIGHT_NSS")
+
+    def test_preflight_nss_requires_only_local_files_first(self):
+        good = b"passwd: files systemd\ngroup: files\nshadow: files systemd\ngshadow: files\n"
+        self.assertTrue(preflight_probe.supported_nss(good))
+        for bad in (good.replace(b"passwd: files systemd", b"passwd: ldap files"),
+                    good + b"initgroups: files\n", good + b"group: files\n"):
+            self.assertFalse(preflight_probe.supported_nss(bad))
+
+    def test_preflight_stage_failure_redacts_exception_text(self):
+        output = io.StringIO()
+        with mock.patch.object(preflight_probe, "host_nss", side_effect=OSError("hle_private")), contextlib.redirect_stderr(output):
+            self.assertEqual(preflight_probe.main(), 1)
+        self.assertEqual(output.getvalue(), "HLO_VM_FAIL_PREFLIGHT_HOST\n")
+
+    @unittest.skipUnless(os.name == "posix", "guest-only bounded pipe semantics")
+    def test_preflight_command_kills_on_oversized_output(self):
+        with self.assertRaises(preflight_probe.Refused):
+            preflight_probe.command(sys.executable, "-c", "import sys; sys.stdout.write('x' * 8192)")
+        with self.assertRaises(preflight_probe.Refused):
+            preflight_probe.command(sys.executable, "-c", "import sys; sys.stdout.write('x' * 2048)", limit=1024)
 
     def test_ext4_type_is_explicit_after_resolving_mke2fs(self):
         command = run_vm.ext4_command(Path("/safe/payload"), Path("/safe/payload.ext4"))
