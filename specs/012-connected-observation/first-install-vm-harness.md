@@ -64,8 +64,14 @@ principal, ledger and filesystem assertions; normal reboot and stopped retry ref
 power cut immediately after PREPARING is durable, fresh-boot retained-residue and retry refusal;
 the driver must stop the installer and prove no state or release root exists before requesting the
 cut, while the synthetic receiver is incapable of consuming a grant in this scenario. A late cut
-is a failed case, never accepted evidence. Across reboot and retry, compare inode, size and byte
-hash of installed metadata, credential and ledger rather than just their existence;
+is a failed case, never accepted evidence. The promoted enrollment directory is
+root-owned 0700 and retains exactly the four uploader-owned 0600 one-use records
+`.enrollment-lock`, `attempt.json`, `credential.json`, and `ready.json` after the
+ledger moves to its sibling. Prove their bounded canonical record shape and
+installed-connector binding without printing secret bytes. Every directory
+membership refusal emits only a fixed stage label, not a path or member name.
+Across reboot and retry, compare inode, size and byte hash of installed
+metadata, credential, enrollment records and ledger rather than just their existence;
 abrupt QEMU power cut after successful stopped install, fresh-boot stopped-state persistence.
 Synthetic root sync-failure tests remain supplementary; the VM harness must not claim they simulate
 real hardware cache loss. Isolation assertions for mounts, sockets, credentials and systemd policy
