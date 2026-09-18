@@ -30,7 +30,25 @@ func Acquire() (*Lease, error) {
 		return nil, ErrUnsafe
 	}
 	defer unix.Close(rootFD)
-	fd, err := unix.Openat2(rootFD, "run/lock", &unix.OpenHow{
+	fd, err := unix.Openat2(rootFD, "run", &unix.OpenHow{
+		Flags:   unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC,
+		Resolve: unix.RESOLVE_BENEATH | unix.RESOLVE_NO_SYMLINKS,
+	})
+	if err != nil {
+		return nil, ErrUnsafe
+	}
+	run := os.NewFile(uintptr(fd), "connected-install-run-directory")
+	defer run.Close()
+	return acquireUnder(run)
+}
+
+// acquireUnder validates /run before opening its fixed lock child. A writable
+// ancestor must not be able to replace the directory containing the lease.
+func acquireUnder(run *os.File) (*Lease, error) {
+	if run == nil || !trustedRun(run) {
+		return nil, ErrUnsafe
+	}
+	fd, err := unix.Openat2(int(run.Fd()), "lock", &unix.OpenHow{
 		Flags:   unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC,
 		Resolve: unix.RESOLVE_BENEATH | unix.RESOLVE_NO_SYMLINKS,
 	})
@@ -85,6 +103,16 @@ func trustedParent(parent *os.File) bool {
 	i, err := parent.Stat()
 	if err != nil || !i.IsDir() || i.Mode()&(os.ModeSetuid|os.ModeSetgid) != 0 ||
 		(i.Mode().Perm()&0022 != 0 && i.Mode()&os.ModeSticky == 0) || !noACL(int(parent.Fd())) {
+		return false
+	}
+	s, ok := i.Sys().(*syscall.Stat_t)
+	return ok && s.Uid == 0 && s.Gid == 0
+}
+
+func trustedRun(run *os.File) bool {
+	i, err := run.Stat()
+	if err != nil || !i.IsDir() || i.Mode().Perm()&0022 != 0 ||
+		i.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 || !noACL(int(run.Fd())) {
 		return false
 	}
 	s, ok := i.Sys().(*syscall.Stat_t)

@@ -4,8 +4,9 @@ Status: narrow unused Linux implementation slice. This does not authorize instal
 
 The first installed profile serializes privileged setup and lifecycle work on one fixed file,
 `/run/lock/home-lab-observer-connected.install.lock`. Only real/effective root can acquire it. The parent must be a
-root-owned directory reached without symlinks; group/other write is accepted only when the sticky bit protects the
-directory. The lock file must be root:root, one-link, empty, regular, exactly 0600 and free of POSIX ACLs. Opening it
+root-owned directory reached without symlinks through a separately checked, non-writable root-owned `/run` ancestor;
+group/other write on `/run/lock` is accepted only when the sticky bit protects that directory. The lock file must be
+root:root, one-link, empty, regular, exactly 0600 and free of POSIX ACLs. Opening it
 never follows a link or blocks on a FIFO. A second holder receives a distinct busy result rather than waiting or
 continuing. Closing releases the kernel lock but does not unlink the file, which would permit split-brain locking.
 
@@ -15,6 +16,7 @@ installer must acquire this lease before reading transition authority and retain
 verification and completion. Holding the lease alone proves none of those obligations. A disposable VM still must
 prove the exact installed manager/profile and crash-recovery transaction before the first connected release.
 
-Acceptance for this slice is root-owned synthetic refusal of foreign/broad parents, foreign/broad/nonempty/linked/
+Acceptance for this slice is root-owned synthetic refusal of a foreign/writable `/run` ancestor, a symlinked lock
+directory, foreign/broad parents, foreign/broad/nonempty/linked/
 special lock entries and contention, plus repeated acquisition after release. Non-root calls refuse without touching
 the fixed path. No test creates persistent accounts, units, credentials or a live registration.

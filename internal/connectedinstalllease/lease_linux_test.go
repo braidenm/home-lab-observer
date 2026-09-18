@@ -108,6 +108,38 @@ func TestOwnedInstallLeaseFixture(t *testing.T) {
 			t.Fatal("lease close")
 		}
 	})
+	for _, scenario := range []string{"trusted run", "foreign run", "writable run", "symlink lock directory"} {
+		t.Run(scenario, func(t *testing.T) {
+			run, path := ownedParent(t)
+			defer run.Close()
+			lockDir := filepath.Join(path, "lock")
+			if scenario == "symlink lock directory" {
+				if os.Symlink(t.TempDir(), lockDir) != nil {
+					t.Fatal("symlink")
+				}
+			} else if os.Mkdir(lockDir, 0755) != nil {
+				t.Fatal("mkdir")
+			}
+			switch scenario {
+			case "foreign run":
+				if os.Chown(path, 65534, 65534) != nil {
+					t.Fatal("chown")
+				}
+			case "writable run":
+				if os.Chmod(path, 0777) != nil {
+					t.Fatal("chmod")
+				}
+			}
+			lease, err := acquireUnder(run)
+			if scenario == "trusted run" {
+				if err != nil || lease == nil || lease.Close() != nil {
+					t.Fatal("trusted /run fixture refused", err)
+				}
+			} else if lease != nil || err != ErrUnsafe {
+				t.Fatal("hostile /run fixture admitted", err)
+			}
+		})
+	}
 }
 
 func ownedParent(t *testing.T) (*os.File, string) {
