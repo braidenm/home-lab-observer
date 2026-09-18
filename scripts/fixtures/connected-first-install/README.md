@@ -107,3 +107,47 @@ Do not delete any overlay or image until its resolved absolute path is confirmed
 inside the dedicated temporary VM directory and the evidence is captured. Report
 each case as pass, fail or not executed; do not upgrade helper evidence into full
 VM acceptance. Activation and owner-server installation remain separate gates.
+
+## Bounded manual harness
+
+`run_vm.py` is the reproducible host runner for the matrix above. Run it only
+on a dedicated KVM test host while all other QEMU guests (including Platform CI)
+are stopped. It refuses non-root execution, an unverified/non-qcow2 Ubuntu base,
+unsafe path ownership, low capacity and any active QEMU process. Inputs must be
+absolute, root-owned regular files with no group/other write permission. The
+checked-out harness files and every input/work-root ancestor must also be
+root-owned and not group/other writable; stage the reviewed PR head in such a
+directory before running it with `sudo`. Supply
+the published Canonical image SHA-256 independently; never accept a digest from
+the image download itself. The work root must already exist and be root-owned
+mode 0700. The script never fetches an image or opens a network connection.
+
+```sh
+sudo python3 scripts/fixtures/connected-first-install/run_vm.py \
+  --image /data/hlo-fixture-input/ubuntu-24.04-cloudimg-amd64.img \
+  --image-sha256 '<canonical-published-64-hex-sha256>' \
+  --archive /data/hlo-fixture-input/home-lab-observer-connected_0.1.0-canary.1_linux_amd64.tar.gz \
+  --manifest /data/hlo-fixture-input/connected-manifest.json \
+  --checksums /data/hlo-fixture-input/SHA256SUMS \
+  --receiver /data/hlo-fixture-input/connected-first-install-receiver \
+  --work-root /data/hlo-first-install-acceptance
+```
+
+The host launcher makes one fresh 12 GiB copy-on-write overlay per case, a
+read-only ext4 payload image and separate cloud-init seed. It starts 2-vCPU,
+3-GiB QEMU guests with `-nic none`, no host share, bounded serial evidence and
+per-boot deadlines. The three cases are success/reboot, a power cut after the
+durable PREPARING marker, and a power cut after a successful stopped install.
+Guest startup includes a wrong-digest preflight refusal. The launcher removes
+temporary payload source copies after creating the read-only image. On each
+passing case it removes only that case's validated overlay file; after all
+cases pass it also removes the validated payload image. It retains bounded
+serial logs and small seeds for audit. On failure it retains the remaining
+images for investigation. `--keep-disks` retains passing images too.
+
+The runner does not claim every hardware flush boundary or installed-worker
+runtime isolation. Its interrupted-case proof is a stopped installer at a
+durable marker followed by an abrupt QEMU kill and reboot. The existing
+synthetic-root tests cover injected file/parent sync failures separately.
+Record this distinction in the PR review and keep activation blocked until its
+own installed-runtime acceptance.
