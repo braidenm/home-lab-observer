@@ -14,6 +14,7 @@
 
 - [x] Prove fixture acceptance in the actual Platform Demo parser (PR365, including source binding and three OS labels).
 - [ ] Specify and review credential lifecycle and OS isolation; implement without observation/control authority mixing.
+  - [x] Specify and test fixed installed-credential decoding and Linux systemd ACL admission as an unused library; packaged mount acceptance remains open.
 - [ ] Implement private handoff, bounded uploader and connection health with failure tests.
 - [ ] Integrate catalog, enrollment, OS-aware installation and authorized hosted views.
 - [ ] Verify packaged platforms, migration/rollback and an explicitly authorized owner canary.
