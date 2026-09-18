@@ -121,6 +121,11 @@ def unit_properties(unit: str, fields: tuple[str, ...]) -> dict[str, str]:
     return values
 
 
+def denies_all_ip(value: str) -> bool:
+    """Match systemd's IPv4/IPv6 expansion without relying on display order."""
+    return sorted(value.split()) == ["0.0.0.0/0", "::/0"]
+
+
 def payload_assert() -> None:
     identity = json.loads((PAYLOAD / "reviewed-identity.json").read_text())
     expected = identity["manifest_sha256"]
@@ -262,7 +267,7 @@ def snapshot() -> dict:
         ("LEDGER", str(STATE / "ledger") in uploader_properties["BindPaths"]),
         ("RELEASE", str(release) in uploader_properties["BindReadOnlyPaths"]),
         ("PRIVILEGES", uploader_properties["NoNewPrivileges"] == "yes"),
-        ("DENY", uploader_properties["IPAddressDeny"] == "0.0.0.0/0 ::/0"),
+        ("DENY", denies_all_ip(uploader_properties["IPAddressDeny"])),
     ):
         need(valid, "UPLOADER_EFFECTIVE_" + label)
     transient = run("/usr/bin/systemctl", "show", "--property=LoadState", "--property=ActiveState", "--property=Transient", "--property=FragmentPath", "home-lab-observer-connected-enrollment.service")
