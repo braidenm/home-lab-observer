@@ -41,6 +41,11 @@ manifest, emits only code-owned stage labels and never joins the
 release archive. This closes diagnostic parity without relaxing or instrumenting
 the production installer's refusal boundary. A probe pass is still not
 installation acceptance.
+For a production `Resolve` refusal after the bundle/host/target checks pass,
+the same fixture-only probe separates bounded root CA validation, Go absolute
+hostname resolution, the exact public-address predicate, Go TLS and final
+`Resolve` parity into fixed diagnostic categories. No raw DNS answer, TLS error,
+certificate, HTTP body or host property enters serial evidence.
 
 The minimum matrix is: refused preflight without grant; successful stopped install and exact unit,
 principal, ledger and filesystem assertions; normal reboot and stopped retry refusal; abrupt QEMU

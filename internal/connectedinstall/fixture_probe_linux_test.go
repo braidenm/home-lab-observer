@@ -4,9 +4,14 @@ package connectedinstall
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"flag"
 	"fmt"
+	"net"
+	"net/netip"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -49,7 +54,7 @@ func vmRefuse(t *testing.T, stage string) {
 
 func vmFailureMarker(stage string) string {
 	switch stage {
-	case "INPUT", "BUNDLE", "HOST", "TARGETS", "DNS_TLS", "PARENT", "CHECKREQUEST":
+	case "INPUT", "BUNDLE", "HOST", "TARGETS", "CA", "GO_DNS", "ADDRESS", "GO_TLS", "RESOLVE_PARITY", "PARENT", "CHECKREQUEST":
 		return "HLO_VM_FAIL_EXACT_" + stage
 	default:
 		return "HLO_VM_FAIL_EXACT_UNKNOWN"
@@ -63,6 +68,66 @@ func TestVMFailureMarkerAllowlist(t *testing.T) {
 	if got := vmFailureMarker("BUNDLE"); got != "HLO_VM_FAIL_EXACT_BUNDLE" {
 		t.Fatal("probe marker rejected fixed stage")
 	}
+	for _, stage := range []string{"CA", "GO_DNS", "ADDRESS", "GO_TLS", "RESOLVE_PARITY"} {
+		if got := vmFailureMarker(stage); got != "HLO_VM_FAIL_EXACT_"+stage {
+			t.Fatal("probe marker rejected fixed network stage")
+		}
+	}
+}
+
+// These diagnostics mirror the production read-only dependencies immediately
+// before calling Resolve unchanged. They are not an alternate admission path.
+func vmDNSStages(t *testing.T, ctx context.Context) []string {
+	t.Helper()
+	ca, err := connectedprofile.ReadRootFile("/etc/ssl/certs/ca-certificates.crt", 1024*1024)
+	if err != nil {
+		vmRefuse(t, "CA")
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(ca) {
+		vmRefuse(t, "CA")
+	}
+	lookupContext, stopLookup := context.WithTimeout(ctx, 5*time.Second)
+	resolver := &net.Resolver{PreferGo: true}
+	ips, err := resolver.LookupNetIP(lookupContext, "ip", connectedprofile.Hostname+".")
+	stopLookup()
+	if err != nil {
+		vmRefuse(t, "GO_DNS")
+	}
+	if len(ips) == 0 || len(ips) > 8 {
+		vmRefuse(t, "ADDRESS")
+	}
+	unique := map[netip.Addr]bool{}
+	for _, ip := range ips {
+		if !connectedprofile.PublicAddress(ip) {
+			vmRefuse(t, "ADDRESS")
+		}
+		unique[ip] = true
+	}
+	ordered := make([]string, 0, len(unique))
+	for ip := range unique {
+		ordered = append(ordered, ip.String())
+	}
+	slices.Sort(ordered)
+	accepted := make([]string, 0, len(ordered))
+	for _, raw := range ordered {
+		attempt, stop := context.WithTimeout(ctx, 3*time.Second)
+		dialer := &tls.Dialer{NetDialer: &net.Dialer{Timeout: 3 * time.Second}, Config: &tls.Config{MinVersion: tls.VersionTLS12, ServerName: connectedprofile.Hostname, RootCAs: roots}}
+		conn, dialErr := dialer.DialContext(attempt, "tcp", net.JoinHostPort(raw, "443"))
+		if dialErr == nil {
+			closeErr := conn.Close()
+			stop()
+			if closeErr == nil {
+				accepted = append(accepted, raw)
+			}
+		} else {
+			stop()
+		}
+	}
+	if ctx.Err() != nil || len(accepted) == 0 {
+		vmRefuse(t, "GO_TLS")
+	}
+	return accepted
 }
 
 func TestVMReadonlyPreflightStages(t *testing.T) {
@@ -89,9 +154,10 @@ func TestVMReadonlyPreflightStages(t *testing.T) {
 	if absentTargets(ctx) != nil {
 		vmRefuse(t, "TARGETS")
 	}
+	verified := vmDNSStages(t, ctx)
 	addresses, err := connectedpolicy.Resolve(ctx)
-	if err != nil {
-		vmRefuse(t, "DNS_TLS")
+	if err != nil || !slices.Equal(addresses, verified) {
+		vmRefuse(t, "RESOLVE_PARITY")
 	}
 	if connectedpolicy.ValidateParent(ctx, addresses) != nil {
 		vmRefuse(t, "PARENT")

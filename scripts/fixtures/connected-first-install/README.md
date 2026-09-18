@@ -171,7 +171,9 @@ without raw host output or secrets. This is diagnostic evidence only; passing
 it does not authorize installation or replace the installer's own preflight.
 An independently pinned fixture-only Go test executable then calls the exact
 same-package bundle, host, target, endpoint and parent checks used by
-`CheckRequest`; it also emits only fixed stage labels. Neither diagnostic
+`CheckRequest`; its endpoint step separates root CA read, Go absolute-host DNS,
+public-address validation, Go TLS and final production `Resolve` parity into
+fixed labels. It emits no raw Go error or certificate data. Neither diagnostic
 receives a grant or changes the installed preflight policy.
 Stage and independently hash `preflight_probe.py` with the four existing
 harness scripts when using a manually transferred checkout.
