@@ -26,6 +26,14 @@ must still establish the supplied CA's stage provenance and inspect each
 actual active file through anchored ownership/mode checks; these expected
 bytes are not write authority.
 
+The Linux active-resource reader uses only the five fixed installed paths and
+the root-owned, no-follow bounded file reader. It detaches each byte sequence,
+then accepts only exact previous/next code-derived bytes, including mixed
+interrupted states, before passing hashes to the pure classifier. This read
+does not establish the exact installed file modes, ext4 write durability,
+private ledger witness, or stopped-worker state. Those remain mandatory before
+replacement, cleanup, or activation.
+
 The separate Linux stage-filesystem slice provides anchored `InspectAt` and
 `PublishAt` primitives, not an installer command. Both require root and an
 exact root-owned config directory on ext4. Inspection permits only the fixed
@@ -49,7 +57,11 @@ worker, predecessor and ledger checks still precede any future publication.
 
 The pure staged classifier accepts only an already valid complete stage, the
 actual active transition journal/receipt bytes, and caller-verified active
-resource hashes plus the private ledger witness. Before publication, the
+resource hashes plus the private ledger witness. The authoritative journal
+and completion are read through fixed root-owned, no-follow, bounded
+names under the anchored ext4 config directory. The reader preserves separate
+absence of each name and refuses empty, linked, broad, foreign or oversized
+files; it does not infer completion or permit cleanup. Before publication, the
 journal/receipt must still be the exact retained predecessor pair (or both
 absent for the first new-format transition) and every active resource must
 match the previous set. After publication, the journal must equal the exact
