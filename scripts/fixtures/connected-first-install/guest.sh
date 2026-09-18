@@ -85,16 +85,15 @@ retry_refuses_without_mutation() {
 }
 
 prepare_guest() {
-  mkdir -p "$fixture_root" /opt/observer-fixture/bundle
+  mkdir -p "$fixture_root" /opt/observer-fixture/bundle/release
   chmod 0700 "$fixture_root"
   (cd "$payload" && sha256sum --check --strict SHA256SUMS >/dev/null) || fail PAYLOAD_CHECKSUM
   archive=("$payload"/*.tar.gz)
   [ "${#archive[@]}" -eq 1 ] && [ -f "${archive[0]}" ] || fail ARCHIVE_COUNT
-  tar -xzf "${archive[0]}" -C /opt/observer-fixture/bundle || fail ARCHIVE_EXTRACT
-  bundle=(/opt/observer-fixture/bundle/home-lab-observer-connected_*)
-  [ "${#bundle[@]}" -eq 1 ] && [ -d "${bundle[0]}" ] || fail BUNDLE_COUNT
-  printf '%s\n' "${bundle[0]}" > "$fixture_root/bundle-path"
-  sha256sum "${bundle[0]}/connected-manifest.json" | cut -d' ' -f1 > "$fixture_root/manifest-sha"
+  python3 "$payload/assert_guest.py" payload || fail REVIEWED_PAYLOAD
+  tar -xzf "${archive[0]}" -C /opt/observer-fixture/bundle/release || fail ARCHIVE_EXTRACT
+  printf '%s\n' /opt/observer-fixture/bundle/release > "$fixture_root/bundle-path"
+  sha256sum /opt/observer-fixture/bundle/release/connected-manifest.json | cut -d' ' -f1 > "$fixture_root/manifest-sha"
   python3 "$payload/assert_guest.py" preflight || fail REVIEWED_PAYLOAD
 
   ip addr add "$alias_ip/32" dev lo || fail LOOPBACK_ALIAS

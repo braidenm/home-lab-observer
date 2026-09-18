@@ -47,14 +47,19 @@ class HarnessAdmissionTest(unittest.TestCase):
                 f"{hashlib.sha256(manifest.read_bytes()).hexdigest()}  {manifest.name}\n"
             )
             digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
-            run_vm.check_archive(archive, manifest, checksums, commit, digest)
+            archive_digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+            run_vm.check_archive(archive, manifest, checksums, commit, digest, archive_digest)
             with self.assertRaises(RuntimeError):
-                run_vm.check_archive(archive, manifest, checksums, "b" * 40, digest)
+                run_vm.check_archive(archive, manifest, checksums, "b" * 40, digest, archive_digest)
             with self.assertRaises(RuntimeError):
-                run_vm.check_archive(archive, manifest, checksums, commit, "b" * 64)
+                run_vm.check_archive(archive, manifest, checksums, commit, "b" * 64, archive_digest)
             archive.write_bytes(b"tampered")
+            checksums.write_text(
+                f"{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}\n"
+                f"{digest}  {manifest.name}\n"
+            )
             with self.assertRaises(RuntimeError):
-                run_vm.check_archive(archive, manifest, checksums, commit, digest)
+                run_vm.check_archive(archive, manifest, checksums, commit, digest, archive_digest)
 
     def test_no_matching_marker_is_not_success(self):
         with tempfile.TemporaryDirectory() as temporary:
