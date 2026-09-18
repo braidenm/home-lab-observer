@@ -59,6 +59,7 @@ func syntheticStageFixture(t *testing.T) (string, string) {
 	}
 	record := connectedtransition.Record{
 		Version: connectedtransition.Version, Operation: "refresh", Previous: c, Next: next,
+		PredecessorFormat: connectedtransition.PredecessorNone,
 		ContractSHA256: syntheticStageHash([]byte("synthetic contract")),
 		PreviousResources: connectedtransition.Resources{
 			CA: syntheticStageHash(oldCA), Hosts: hosts(c.Addresses[0]),
