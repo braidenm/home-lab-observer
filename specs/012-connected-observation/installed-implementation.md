@@ -29,6 +29,8 @@ rich standalone dashboard remain unchanged. The fixed installer operations are:
   comparisons and publishes a receipt bound to the exact journal. Services remain stopped; activation is a
   separate gate. A crash,
   refused write or missing/mismatched receipt reports `REFRESH_RECOVERY_REQUIRED`, not a ready mixed generation.
+  Legacy completed-refresh admission now reuses the pure exact-byte transition
+  predecessor check; this does not implement a new journal, resume or rollback.
 - `uninstall`: stops/disables only exact owned services, quarantines their unit files and retains credentials,
   ledger, accounts, artifacts and diagnostics. The owner must separately revoke registration in Platform Demo.
   A partial detach preserves evidence and reports recovery required.

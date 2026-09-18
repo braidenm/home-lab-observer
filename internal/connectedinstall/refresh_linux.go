@@ -19,6 +19,7 @@ import (
 	"github.com/braidenm/home-lab-observer/internal/connectedenroll"
 	"github.com/braidenm/home-lab-observer/internal/connectedpolicy"
 	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
+	"github.com/braidenm/home-lab-observer/internal/connectedtransition"
 	"github.com/braidenm/home-lab-observer/internal/connectedunits"
 	"github.com/braidenm/home-lab-observer/internal/ledgerwitness"
 	"github.com/braidenm/home-lab-observer/internal/uploadstate"
@@ -32,19 +33,13 @@ type refreshRecord struct {
 
 func decodeRefresh(data []byte) (refreshRecord, error) {
 	var r refreshRecord
-	if len(data) > 8192 || json.Unmarshal(data, &r) != nil || r.Version != "observer-connected-refresh/v1" || r.Previous.Validate() != nil || r.Next.Validate() != nil || r.Previous.PolicyGeneration == math.MaxUint64 || r.Next.PolicyGeneration != r.Previous.PolicyGeneration+1 {
-		return r, ErrUnsafe
+	if len(data) == 0 || len(data) > 8192 || json.Unmarshal(data, &r) != nil {
+		return refreshRecord{}, ErrUnsafe
 	}
-	// Endpoint refresh cannot substitute installation identity, principals,
-	// artifact or durable ledger binding. Only generation and IP pins change.
-	want := r.Previous
-	want.PolicyGeneration = r.Next.PolicyGeneration
-	want.Addresses = r.Next.Addresses
-	wantBytes, _ := connectedprofile.Encode(want)
-	nextBytes, _ := connectedprofile.Encode(r.Next)
-	canonical, _ := json.Marshal(r)
-	if !bytes.Equal(wantBytes, nextBytes) || !bytes.Equal(canonical, data) {
-		return r, ErrUnsafe
+	// The same pure admission now governs existing receipts and newly
+	// constructed legacy journals during the staged transition migration.
+	if _, err := connectedtransition.AdmitCompletedLegacy(data, completion(data), r.Next); err != nil {
+		return refreshRecord{}, ErrUnsafe
 	}
 	return r, nil
 }
@@ -71,17 +66,11 @@ func refreshState(c connectedprofile.Config) ([]byte, []byte, error) {
 	if err != nil {
 		return nil, nil, ErrRecovery
 	}
-	r, err := decodeRefresh(data)
+	got, err := connectedprofile.ReadRootFile(receipt, 256)
 	if err != nil {
 		return nil, nil, ErrRecovery
 	}
-	got, err := connectedprofile.ReadRootFile(receipt, 256)
-	if err != nil || !bytes.Equal(got, completion(data)) {
-		return nil, nil, ErrRecovery
-	}
-	current, _ := connectedprofile.Encode(c)
-	next, _ := connectedprofile.Encode(r.Next)
-	if !bytes.Equal(current, next) {
+	if _, err := connectedtransition.AdmitCompletedLegacy(data, got, c); err != nil {
 		return nil, nil, ErrRecovery
 	}
 	return data, got, nil
