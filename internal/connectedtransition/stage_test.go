@@ -128,6 +128,34 @@ func TestStageAdmissionBindsExactPredecessor(t *testing.T) {
 			t.Fatal(name, "admitted")
 		}
 	}
+	for name, mutate := range map[string]func(*Record){
+		"resource chain": func(r *Record) { r.PreviousResources.CollectorUnit = hexByte("f") },
+		"contract chain": func(r *Record) { r.ContractSHA256 = hexByte("f") },
+		"code history": func(r *Record) {
+			r.PreviousCodeBefore = hexByte("f")
+			r.PreviousCodeAfter = hexByte("f")
+		},
+	} {
+		changedRecord := record
+		mutate(&changedRecord)
+		changedProposal, err := Encode(changedRecord)
+		if err != nil {
+			t.Fatal(name, err)
+		}
+		changedWitness, err := Prepare(changedRecord)
+		if err != nil {
+			t.Fatal(name, err)
+		}
+		changedPreparation, err := EncodePreparation(changedWitness)
+		if err != nil {
+			t.Fatal(name, err)
+		}
+		changedFiles := cloneStage(files)
+		changedFiles[StageProposalName] = changedProposal
+		if _, err := ValidateStage(changedPreparation, changedFiles); err == nil {
+			t.Fatal(name, "non-contiguous predecessor admitted")
+		}
+	}
 	// Even an internally valid prior transition and its exact receipt cannot
 	// be substituted if it does not lead to this proposal's previous state.
 	unrelated, _, otherFiles := stageFixture(t, "code-select")
