@@ -32,6 +32,7 @@ var vmSourceCommit string
 const vmBundle = "/opt/observer-fixture/bundle/release"
 const vmDigestFile = "/var/lib/hlo-first-install-fixture/manifest-sha"
 const vmServerID = "srv_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+const vmAlias = "93.184.216.34"
 
 func vmMarker(t *testing.T, marker string) {
 	t.Helper()
@@ -54,7 +55,7 @@ func vmRefuse(t *testing.T, stage string) {
 
 func vmFailureMarker(stage string) string {
 	switch stage {
-	case "INPUT", "BUNDLE", "HOST", "TARGETS", "CA", "GO_DNS", "ADDRESS", "GO_TLS", "RESOLVE_PARITY", "PARENT", "CHECKREQUEST":
+	case "INPUT", "BUNDLE", "HOST", "TARGETS", "CA", "GO_DNS", "ADDRESS_COUNT", "ADDRESS_MAPPED", "ADDRESS_NONPUBLIC", "ADDRESS_UNEXPECTED_PUBLIC", "ALIAS_INVALID", "GO_TLS", "RESOLVE_PARITY", "PARENT", "CHECKREQUEST":
 		return "HLO_VM_FAIL_EXACT_" + stage
 	default:
 		return "HLO_VM_FAIL_EXACT_UNKNOWN"
@@ -68,10 +69,62 @@ func TestVMFailureMarkerAllowlist(t *testing.T) {
 	if got := vmFailureMarker("BUNDLE"); got != "HLO_VM_FAIL_EXACT_BUNDLE" {
 		t.Fatal("probe marker rejected fixed stage")
 	}
-	for _, stage := range []string{"CA", "GO_DNS", "ADDRESS", "GO_TLS", "RESOLVE_PARITY"} {
+	for _, stage := range []string{"CA", "GO_DNS", "ADDRESS_COUNT", "ADDRESS_MAPPED", "ADDRESS_NONPUBLIC", "ADDRESS_UNEXPECTED_PUBLIC", "ALIAS_INVALID", "GO_TLS", "RESOLVE_PARITY"} {
 		if got := vmFailureMarker(stage); got != "HLO_VM_FAIL_EXACT_"+stage {
 			t.Fatal("probe marker rejected fixed network stage")
 		}
+	}
+	if got := vmFailureMarker("ADDRESS_93.184.216.34"); got != "HLO_VM_FAIL_EXACT_UNKNOWN" {
+		t.Fatal("probe marker exposed an address")
+	}
+}
+
+// This fixture-only classifier refuses an answer other than the guest's fixed
+// loopback alias before any TLS dial. It does not replace Resolve or broaden its
+// public-address policy, and returns only code-owned categories, never DNS data.
+func vmAddressCategory(ips []netip.Addr, expected netip.Addr) string {
+	if len(ips) == 0 || len(ips) > 8 {
+		return "ADDRESS_COUNT"
+	}
+	if !connectedprofile.PublicAddress(expected) {
+		return "ALIAS_INVALID"
+	}
+	for _, ip := range ips {
+		if ip.Is4In6() {
+			return "ADDRESS_MAPPED"
+		}
+		if !connectedprofile.PublicAddress(ip) {
+			return "ADDRESS_NONPUBLIC"
+		}
+		if ip != expected {
+			return "ADDRESS_UNEXPECTED_PUBLIC"
+		}
+	}
+	return ""
+}
+
+func TestVMAddressCategory(t *testing.T) {
+	alias := netip.MustParseAddr(vmAlias)
+	for _, test := range []struct {
+		name     string
+		ips      []netip.Addr
+		expected netip.Addr
+		category string
+	}{
+		{"alias", []netip.Addr{alias}, alias, ""},
+		{"duplicate alias", []netip.Addr{alias, alias}, alias, ""},
+		{"empty", nil, alias, "ADDRESS_COUNT"},
+		{"too many", []netip.Addr{alias, alias, alias, alias, alias, alias, alias, alias, alias}, alias, "ADDRESS_COUNT"},
+		{"mapped", []netip.Addr{netip.MustParseAddr("::ffff:93.184.216.34")}, alias, "ADDRESS_MAPPED"},
+		{"private", []netip.Addr{netip.MustParseAddr("127.0.0.1")}, alias, "ADDRESS_NONPUBLIC"},
+		{"unexpected public", []netip.Addr{netip.MustParseAddr("1.1.1.1")}, alias, "ADDRESS_UNEXPECTED_PUBLIC"},
+		{"invalid alias", []netip.Addr{alias}, netip.MustParseAddr("127.0.0.1"), "ALIAS_INVALID"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := vmAddressCategory(test.ips, test.expected); got != test.category {
+				t.Fatalf("category = %q, want %q", got, test.category)
+			}
+		})
 	}
 }
 
@@ -94,14 +147,11 @@ func vmDNSStages(t *testing.T, ctx context.Context) []string {
 	if err != nil {
 		vmRefuse(t, "GO_DNS")
 	}
-	if len(ips) == 0 || len(ips) > 8 {
-		vmRefuse(t, "ADDRESS")
+	if category := vmAddressCategory(ips, netip.MustParseAddr(vmAlias)); category != "" {
+		vmRefuse(t, category)
 	}
 	unique := map[netip.Addr]bool{}
 	for _, ip := range ips {
-		if !connectedprofile.PublicAddress(ip) {
-			vmRefuse(t, "ADDRESS")
-		}
 		unique[ip] = true
 	}
 	ordered := make([]string, 0, len(unique))
