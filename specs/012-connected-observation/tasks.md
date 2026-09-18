@@ -15,6 +15,7 @@
 - [x] Prove fixture acceptance in the actual Platform Demo parser (PR365, including source binding and three OS labels).
 - [ ] Specify and review credential lifecycle and OS isolation; implement without observation/control authority mixing.
 - [ ] Implement private handoff, bounded uploader and connection health with failure tests.
+  - [x] Define bounded disposable operational status and its private single-slot Linux writer; not upload or activation authority.
 - [ ] Integrate catalog, enrollment, OS-aware installation and authorized hosted views.
 - [ ] Verify packaged platforms, migration/rollback and an explicitly authorized owner canary.
   - [x] Define and test the bounded pure activation request/response/commit records; no service activation authority.

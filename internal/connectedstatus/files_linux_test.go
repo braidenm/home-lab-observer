@@ -1,0 +1,136 @@
+//go:build linux
+
+package connectedstatus
+
+import (
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	"golang.org/x/sys/unix"
+
+	"github.com/braidenm/home-lab-observer/internal/connectedactivation"
+)
+
+func TestActivationResponseUsesOneBoundedPrivateSlot(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	w, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := connectedactivation.EncodeResponse(connectedactivation.Response{
+		Version:       connectedactivation.ResponseVersion,
+		RequestSHA256: strings.Repeat("a", 64),
+		InvocationID:  strings.Repeat("b", 32),
+		Challenge:     strings.Repeat("c", 64),
+		Result:        connectedactivation.Pass,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 50 {
+		if err := w.WriteActivationResponse(response); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if w.WriteActivationResponse(make([]byte, 2049)) != ErrUnsafe {
+		t.Fatal("unbounded response accepted")
+	}
+	if w.WriteActivationResponse([]byte(`{"secret":"raw"}`)) != ErrUnsafe {
+		t.Fatal("unclosed response accepted")
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 2 {
+		t.Fatal("response history grew")
+	}
+	w, err = Open(dir)
+	if err != nil {
+		t.Fatal("valid old response prevents startup", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPrivateBoundedStatusLifecycle(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	w, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(dir); err != ErrUnsafe {
+		t.Fatal("concurrent writer accepted")
+	}
+	r := Record{Version: "observer-connected-status/v1", State: "COLLECTING", UpdatedAt: time.Now().UTC()}
+	for range 50 {
+		if err := w.Write(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 2 {
+		t.Fatal("status storage grew")
+	}
+	if err := os.WriteFile(dir+"/.status-next", []byte("interrupted"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	w, err = Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Close()
+	if _, err := os.Stat(dir + "/.status-next"); !os.IsNotExist(err) {
+		t.Fatal("disposable staging not cleared")
+	}
+	if err := os.Chmod(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(dir); err != ErrUnsafe {
+		t.Fatal("shared directory accepted")
+	}
+}
+
+func TestUnsafeStatusEntriesFailWithoutFollowing(t *testing.T) {
+	for _, kind := range []string{"symlink-lock", "fifo-lock", "unknown"} {
+		t.Run(kind, func(t *testing.T) {
+			dir := t.TempDir()
+			if os.Chmod(dir, 0700) != nil {
+				t.Fatal("chmod")
+			}
+			switch kind {
+			case "symlink-lock":
+				target := t.TempDir() + "/unrelated"
+				if os.WriteFile(target, nil, 0600) != nil || os.Symlink(target, dir+"/.status-lock") != nil {
+					t.Fatal("fixture")
+				}
+			case "fifo-lock":
+				if unix.Mkfifo(dir+"/.status-lock", 0600) != nil {
+					t.Fatal("fixture")
+				}
+			case "unknown":
+				if os.WriteFile(dir+"/unknown", nil, 0600) != nil {
+					t.Fatal("fixture")
+				}
+			}
+			if w, err := Open(dir); err != ErrUnsafe {
+				if w != nil {
+					w.Close()
+				}
+				t.Fatal("unsafe entry accepted")
+			}
+		})
+	}
+}
