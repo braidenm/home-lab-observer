@@ -55,7 +55,7 @@ func publishFirstJournalAt(ctx context.Context, config *os.File, after func(stri
 		if config.Sync() != nil || journalInterrupted(ctx, after, "parent-sync") {
 			return ErrRecovery
 		}
-		return confirmFirstJournal(config, proposal)
+		return confirmFirstJournal(ctx, config, proposal)
 	}
 	if journalInterrupted(ctx, after, "before-create") {
 		return ErrRecovery
@@ -95,16 +95,16 @@ func publishFirstJournalAt(ctx context.Context, config *os.File, after func(stri
 		journalInterrupted(ctx, after, "parent-sync") {
 		return ErrRecovery
 	}
-	return confirmFirstJournal(config, proposal)
+	return confirmFirstJournal(ctx, config, proposal)
 }
 
 func journalInterrupted(ctx context.Context, after func(string) error, step string) bool {
 	return ctx.Err() != nil || (after != nil && after(step) != nil)
 }
 
-func confirmFirstJournal(config *os.File, proposal []byte) error {
+func confirmFirstJournal(ctx context.Context, config *os.File, proposal []byte) error {
 	observed, err := ReadAuthorityAt(config)
-	if err != nil || observed.Completion != nil || !bytes.Equal(observed.Journal, proposal) {
+	if err != nil || ctx.Err() != nil || observed.Completion != nil || !bytes.Equal(observed.Journal, proposal) {
 		return ErrRecovery
 	}
 	return nil
