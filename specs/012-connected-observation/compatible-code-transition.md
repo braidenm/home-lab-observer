@@ -266,6 +266,20 @@ Before implementing the codec or writes, freeze these additional recovery states
   preparation files while active resources still match the completed predecessor.
   Unknown entries or changed active resources refuse cleanup. It does not undo a
   published transition; after publication, recovery remains forward-only.
+  The first pure-codec slice defines canonical `observer-connected-transition-preparing/v1`
+  bytes (at most 4 KiB) with the proposed transition-record SHA-256, exact previous
+  installed configuration and resource hashes, predecessor-completion SHA-256 (or
+  explicit initial), and the same private logical/physical ledger witness as the
+  proposed transition. It must derive from a valid proposed record and reject
+  extra keys, alternate encodings, invalid hashes and mismatched config/hosts
+  hashes. Pure comparison with the exact proposed record must reject a changed
+  valid proposal as well as an invalid one. This is only a compact
+  intent/witness; it does not retain staged CA bytes, prove filesystem ownership
+  or authorize cleanup. Before any future
+  abort, the installer must separately prove that no authoritative journal was
+  published, the completed predecessor is exact, workers are stopped, every
+  active resource and ledger witness is unchanged, and staging contains only
+  known owned entries. This slice has no installer wiring.
 - **Predecessor retention:** retain exact previous journal and completion bytes
   in bounded staging before replacing `transition.json`. Their hashes alone do
   not preserve the evidence needed to validate the predecessor after replacement.
