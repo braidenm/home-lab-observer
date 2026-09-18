@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { managerSmokeFailure } from "./windows-manager-smoke-failure.mjs";
+import { readRuntimeSmokeDiagnostics } from "./runtime-smoke-diagnostics.mjs";
 
 const optedIn = process.env.OBSERVER_TEST_USER_MANAGER === "1";
 if (!optedIn) {
@@ -48,7 +49,8 @@ try {
   assert(cleanupConfirmed, "normal disable did not remove the managed registration");
 } catch (error) {
   const shape = queryFixedTaskXMLShape();
-  primaryFailure = new Error(`${error instanceof Error ? error.message : "Windows manager smoke failed"}; task_xml_shape=${JSON.stringify(shape)}`);
+  const runtime = await readRuntimeSmokeDiagnostics(state);
+  primaryFailure = new Error(`${error instanceof Error ? error.message : "Windows manager smoke failed"}; task_xml_shape=${JSON.stringify(shape)}; runtime=${JSON.stringify(runtime)}`);
 } finally {
   if (enableAttempted && !cleanupConfirmed) {
     try {

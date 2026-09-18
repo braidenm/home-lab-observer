@@ -94,7 +94,15 @@ prerequisites. This document records pending work, not completed behavior.
   failure and retains uniform permission-denied reasons. The added regression
   passes; mixed failures deliberately map to collection failed.
 
-Remaining: actual JVM parsing of both exact fixture files, deployed first-party
+- Platform candidate `2e62dbc4` executes both byte-identical fixtures through the
+  actual JVM parser and upload schema, plus the partial sample's read projection.
+  The 11 parser/schema tests pass, as do 10 focused first-party client/UI tests and
+  typechecking. Fixture SHA-256 values are `150e1a1dae8b2e2da313b25fc2836b42e51d2550345e7c249291245e5b400961`
+  and `73f1017cedd1c0d875772ae879b31df425e05812ddd5c12e25d5cadb8c85c40b`.
+  The database-backed upload/detail test compiles but awaits hosted CI; this is
+  not a claim of installed transport or deployed receiver proof.
+
+Remaining: database-backed upload/detail proof, deployed first-party
 null-total/truncation compatibility, compiled installation compatibility identity,
 packaged activation/rollback acceptance and the owner canary. Do not advertise
 the draft connected collector as a supported installed profile yet.

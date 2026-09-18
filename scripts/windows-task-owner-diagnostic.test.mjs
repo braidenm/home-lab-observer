@@ -1,8 +1,49 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { link, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { readRuntimeSmokeDiagnostics, summarizeRuntimeDiagnostics } from "./runtime-smoke-diagnostics.mjs";
+
+test("runtime failure evidence reads only a bounded regular fixture file", async () => {
+  const state = await mkdtemp(path.join(os.tmpdir(), "observer-runtime-diagnostic-test-"));
+  try {
+    assert.equal((await readRuntimeSmokeDiagnostics(state)).code, "RUNTIME_DIAGNOSTIC_UNAVAILABLE");
+    await mkdir(path.join(state, "diagnostics"));
+    const target = path.join(state, "diagnostics", "observer.jsonl");
+    const row = { observed_at: "2026-09-17T00:00:00Z", event: "STOP_REQUESTED", code: "OK", version: "dev", count: 0, duration_ms: 0 };
+    await writeFile(target, JSON.stringify(row) + "\n");
+    assert.deepEqual(await readRuntimeSmokeDiagnostics(state), { code: "RUNTIME_DIAGNOSTIC_AVAILABLE", events: [{ event: "STOP_REQUESTED", code: "OK" }] });
+    await link(target, path.join(state, "linked"));
+    assert.equal((await readRuntimeSmokeDiagnostics(state)).code, "RUNTIME_DIAGNOSTIC_UNAVAILABLE");
+    await rm(path.join(state, "linked"));
+    await writeFile(target, Buffer.alloc(65537));
+    assert.equal((await readRuntimeSmokeDiagnostics(state)).code, "RUNTIME_DIAGNOSTIC_UNAVAILABLE");
+  } finally {
+    await rm(state, { recursive: true, force: true });
+  }
+});
+
+test("runtime failure evidence emits only bounded code-owned pairs", () => {
+  const privateValue = "synthetic-secret@example.invalid";
+  const row = { observed_at: privateValue, event: "RUNTIME_STOPPED", code: "TIMEOUT", version: privateValue, count: 0, duration_ms: 0 };
+  const bytes = Buffer.from((JSON.stringify(row) + "\n").repeat(10));
+  const summary = summarizeRuntimeDiagnostics(bytes);
+  assert.equal(summary.code, "RUNTIME_DIAGNOSTIC_AVAILABLE");
+  assert.equal(summary.events.length, 8);
+  assert.deepEqual(summary.events[0], { event: "RUNTIME_STOPPED", code: "TIMEOUT" });
+  assert(!JSON.stringify(summary).includes(privateValue));
+  for (const value of [
+    Buffer.alloc(0), Buffer.alloc(65537), Buffer.from("bad\n"), Buffer.from(JSON.stringify(row)),
+    Buffer.from(JSON.stringify({ ...row, event: privateValue }) + "\n"),
+    Buffer.from(JSON.stringify({ ...row, code: privateValue }) + "\n"),
+    Buffer.from(JSON.stringify({ ...row, message: privateValue }) + "\n"),
+    Buffer.from(JSON.stringify({ ...row, duration_ms: -1 }) + "\n"),
+    Buffer.from((JSON.stringify(row) + "\n").repeat(257)),
+  ]) assert.deepEqual(summarizeRuntimeDiagnostics(value), { code: "RUNTIME_DIAGNOSTIC_UNAVAILABLE" });
+});
 
 test("Windows task diagnostic recognizes only exact current-owner aliases", { skip: process.platform !== "win32" }, () => {
   const source = readFileSync(new URL("./smoke-windows-manager.mjs", import.meta.url), "utf8");
