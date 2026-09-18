@@ -82,6 +82,13 @@ func TestCanonicalRecordAndCompletion(t *testing.T) {
 }
 
 func TestOperationAndWitnessRefusals(t *testing.T) {
+	legacyPredecessor := sampleRecord("refresh")
+	legacyPredecessor.PredecessorCompletionSHA = ""
+	legacyPredecessor.PreviousCodeBefore = hexByte("f")
+	legacyPredecessor.PreviousCodeAfter = legacyPredecessor.PreviousCodeBefore
+	if _, err := Encode(legacyPredecessor); err != nil {
+		t.Fatal("optional predecessor or retained code history refused", err)
+	}
 	for name, mutate := range map[string]func(*Record){
 		"unknown operation":         func(r *Record) { r.Operation = "restore" },
 		"generation gap":            func(r *Record) { r.Next.PolicyGeneration++ },
