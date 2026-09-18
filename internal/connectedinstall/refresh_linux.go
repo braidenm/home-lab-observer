@@ -130,6 +130,9 @@ func Refresh(ctx context.Context) error {
 		return err
 	}
 	defer lock.Close()
+	if err := rejectRecoveryMarkers(); err != nil {
+		return err
+	}
 	c, err := inspectInstalled()
 	if err != nil {
 		return err

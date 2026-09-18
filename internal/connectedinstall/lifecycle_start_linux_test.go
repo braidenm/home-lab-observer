@@ -16,7 +16,7 @@ type startLeaseFixture struct{ close func() error }
 func (l startLeaseFixture) Close() error { return l.close() }
 
 func TestStartLeaseAndRefusalOrder(t *testing.T) {
-	steps := []string{"lease", "removal", "inspect", "stop", "preflight", "audit", "activate", "close"}
+	steps := []string{"lease", "markers", "inspect", "stop", "preflight", "audit", "activate", "close"}
 	for _, failure := range append([]string{""}, steps...) {
 		t.Run("failure-"+failure, func(t *testing.T) {
 			calls := []string{}
@@ -36,7 +36,7 @@ func TestStartLeaseAndRefusalOrder(t *testing.T) {
 					return startLeaseFixture{func() error { return call("close") }}, nil
 				},
 				preflight: func(context.Context) error { return call("preflight") },
-				removal:   func() error { return call("removal") },
+				markers:   func() error { return call("markers") },
 				inspect:   func() (connectedprofile.Config, error) { return binding, call("inspect") },
 				audit: func(_ context.Context, c connectedprofile.Config) error {
 					if !reflect.DeepEqual(c, binding) {
@@ -92,7 +92,7 @@ func TestStartCancellationNeverActivates(t *testing.T) {
 					}
 					return startLeaseFixture{func() error { closed = true; return nil }}, nil
 				},
-				preflight: func(context.Context) error { return nil }, removal: func() error { return nil },
+				preflight: func(context.Context) error { return nil }, markers: func() error { return nil },
 				inspect: func() (connectedprofile.Config, error) { return principalFixture(), nil },
 				audit: func(context.Context, connectedprofile.Config) error {
 					if at == "audit" {

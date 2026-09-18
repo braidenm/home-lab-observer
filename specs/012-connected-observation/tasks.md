@@ -28,6 +28,7 @@
   - [x] Add pure fixed-stage byte admission for the proposal, CA bytes and exact predecessor chain; this does not establish filesystem ownership or durability.
   - [x] Classify complete staged evidence without treating a retained predecessor receipt as new completion; this does not permit abort, cleanup or worker startup.
   - [x] Add independent anchored ext4 stage inspection and exclusive publication primitives with root synthetic interruption tests; not wired to installer commands.
+  - [x] Fence normal start/restart/refresh on fixed staging residue; no abort, cleanup or forward recovery operation yet.
   - [ ] Integrate the bounded preparation witness, exact predecessor/staging retention and forward-only interrupted transition recovery.
   - [ ] Prove compatible code selection and rollback across two packaged releases without restoring or changing the used ledger.
 - [ ] Review and implement [activation evidence](activation-design.md), including bounded same-process checks and the parent/worker enforcement rendezvous; no manual bypass.

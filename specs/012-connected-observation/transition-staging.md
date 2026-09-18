@@ -32,6 +32,12 @@ ledger, and eventual forward-recovery checks. Root-owned synthetic ext4 tests
 exercise both successful reopen and failures at each durable publication step;
 they do not substitute for VM power-loss proof.
 
+The draft installer's normal `start`, `restart`, and endpoint `refresh` paths
+now refuse any fixed preparation/stage marker under the installation lease,
+including a dangling symlink. This is a residue fence only: it neither reads
+partial evidence as valid nor chooses abort/forward recovery. The stopped
+worker, predecessor and ledger checks still precede any future publication.
+
 The pure staged classifier accepts only an already valid complete stage, the
 actual active transition journal/receipt bytes, and caller-verified active
 resource hashes plus the private ledger witness. Before publication, the
