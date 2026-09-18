@@ -25,6 +25,7 @@
   - [x] Verify exact connected bundle bytes and deterministic archive from an independently trusted manifest digest; no installation or selection authority.
   - [x] Add a closed build-only connected packer that emits final checksums last; no release publication or installation.
   - [x] Define fixed same-process Linux worker checks for primitive denials and restricted views; installed-profile proof remains open.
+  - [x] Add read-only paused-worker descriptor/process identity audit; manager correlation and VM enforcement remain external gates.
   - [x] Define and test the bounded pure activation request/response/commit records; no service activation authority.
   - [x] Add pure fixed-stage byte admission for the proposal, CA bytes and exact predecessor chain; this does not establish filesystem ownership or durability.
   - [x] Classify complete staged evidence without treating a retained predecessor receipt as new completion; this does not permit abort, cleanup or worker startup.
