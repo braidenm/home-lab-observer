@@ -15,6 +15,39 @@ SERVER = "srv_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 PREPARING = "/etc/home-lab-observer-connected/preparing.json"
 STATE_ROOT = "/var/lib/home-lab-observer-connected"
 RELEASE_ROOT = "/opt/home-lab-observer-connected"
+MAX_OUTPUT = 8192
+PHASE_LABELS = (
+    (b"PREFLIGHT_REFUSED:", "PREFLIGHT_REFUSED"),
+    (b"LOCAL_SETUP_INCOMPLETE:", "LOCAL_SETUP_INCOMPLETE"),
+    (b"ENROLLMENT_RECOVERY_REQUIRED:", "ENROLLMENT_RECOVERY_REQUIRED"),
+)
+
+
+def append_bounded(output: bytearray, data: bytes) -> bool:
+    if len(data) > MAX_OUTPUT - len(output):
+        return False
+    output.extend(data)
+    return True
+
+
+def classify_failure(output: bytes) -> str:
+    found = [phase for label, phase in PHASE_LABELS if label in output]
+    return found[0] if len(found) == 1 else "UNRECOGNIZED"
+
+
+def normalized_exit(code: int) -> int:
+    if 0 <= code <= 255:
+        return code
+    if -64 <= code < 0:
+        return 128 - code
+    return 255
+
+
+def failure_marker(output: bytes, code: int, prompted: bool) -> str:
+    return (
+        f"FIXTURE_DRIVER_FAILURE PHASE={classify_failure(output)} "
+        f"EXIT={normalized_exit(code)} PROMPT={int(prompted)}"
+    )
 
 
 def main() -> int:
@@ -70,8 +103,7 @@ def main() -> int:
                 except OSError:
                     data = b""
                 if data:
-                    output.extend(data)
-                    if len(output) > 8192:
+                    if not append_bounded(output, data):
                         print("FIXTURE_DRIVER_OUTPUT_OVERFLOW", flush=True)
                         return 1
                     if not prompted and b"One-use enrollment grant" in output:
@@ -80,10 +112,11 @@ def main() -> int:
             finished, status = os.waitpid(child, os.WNOHANG)
             if finished:
                 child_running = False
-                if os.waitstatus_to_exitcode(status) == 0 and prompted and b"INSTALLED_PENDING_ACCEPTANCE" in output:
+                exit_code = os.waitstatus_to_exitcode(status)
+                if exit_code == 0 and prompted and b"INSTALLED_PENDING_ACCEPTANCE" in output:
                     print("DRIVER_INSTALLED", flush=True)
                     return 0
-                print("FIXTURE_DRIVER_INSTALL_FAILED", flush=True)
+                print(failure_marker(output, exit_code, prompted), flush=True)
                 return 1
         print("FIXTURE_DRIVER_TIMEOUT_OR_CLOSED", flush=True)
         return 1
