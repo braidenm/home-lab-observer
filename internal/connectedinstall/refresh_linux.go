@@ -52,10 +52,17 @@ func completion(data []byte) []byte {
 // refreshState returns the last closed journal only when completion and current
 // installed identity agree. A missing journal is valid only without a receipt.
 func refreshState(c connectedprofile.Config) ([]byte, []byte, error) {
-	journal := connectedprofile.ConfigDirectory + "/refresh.json"
-	receipt := connectedprofile.ConfigDirectory + "/refresh-complete"
+	return refreshStateAt(c, connectedprofile.ConfigDirectory+"/refresh.json", connectedprofile.ConfigDirectory+"/refresh-complete")
+}
+
+func refreshStateAt(c connectedprofile.Config, journal, receipt string) ([]byte, []byte, error) {
 	if _, err := os.Lstat(journal); os.IsNotExist(err) {
 		if _, err := os.Lstat(receipt); os.IsNotExist(err) {
+			// Only the initial installed generation has no refresh evidence.
+			// Losing both files after a refresh must not reset the history.
+			if c.PolicyGeneration != 1 {
+				return nil, nil, ErrRecovery
+			}
 			return nil, nil, nil
 		}
 		return nil, nil, ErrUnsafe

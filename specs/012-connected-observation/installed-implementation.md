@@ -31,6 +31,9 @@ rich standalone dashboard remain unchanged. The fixed installer operations are:
   refused write or missing/mismatched receipt reports `REFRESH_RECOVERY_REQUIRED`, not a ready mixed generation.
   Legacy completed-refresh admission now reuses the pure exact-byte transition
   predecessor check; this does not implement a new journal, resume or rollback.
+  An absent journal and receipt are admitted only for initial policy generation 1.
+  A later generation without either evidence file is recovery-required, so loss of
+  both files cannot be mistaken for an initial install.
 - `uninstall`: stops/disables only exact owned services, quarantines their unit files and retains credentials,
   ledger, accounts, artifacts and diagnostics. The owner must separately revoke registration in Platform Demo.
   A partial detach preserves evidence and reports recovery required.

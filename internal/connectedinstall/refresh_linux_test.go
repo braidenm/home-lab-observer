@@ -6,11 +6,33 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
 )
+
+func TestRefreshStateRequiresEvidenceAfterInitialGeneration(t *testing.T) {
+	directory := t.TempDir()
+	journal := filepath.Join(directory, "refresh.json")
+	receipt := filepath.Join(directory, "refresh-complete")
+	initial := connectedprofile.Config{PolicyGeneration: 1}
+	if _, _, err := refreshStateAt(initial, journal, receipt); err != nil {
+		t.Fatal("initial install without refresh evidence refused", err)
+	}
+	refreshed := initial
+	refreshed.PolicyGeneration = 2
+	if _, _, err := refreshStateAt(refreshed, journal, receipt); err != ErrRecovery {
+		t.Fatalf("refreshed install without evidence must require recovery: %v", err)
+	}
+	if err := os.WriteFile(receipt, []byte("synthetic incomplete receipt"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := refreshStateAt(initial, journal, receipt); err != ErrUnsafe {
+		t.Fatalf("orphan completion must refuse: %v", err)
+	}
+}
 
 func TestRefreshChangesOnlyNetworkGeneration(t *testing.T) {
 	c := connectedprofile.Config{Version: connectedprofile.Version, State: "INSTALLED_READY", ServerID: "srv_" + strings.Repeat("a", 32), ConnectorID: "agent_" + strings.Repeat("b", 32), CollectorUID: 60101, UploaderUID: 60102, UploaderGID: 60102, SharedGID: 60103, ArtifactSHA256: strings.Repeat("c", 64), PolicyGeneration: 1, Addresses: []string{"1.1.1.1"}}
