@@ -21,6 +21,7 @@
 - [x] Add fixed-host endpoint resolution and exact loaded-systemd IP-policy admission as an unused library; kernel enforcement and installed startup remain acceptance gates.
 - [ ] Integrate catalog, enrollment, OS-aware installation and authorized hosted views.
 - [ ] Verify packaged platforms, migration/rollback and an explicitly authorized owner canary.
+  - [x] Add the private binding-checked existing-ledger result codec; no operator exposure or promotion authority.
   - [x] Freeze the current code-owned connected compatibility descriptor and resource/state hashes; recognition grants no code-selection authority.
   - [x] Declare bounded v1/v2 connected build identities tied to the compiled contract; identity does not authenticate a publisher.
   - [x] Verify exact connected bundle bytes and deterministic archive from an independently trusted manifest digest; no installation or selection authority.
