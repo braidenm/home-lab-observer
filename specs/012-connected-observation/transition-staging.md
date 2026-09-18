@@ -17,6 +17,21 @@ oversized entries refuse. This check does not establish file ownership,
 durability, legacy-journal migration, ledger identity or worker state; the
 installer must prove those separately from anchored descriptors.
 
+The separate Linux stage-filesystem slice provides anchored `InspectAt` and
+`PublishAt` primitives, not an installer command. Both require root and an
+exact root-owned config directory on ext4. Inspection permits only the fixed
+private stage inventory, modes, ownership, no links/ACLs, bounded regular
+files, and matching canonical proposal/preparation bytes. Publication refuses
+occupied names, writes/syncs the preparation first, then creates/syncs the
+private stage and each fixed member exclusively, and reopens all evidence for
+byte comparison before returning. Any uncertain write or injected post-sync
+interruption leaves the evidence intact and requires recovery; it does not
+silently retry, delete, publish the active journal, or start workers. The
+caller still owes installation lease, stopped-worker, predecessor, private
+ledger, and eventual forward-recovery checks. Root-owned synthetic ext4 tests
+exercise both successful reopen and failures at each durable publication step;
+they do not substitute for VM power-loss proof.
+
 The pure staged classifier accepts only an already valid complete stage, the
 actual active transition journal/receipt bytes, and caller-verified active
 resource hashes plus the private ledger witness. Before publication, the
