@@ -73,7 +73,8 @@ func TestStageAdmissionRequiresExactFixedEvidence(t *testing.T) {
 	}
 }
 
-func TestStageAdmissionBindsExactPredecessor(t *testing.T) {
+func chainedStageFixture(t *testing.T) (Record, []byte, map[string][]byte) {
+	t.Helper()
 	predecessor, _, earlier := stageFixture(t, "refresh")
 	predecessorBytes := earlier[StageProposalName]
 	predecessorCompletion, err := Completion(predecessorBytes)
@@ -113,6 +114,11 @@ func TestStageAdmissionBindsExactPredecessor(t *testing.T) {
 		StagePredecessorName:           predecessorBytes,
 		StagePredecessorCompletionName: predecessorCompletion,
 	}
+	return record, preparation, files
+}
+
+func TestStageAdmissionBindsExactPredecessor(t *testing.T) {
+	record, preparation, files := chainedStageFixture(t)
 	if _, err := ValidateStage(preparation, files); err != nil {
 		t.Fatal("exact predecessor refused", err)
 	}

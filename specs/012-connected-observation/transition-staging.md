@@ -17,6 +17,20 @@ oversized entries refuse. This check does not establish file ownership,
 durability, legacy-journal migration, ledger identity or worker state; the
 installer must prove those separately from anchored descriptors.
 
+The pure staged classifier accepts only an already valid complete stage, the
+actual active transition journal/receipt bytes, and caller-verified active
+resource hashes plus the private ledger witness. Before publication, the
+journal/receipt must still be the exact retained predecessor pair (or both
+absent for the first new-format transition) and every active resource must
+match the previous set. After publication, the journal must equal the exact
+proposal. A retained predecessor receipt is recognized as *old* evidence, not
+completion of the new proposal; its unexpected absence after publication
+refuses rather than inventing a missing-file transition. A new exact receipt
+is accepted only with all next resources. It reports preparation pending,
+forward recovery required or
+completion cleanup pending. None of these is a worker startup, abort or cleanup
+permit; filesystem ownership, sync and stopped-worker proofs are external.
+
 ## Fixed evidence
 
 - `transition-preparing.json` in the root-owned config directory contains
