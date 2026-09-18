@@ -254,15 +254,17 @@ def snapshot() -> dict:
         "PrivateNetwork": "yes", "RootDirectory": "", "BindPaths": "",
         "NoNewPrivileges": "yes",
     }, "COLLECTOR_EFFECTIVE")
-    need(uploader_properties["FragmentPath"] == "/etc/systemd/system/" + units[1]
-         and uploader_properties["DropInPaths"] == ""
-         and uploader_properties["NeedDaemonReload"] == "no"
-         and uploader_properties["RootDirectory"] == str(STATE / "uploader-root")
-         and str(STATE / "ledger") in uploader_properties["BindPaths"]
-         and str(release) in uploader_properties["BindReadOnlyPaths"]
-         and uploader_properties["NoNewPrivileges"] == "yes"
-         and uploader_properties["IPAddressDeny"] == "0.0.0.0/0 ::/0",
-         "UPLOADER_EFFECTIVE")
+    for label, valid in (
+        ("FRAGMENT", uploader_properties["FragmentPath"] == "/etc/systemd/system/" + units[1]),
+        ("DROPINS", uploader_properties["DropInPaths"] == ""),
+        ("RELOAD", uploader_properties["NeedDaemonReload"] == "no"),
+        ("ROOT", uploader_properties["RootDirectory"] == str(STATE / "uploader-root")),
+        ("LEDGER", str(STATE / "ledger") in uploader_properties["BindPaths"]),
+        ("RELEASE", str(release) in uploader_properties["BindReadOnlyPaths"]),
+        ("PRIVILEGES", uploader_properties["NoNewPrivileges"] == "yes"),
+        ("DENY", uploader_properties["IPAddressDeny"] == "0.0.0.0/0 ::/0"),
+    ):
+        need(valid, "UPLOADER_EFFECTIVE_" + label)
     transient = run("/usr/bin/systemctl", "show", "--property=LoadState", "--property=ActiveState", "--property=Transient", "--property=FragmentPath", "home-lab-observer-connected-enrollment.service")
     need("LoadState=not-found\n" in transient and "ActiveState=inactive\n" in transient and "Transient=no\n" in transient and "FragmentPath=\n" in transient, "TRANSIENT_RETAINED")
     return {"installed": [installed_stat.st_ino, installed_stat.st_size, digest(installed)],
