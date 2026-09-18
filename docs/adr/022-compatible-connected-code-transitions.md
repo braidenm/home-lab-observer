@@ -33,6 +33,8 @@ start repeats ADR 021, and no completion record is activation authority.
 
 The [detailed transition plan](../../specs/012-connected-observation/compatible-code-transition.md)
 defines compatibility, legacy journal admission, interruption behavior and tests.
+The [staging durability research](../architecture-research/008-connected-transition-durability.md)
+records the filesystem and systemd evidence behind the proposed write order.
 The bounded [descriptor binding slice](../../specs/012-connected-observation/compatibility-descriptor.md)
 recognizes current state/wire contracts using connected v2, while explicitly
 marking transitions unsupported and durable filesystem identity unasserted.
