@@ -21,7 +21,8 @@ STATE = Path("/var/lib/home-lab-observer-connected")
 RELEASES = Path("/opt/home-lab-observer-connected/releases")
 SERVER = "srv_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 MEMBER_STAGES = frozenset({"BUNDLE", "RELEASES", "RELEASE", "CONFIG", "CREDENTIALS", "STATE",
-                           "ENROLLMENT", "UPLOADER_ROOT", "UPLOADER_ETC", "UPLOADER_STATE", "RECOVERY_CONFIG"})
+                           "ENROLLMENT", "UPLOADER_ROOT", "UPLOADER_ETC", "UPLOADER_STATE",
+                           "UPLOADER_DEV", "UPLOADER_RUN", "UPLOADER_SYSTEMD", "RECOVERY_CONFIG"})
 ENROLLMENT_MEMBERS = frozenset({".enrollment-lock", "attempt.json", "credential.json", "ready.json"})
 
 
@@ -56,6 +57,25 @@ def plain(path: Path, mode: int, uid: int, gid: int, directory: bool = False) ->
 def names(path: Path, expected: set[str], stage: str) -> None:
     need(stage in MEMBER_STAGES, "UNKNOWN_MEMBER_UNKNOWN")
     need({entry.name for entry in path.iterdir()} == expected, "UNKNOWN_MEMBER_" + stage)
+
+
+def systemd_root_scaffold(root: Path) -> None:
+    """Verify the empty mount-point directories systemd creates for RootDirectory=."""
+    for name, mode in (("root", 0o750), ("usr", 0o755), ("var", 0o755),
+                       ("proc", 0o555), ("sys", 0o555), ("dev", 0o555),
+                       ("run", 0o555)):
+        path = root / name
+        plain(path, mode, 0, 0, True)
+        if name in ("root", "usr", "var", "proc", "sys"):
+            names(path, set(), "UPLOADER_ROOT")
+    names(root / "dev", {"mqueue"}, "UPLOADER_DEV")
+    plain(root / "dev/mqueue", 0o755, 0, 0, True)
+    names(root / "dev/mqueue", set(), "UPLOADER_DEV")
+    names(root / "run", {"systemd"}, "UPLOADER_RUN")
+    plain(root / "run/systemd", 0o755, 0, 0, True)
+    names(root / "run/systemd", {"incoming"}, "UPLOADER_SYSTEMD")
+    plain(root / "run/systemd/incoming", 0o755, 0, 0, True)
+    names(root / "run/systemd/incoming", set(), "UPLOADER_SYSTEMD")
 
 
 def enrollment_records(path: Path, uid: int, gid: int, connector: str, secret: str) -> dict:
@@ -174,7 +194,9 @@ def snapshot() -> dict:
                                     profile["connector_id"], credential_record.get("secret", ""))
     uploader_root = STATE / "uploader-root"
     plain(uploader_root, 0o755, 0, 0, True)
-    names(uploader_root, {"bin", "etc", "state", "handoff", "activation"}, "UPLOADER_ROOT")
+    names(uploader_root, {"bin", "etc", "state", "handoff", "activation",
+                          "root", "usr", "var", "proc", "sys", "dev", "run"}, "UPLOADER_ROOT")
+    systemd_root_scaffold(uploader_root)
     names(uploader_root / "etc", {"ssl", "home-lab-observer-connected", "hosts", "resolv.conf", "nsswitch.conf"}, "UPLOADER_ETC")
     names(uploader_root / "state", {"enrollment", "ledger", "status"}, "UPLOADER_STATE")
     ledger = STATE / "ledger"
