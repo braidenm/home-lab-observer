@@ -53,6 +53,15 @@ func replaceTransitionAt(
 		if err != nil || !os.SameFile(identity, confirmedIdentity) || !bytes.Equal(confirmed, next) || ctx.Err() != nil {
 			return ErrRecovery
 		}
+		// A prior rename may have been interrupted before its directory sync.
+		// Re-observing next bytes alone is not durable publication evidence.
+		if parent.Sync() != nil || (after != nil && after("parent-sync") != nil) {
+			return ErrRecovery
+		}
+		confirmed, confirmedIdentity, err = readTransitionMember(parent, target, mode, limit)
+		if err != nil || !os.SameFile(identity, confirmedIdentity) || !bytes.Equal(confirmed, next) || ctx.Err() != nil {
+			return ErrRecovery
+		}
 		return nil
 	}
 	if ctx.Err() != nil {

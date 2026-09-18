@@ -39,7 +39,8 @@ func TestOwnedTransitionReplacementFixture(t *testing.T) {
 	temp := ".observer-transition-config-" + hex.EncodeToString(sum[:])
 	for _, scenario := range []string{
 		"replace", "already-next", "partial-temp", "file-sync-interruption",
-		"rename-interruption", "foreign-target", "linked-temp", "broad-temp",
+		"rename-interruption", "parent-sync-interruption", "already-next-sync-interruption",
+		"foreign-target", "linked-temp", "broad-temp",
 		"foreign-temp", "hardlink-temp", "oversized-temp", "broad-target",
 		"symlink-target", "canceled", "unknown-role",
 	} {
@@ -47,7 +48,7 @@ func TestOwnedTransitionReplacementFixture(t *testing.T) {
 			path := t.TempDir()
 			target := filepath.Join(path, "installed.json")
 			initial := previous
-			if scenario == "already-next" {
+			if scenario == "already-next" || scenario == "already-next-sync-interruption" {
 				initial = next
 			}
 			if scenario == "foreign-target" {
@@ -114,10 +115,13 @@ func TestOwnedTransitionReplacementFixture(t *testing.T) {
 				role = "shell"
 			}
 			var hook func(string) error
-			if scenario == "file-sync-interruption" || scenario == "rename-interruption" {
+			if scenario == "file-sync-interruption" || scenario == "rename-interruption" ||
+				scenario == "parent-sync-interruption" || scenario == "already-next-sync-interruption" {
 				step := "file-sync"
 				if scenario == "rename-interruption" {
 					step = "rename"
+				} else if scenario == "parent-sync-interruption" || scenario == "already-next-sync-interruption" {
+					step = "parent-sync"
 				}
 				hook = func(at string) error {
 					if at == step {
@@ -132,7 +136,7 @@ func TestOwnedTransitionReplacementFixture(t *testing.T) {
 				if err != nil {
 					t.Fatal("recognized replacement refused", err)
 				}
-			case "file-sync-interruption", "rename-interruption":
+			case "file-sync-interruption", "rename-interruption", "parent-sync-interruption", "already-next-sync-interruption":
 				if err != ErrRecovery {
 					t.Fatal("interrupted replacement looked complete")
 				}
@@ -153,7 +157,9 @@ func TestOwnedTransitionReplacementFixture(t *testing.T) {
 					}
 				}
 			}
-			if scenario == "replace" || scenario == "already-next" || scenario == "partial-temp" || scenario == "file-sync-interruption" || scenario == "rename-interruption" {
+			if scenario == "replace" || scenario == "already-next" || scenario == "partial-temp" ||
+				scenario == "file-sync-interruption" || scenario == "rename-interruption" ||
+				scenario == "parent-sync-interruption" || scenario == "already-next-sync-interruption" {
 				data, readErr := os.ReadFile(target)
 				if readErr != nil || !bytes.Equal(data, next) {
 					t.Fatal("next bytes not authoritative after successful return", readErr)

@@ -144,7 +144,8 @@ partial temporary write is not evidence about the active target. An unknown
 name, wrong owner/type/mode/link/ACL, unsupported filesystem, or active bytes
 outside the exact previous/next set remains a stopped recovery refusal. A
 crash after rename but before parent sync must reopen and classify the actual
-target; it must never assume that the rename persisted. After all resources
+target and sync its parent even if the target already has next bytes; it must
+never assume that the rename persisted. After all resources
 match next, exact installed modes, loaded manager properties, package and
 private ledger witnesses must be rechecked before publishing completion.
 
