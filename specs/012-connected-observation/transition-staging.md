@@ -75,6 +75,14 @@ remain distinct detached evidence. The read does not establish a completed
 pair or compare it to the stage; those admission checks remain separate and
 must precede any transition publication or recovery.
 
+A separate read-only first-predecessor inspection now reopens a complete
+anchored stage, then requires both installed legacy names absent for `none` or
+byte-for-byte equal to the staged legacy journal and receipt for
+`legacy-refresh-v1`. It refuses new-format predecessors, partial legacy pairs
+and substituted installed bytes. The installation lease, stopped-worker and
+private-ledger proofs remain the caller's responsibility; this inspection is
+not publication or recovery authority.
+
 A read-only composition now requires the stage's decoded record to equal its
 exact canonical proposal, re-derives code-owned previous/next resource bytes,
 rejects active bytes outside those sets, and joins the fixed journal/receipt

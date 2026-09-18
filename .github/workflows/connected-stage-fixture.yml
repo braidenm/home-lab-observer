@@ -46,4 +46,4 @@ jobs:
         run: >-
           sudo env -i PATH=/usr/bin:/bin TMPDIR=/tmp OBSERVER_CONNECTED_STAGE_ACCEPTANCE=1
           "$RUNNER_TEMP/connected-stage.test"
-          -test.run='^TestOwnedTransitionStage(ReadOnly|Publication|Authority|Legacy)Fixture$' -test.count=1 -test.timeout=120s -test.v
+          -test.run='^TestOwnedTransitionStage(ReadOnly|Publication|Authority|Legacy|FirstPredecessor)Fixture$' -test.count=1 -test.timeout=120s -test.v

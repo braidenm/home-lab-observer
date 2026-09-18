@@ -40,8 +40,8 @@
   - [ ] Implement proposal-bound active-file replacement with exact residue admission, sync fault injection, and forward-only recovery.
   - [x] Add independent anchored ext4 stage inspection and exclusive publication primitives with root synthetic interruption tests; not wired to installer commands.
   - [x] Read the fixed authoritative transition journal/receipt names under the anchored ext4 config directory; classification and writes remain separate.
-  - [x] Read both fixed legacy refresh names as separate anchored ext4 evidence with a privileged refusal fixture; stage comparison remains open.
+  - [x] Read both fixed legacy refresh names as separate anchored ext4 evidence with a privileged refusal fixture; stage comparison is a separate check.
   - [x] Compose only read-only staged/active/ledger evidence into a diagnostic phase; it grants no replacement, cleanup or worker start.
   - [x] Add closed none/legacy/new-format predecessor byte admission and pure phase classification; no installed legacy-file provenance is inferred.
-  - [ ] Independently anchor and compare installed legacy refresh files to the staged predecessor before publication or recovery is enabled.
+  - [x] Independently anchor and compare installed legacy refresh files to a complete staged first predecessor; the lease, stopped workers and durable publication remain open.
 - [ ] Specify richer remote quality-aware read models; keep Kubernetes deferred and actions in Spec 011.
