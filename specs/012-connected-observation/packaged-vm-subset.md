@@ -173,9 +173,9 @@ are intentionally not recoverable.
 ## Quality-aware collector and used-ledger follow-up (2026-09-18)
 
 The draft collector now publishes the native quality-aware host contract. The
-next packaged run therefore validates that exact canonical contract and server
-binding, requires Linux CPU and uptime availability plus useful RAM (complete or
-degraded), and refuses any assertion of complete filesystem coverage or a known
+packaged follow-up validated that exact canonical contract and server
+binding, required Linux CPU and uptime availability plus useful RAM (complete or
+degraded), and refused any assertion of complete filesystem coverage or a known
 whole-host filesystem total. The old legacy-unavailable assertion is removed;
 historical evidence above continues to describe the older package truthfully.
 
@@ -183,10 +183,10 @@ The acceptance predicate has Linux-native fixture tests covering useful partial
 data, false complete coverage, foreign server binding, invalid metric values and
 the legacy response. These tests alone do not prove hosted transport.
 
-That fresh run also exercises the unchanged packaged `validate-existing-ledger`
-mode twice through the real offline manager profile. It compares private results
-to the synthetic pristine record fingerprint, retains anchored ext4 directory and
-database identity across both opens, and checks that the named paths still point
+The fresh run also exercised the unchanged packaged `validate-existing-ledger`
+mode twice through the real offline manager profile. It compared private results
+to the synthetic pristine record fingerprint, retained anchored ext4 directory and
+database identity across both opens, and checked that the named paths still pointed
 to the promoted objects. Fingerprints and filesystem identifiers never enter test
 output. This adds no steady uploader, HTTP request, steady-uploader activation or real
 credential.
