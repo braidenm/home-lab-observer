@@ -17,6 +17,15 @@ oversized entries refuse. This check does not establish file ownership,
 durability, legacy-journal migration, ledger identity or worker state; the
 installer must prove those separately from anchored descriptors.
 
+The pure resource-derivation slice renders both installed configurations,
+fixed hosts files and reviewed systemd units from the canonical proposed
+record, then requires every resulting SHA-256 to match the record. It copies
+the caller-supplied old/new CA inputs. This rejects a syntactically
+valid record that claims different unit bytes or a substituted CA. The caller
+must still establish the supplied CA's stage provenance and inspect each
+actual active file through anchored ownership/mode checks; these expected
+bytes are not write authority.
+
 The separate Linux stage-filesystem slice provides anchored `InspectAt` and
 `PublishAt` primitives, not an installer command. Both require root and an
 exact root-owned config directory on ext4. Inspection permits only the fixed
