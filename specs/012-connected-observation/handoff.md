@@ -28,6 +28,9 @@ The future uploader reads only that projection. This library stores no credentia
   Sync/replace failure is reported even if a new snapshot became visible. Close releases only owned handles/locks.
 - B7: Test private versus unsafe existing permissions, missing/oversized/corrupt/symlink/hardlink input, competing
   writers, concurrent readers, staging leftovers and injected write/sync/replace failure. Native CI covers all three OSes.
+  Keep 25 repeated publication-race cases on each pull-request platform in addition to the normal suite and Linux
+  race detector. Run the deeper 1000-repeat, three-platform stress matrix through an explicit manual workflow so
+  ordinary PR checks stay within the repository's 15-minute budget without deleting the extended proof.
 
 Receiver proof is merged in Platform Demo PR365. This slice implements a local privacy boundary, not OS-enforced
 collector/uploader separation: separate accounts, egress policy, credential storage and installed worker lifecycle
