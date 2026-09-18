@@ -62,3 +62,10 @@ an arrival between initial EOF and tail proof,
 source refusal, selected-field canaries, all bounds and mapping cases, native-error versus stale behavior, cancellation,
 close-once ownership, thread identity, and whole-attempt rejection after cursor failure. Real libsystemd compatibility,
 native fixture journals, executable identity, private pipes and static-core packaging remain separate required slices.
+
+Budget and normalization fixtures perform synchronous synthetic native calls without injected scheduler yields. The
+two-second production deadline still applies: tests must not turn each of hundreds of fake row operations into an
+OS-thread scheduling stress test. The dedicated thread-ownership fixture explicitly yields at each native operation
+and verifies that open/read/close retain the owning thread. Cancellation fixtures inject cancellation at operation
+boundaries rather than sleeping. This separates deterministic row/byte accounting from adversarial scheduling without
+extending or bypassing the production deadline.

@@ -1,11 +1,13 @@
 # Native preview 3: optional native log metadata and history
 
-These notes describe the preview 3 release candidate. Check the
-[releases page](https://github.com/braidenm/home-lab-observer/releases) for published artifacts; this file on `main`
-is not itself a publication announcement. Owned Windows native acceptance has passed on x64 and ARM64.
-The owner must record a successful independent Native reproducibility check for the exact authorized commit before
-dispatch; publication reuses that evidence instead of duplicating sixteen compilation operations. The publication
-workflow still verifies all six native target artifacts, checks vulnerabilities and attests final bytes before release.
+These notes describe the published, immutable
+[Preview 3 release](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-preview.3), built from
+`9a60a2845d716d2f252a8852f893a5825f6b7ef6`. The
+[release run](https://github.com/braidenm/home-lab-observer/actions/runs/34528402601) passed all six native target
+checks, vulnerability scanning, final-byte attestation, publication and anonymous download verification. Owned Windows
+native acceptance passed on x64 and ARM64. The independent paired reproducibility check for that exact commit also
+[passed](https://github.com/braidenm/home-lab-observer/actions/runs/34527795041). See the
+[standalone preview evidence](standalone-preview-evidence.md) for what these checks do and do not establish.
 
 ## Capabilities
 
@@ -23,8 +25,7 @@ the existing seven-day, 250-MiB database budget. This is local operational histo
   can evade reset detection. Do not treat the history as tamper-evident.
 - macOS native logs remain unsupported. Existing host observations and the dashboard remain available.
 
-Nothing enables native logs on installation or upgrade. After confirming this feature is available in the published
-release, use `observer serve --log-source system` on Linux, or
+Nothing enables native logs on installation or upgrade. With Preview 3, use `observer serve --log-source system` on Linux, or
 `observer.exe serve --log-source system --log-source application` on Windows. Managed background registration accepts
 the same explicit source options on `background enable`.
 Follow the [native log guide](https://github.com/braidenm/home-lab-observer/blob/main/docs/native-log-history.md).

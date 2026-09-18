@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -54,7 +53,6 @@ func row(at time.Time, index int) fakeRow {
 }
 func (j *fakeJournal) call(name string) error {
 	j.calls = append(j.calls, name)
-	runtime.Gosched()
 	if j.hook != nil {
 		j.hook(name)
 	}
