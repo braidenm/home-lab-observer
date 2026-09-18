@@ -6,6 +6,7 @@ on:
       - '.github/workflows/connected-first-install-fixture.yml'
       - 'cmd/observer-connected-install/**'
       - 'internal/connectedinstall/**'
+      - 'internal/connectedpolicy/**'
       - 'scripts/fixtures/connected-first-install/**'
       - 'specs/012-connected-observation/first-install-transaction.md'
       - 'go.mod'
@@ -16,6 +17,7 @@ on:
       - '.github/workflows/connected-first-install-fixture.yml'
       - 'cmd/observer-connected-install/**'
       - 'internal/connectedinstall/**'
+      - 'internal/connectedpolicy/**'
       - 'scripts/fixtures/connected-first-install/**'
       - 'specs/012-connected-observation/first-install-transaction.md'
       - 'go.mod'
@@ -43,7 +45,7 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Unit, prompt, dependency and receiver contracts
-        run: go test ./internal/connectedinstall ./cmd/observer-connected-install ./scripts/fixtures/connected-first-install
+        run: go test ./internal/connectedpolicy ./internal/connectedinstall ./cmd/observer-connected-install ./scripts/fixtures/connected-first-install
       - name: Compile owned temporary-root fixture
         run: go test -c ./internal/connectedinstall -o "$RUNNER_TEMP/connected-first-install.test"
       - name: Prove synthetic role/refusal/fault boundaries only

@@ -189,7 +189,10 @@ func runEnrollmentWithPreflight(ctx context.Context, properties []string, execut
 		if mode == "validate-ledger" || mode == "validate-enrollment" {
 			err = connectedpolicy.ValidateOffline(child, enrollmentUnit, connectedpolicy.OfflineExpectation{UploaderUID: policy.UploaderUID, UploaderGID: policy.UploaderGID, SharedGID: policy.SharedGID, ArtifactSHA256: policy.ArtifactSHA256, Mode: mode})
 		} else {
-			err = connectedpolicy.ValidateEffective(child, enrollmentUnit, policy.Addresses)
+			err = connectedpolicy.ValidateOnline(child, enrollmentUnit, connectedpolicy.OnlineExpectation{UploaderUID: policy.UploaderUID, UploaderGID: policy.UploaderGID, SharedGID: policy.SharedGID, ArtifactSHA256: policy.ArtifactSHA256})
+			if err == nil {
+				err = connectedpolicy.ValidateEffective(child, enrollmentUnit, policy.Addresses)
+			}
 		}
 	}
 	if err == nil {

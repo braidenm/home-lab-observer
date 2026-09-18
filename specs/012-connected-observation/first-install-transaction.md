@@ -27,7 +27,10 @@ layout. The digest may name one immutable release directory only after canonical
 caller-selected file writer, path creator or subprocess API is exported or used by the command. Every new file is
 exclusive, no-follow, verified by pinned descriptor, synced with its parent, and never replaced by default. A
 collision, unknown entry or failed sync leaves evidence and reports recovery-required. The grant goes only through
-the reviewed private enrollment pipe to the eventual uploader UID under the fixed transient manager profile.
+the reviewed private enrollment pipe to the eventual uploader UID under the fixed transient manager profile. Before
+grant handoff, the installer verifies the manager's actual transient UID/GID, root/bind mounts, capabilities,
+syscall and address-family restrictions, IPC and empty credential arrays, then separately validates effective
+IP/slice policy. It rechecks the owned invocation identity immediately before writing the pipe.
 
 The initial command has no recovery/resume or cleanup verb. Errors before grant handoff distinguish local setup
 incomplete; after an ambiguous grant handoff they require registration revocation and explicit owned-state
