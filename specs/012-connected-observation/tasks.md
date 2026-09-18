@@ -47,6 +47,7 @@
   - [x] Add independent anchored ext4 stage inspection and exclusive publication primitives with root synthetic interruption tests; not wired to installer commands.
   - [x] Read the fixed authoritative transition journal/receipt names under the anchored ext4 config directory; classification and writes remain separate.
   - [x] Fence normal start/restart/refresh on fixed staging residue; no abort, cleanup or forward recovery operation yet.
+  - [x] Show fixed transition residue as recovery-required in installer status without treating it as a completed refresh or making a recovery decision.
   - [ ] Integrate the bounded preparation witness, exact predecessor/staging retention and forward-only interrupted transition recovery.
   - [ ] Prove compatible code selection and rollback across two packaged releases without restoring or changing the used ledger.
 - [ ] Review and implement [activation evidence](activation-design.md), including bounded same-process checks and the parent/worker enforcement rendezvous; no manual bypass.

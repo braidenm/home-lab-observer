@@ -141,6 +141,11 @@ func ReadStatus() (Status, error) {
 			}
 			return Status{State: entry.state}, nil
 		}
+		if markerErr := rejectRecoveryMarkers(); markerErr == ErrRecovery {
+			return Status{State: "TRANSITION_RECOVERY_REQUIRED"}, nil
+		} else if markerErr != nil {
+			return Status{}, ErrUnsafe
+		}
 		if _, _, err := refreshState(c); err != nil {
 			return Status{State: "REFRESH_RECOVERY_REQUIRED"}, nil
 		}
