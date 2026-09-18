@@ -4,6 +4,11 @@ Status: implementation in progress. The harness is manual, never a PR CI job or 
 
 An operator supplies a checksum-verified official Ubuntu 24.04 amd64 cloud image, the exact reviewed
 three-binary connected bundle and a dedicated empty work directory on a KVM host. The harness refuses
+unless the operator supplies the independently reviewed source commit, manifest digest and receiver
+digest; it binds
+those values to the sidecar, guest-extracted bundle, installed release and installed config. The host
+resolves only root-owned tools from a fixed system PATH and treats unreadable process state as busy.
+It also refuses
 the wrong image digest, non-absolute paths, preexisting output, insufficient 2-vCPU/3-GiB/12-GiB
 capacity, any other active QEMU guest, or missing cloud-init/QEMU/ext4 tools. It never reuses the
 Platform CI base disk, mounts a host directory into a guest, enables an external NIC or connects to
@@ -19,10 +24,19 @@ HTTP request body or raw environment is printed to the serial evidence channel.
 The minimum matrix is: refused preflight without grant; successful stopped install and exact unit,
 principal, ledger and filesystem assertions; normal reboot and stopped retry refusal; abrupt QEMU
 power cut immediately after PREPARING is durable, fresh-boot retained-residue and retry refusal;
+the driver must stop the installer and prove no state or release root exists before requesting the
+cut, while the synthetic receiver is incapable of consuming a grant in this scenario. A late cut
+is a failed case, never accepted evidence. Across reboot and retry, compare inode, size and byte
+hash of installed metadata, credential and ledger rather than just their existence;
 abrupt QEMU power cut after successful stopped install, fresh-boot stopped-state persistence.
 Synthetic root sync-failure tests remain supplementary; the VM harness must not claim they simulate
 real hardware cache loss. Isolation assertions for mounts, sockets, credentials and systemd policy
 remain explicit evidence items, with failures a hard no-go.
+
+The executable three-case harness is a prerequisite but not a claim of full acceptance. The larger
+manual inventory additionally calls for hostile pre-publish targets, fault injection and runtime
+worker isolation. Exact guest unit fragments, effective systemd properties, no-ACL ownership and
+unknown-member checks narrow that gap; any unexecuted item must still be reported as unexecuted.
 
 The host bounds every QEMU process by timeout and PID, holds an exclusive fixture lease, and prints
 fixed redacted PASS/FAIL case identifiers. It preserves evidence on failure. On success, an explicit

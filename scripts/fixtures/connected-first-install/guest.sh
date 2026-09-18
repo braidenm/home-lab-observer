@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Runs only in the no-NIC disposable Ubuntu fixture guest, never on an owner host.
 set -euo pipefail
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 fixture_root=/var/lib/hlo-first-install-fixture
 payload=/mnt/hlo-first-install
@@ -55,17 +56,32 @@ installed_assertions() {
   unit_stopped "$collector" || fail COLLECTOR_NOT_STOPPED
   unit_stopped "$uploader" || fail UPLOADER_NOT_STOPPED
   no_worker || fail WORKER_PROCESS
+  [ "$(systemctl show --property=ActiveState --value home-lab-observer-connected-enrollment.service)" = inactive ] || fail TRANSIENT_ACTIVE
 }
 
 recovery_assertions() {
   [ -f /etc/home-lab-observer-connected/preparing.json ] || fail PREPARING_MISSING
   [ ! -e /etc/home-lab-observer-connected/installed.json ] || fail UNEXPECTED_CONFIG
+  [ ! -e /var/lib/home-lab-observer-connected ] || fail LATE_POWER_CUT
+  [ ! -e /opt/home-lab-observer-connected ] || fail LATE_POWER_CUT
   no_worker || fail WORKER_PROCESS
   for unit in "$collector" "$uploader"; do
     state="$(systemctl show --no-pager --property=ActiveState --property=UnitFileState -- "$unit")" || fail UNIT_QUERY
     grep -qx 'ActiveState=inactive' <<< "$state" || fail ACTIVE_AFTER_CUT
     ! grep -qx 'UnitFileState=enabled' <<< "$state" || fail ENABLED_AFTER_CUT
   done
+}
+
+retry_refuses_without_mutation() {
+  local bundle digest before after
+  bundle="$(cat "$fixture_root/bundle-path")"
+  digest="$(cat "$fixture_root/manifest-sha")"
+  before="$(stat -c '%i:%s:%Y' /etc/home-lab-observer-connected/preparing.json)"
+  if timeout 12 "$bundle/observer-connected-install" install "$bundle" "$digest" "$server" </dev/null >/dev/null 2>&1; then
+    fail RETRY_ADMITTED
+  fi
+  after="$(stat -c '%i:%s:%Y' /etc/home-lab-observer-connected/preparing.json)"
+  [ "$before" = "$after" ] || fail RETRY_MUTATED
 }
 
 prepare_guest() {
@@ -79,6 +95,7 @@ prepare_guest() {
   [ "${#bundle[@]}" -eq 1 ] && [ -d "${bundle[0]}" ] || fail BUNDLE_COUNT
   printf '%s\n' "${bundle[0]}" > "$fixture_root/bundle-path"
   sha256sum "${bundle[0]}/connected-manifest.json" | cut -d' ' -f1 > "$fixture_root/manifest-sha"
+  python3 "$payload/assert_guest.py" preflight || fail REVIEWED_PAYLOAD
 
   ip addr add "$alias_ip/32" dev lo || fail LOOPBACK_ALIAS
   printf '%s %s %s\n' "$alias_ip" app.braidenmiller.com app.braidenmiller.com. >> /etc/hosts
@@ -89,7 +106,9 @@ prepare_guest() {
     -keyout "$fixture_root/key.pem" -out "$fixture_root/cert.pem" >/dev/null 2>&1 || fail CERT
   cp "$fixture_root/cert.pem" /usr/local/share/ca-certificates/hlo-first-install-fixture.crt
   update-ca-certificates >/dev/null 2>&1 || fail TRUST
-  "$payload/connected-first-install-receiver" "$alias_ip:443" "$fixture_root/cert.pem" "$fixture_root/key.pem" >/dev/null 2>&1 &
+  local receiver_mode=normal
+  [ "$1" != interrupt ] || receiver_mode=interrupt
+  "$payload/connected-first-install-receiver" "$alias_ip:443" "$fixture_root/cert.pem" "$fixture_root/key.pem" "$receiver_mode" >/dev/null 2>&1 &
   receiver_pid=$!
   for _ in $(seq 1 50); do
     if (echo >/dev/tcp/$alias_ip/443) 2>/dev/null; then
@@ -125,7 +144,7 @@ EOF
 case "${1:-}" in
   success|success-cut|interrupt)
     baseline
-    prepare_guest
+    prepare_guest "$1"
     bundle="$(cat "$fixture_root/bundle-path")"
     digest="$(cat "$fixture_root/manifest-sha")"
     if "$bundle/observer-connected-install" install "$bundle" "$(printf '%064d' 0)" "$server" </dev/null >/dev/null 2>&1; then
@@ -136,6 +155,9 @@ case "${1:-}" in
     if [ "$1" != interrupt ]; then
       python3 "$payload/drive_pty.py" install "$bundle" "$digest" || fail INSTALL
       installed_assertions
+      python3 "$payload/assert_guest.py" capture || fail DEEP_ASSERT
+      retry_refuses_without_mutation
+      python3 "$payload/assert_guest.py" verify || fail RETRY_MUTATED
       sync
       if [ "$1" = success-cut ]; then
         emit SUCCESS_READY_FOR_CUT
@@ -153,9 +175,16 @@ case "${1:-}" in
     mode="$(cat "$fixture_root/postboot-mode")"
     if [ "$mode" = success ] || [ "$mode" = success-cut ]; then
       installed_assertions
+      python3 "$payload/assert_guest.py" verify || fail REBOOT_STATE
+      retry_refuses_without_mutation
+      python3 "$payload/assert_guest.py" verify || fail RETRY_MUTATED
       emit SUCCESS_REBOOT_PASS
     elif [ "$mode" = interrupt ]; then
       recovery_assertions
+      python3 "$payload/assert_guest.py" recovery || fail RECOVERY_STATE
+      retry_refuses_without_mutation
+      recovery_assertions
+      python3 "$payload/assert_guest.py" recovery || fail RETRY_MUTATED
       emit INTERRUPT_REBOOT_PASS
     else
       fail UNKNOWN_MODE
