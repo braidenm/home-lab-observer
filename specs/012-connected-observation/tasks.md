@@ -29,6 +29,7 @@
   - [x] Verify exact connected bundle bytes and deterministic archive from an independently trusted manifest digest; no installation or selection authority.
   - [x] Add a closed build-only connected packer that emits final checksums last; no release publication or installation.
   - [x] Define fixed same-process Linux worker checks for primitive denials and restricted views; installed-profile proof remains open.
+  - [x] Add a manually triggered synthetic systemd255 primitive fixture; its hosted run and the full installed-profile acceptance remain open.
   - [x] Add read-only paused-worker descriptor/process identity audit; manager correlation and VM enforcement remain external gates.
   - [x] Define and test the bounded pure activation request/response/commit records; no service activation authority.
   - [x] Add the same-process uploader-side startup rendezvous as an unused Linux library; root transaction and installed enforcement remain open.
