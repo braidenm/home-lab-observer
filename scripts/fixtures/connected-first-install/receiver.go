@@ -26,11 +26,12 @@ type request struct {
 }
 
 func main() {
-	if len(os.Args) != 4 || os.Args[1] != "93.184.216.34:443" {
+	if len(os.Args) != 5 || os.Args[1] != "93.184.216.34:443" || (os.Args[4] != "normal" && os.Args[4] != "interrupt") {
 		fmt.Fprintln(os.Stderr, "FIXTURE_ARGS_REFUSED")
 		os.Exit(22)
 	}
 	var consumed atomic.Bool
+	interrupt := os.Args[4] == "interrupt"
 	server := &http.Server{
 		Addr:              os.Args[1],
 		ReadHeaderTimeout: 3 * time.Second,
@@ -38,7 +39,7 @@ func main() {
 		WriteTimeout:      5 * time.Second,
 		MaxHeaderBytes:    4096,
 		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12},
-		Handler:           fixtureHandler(&consumed),
+		Handler:           fixtureHandler(&consumed, interrupt),
 	}
 	if err := server.ListenAndServeTLS(os.Args[2], os.Args[3]); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		fmt.Fprintln(os.Stderr, "FIXTURE_LISTEN_FAILED")
@@ -46,7 +47,7 @@ func main() {
 	}
 }
 
-func fixtureHandler(consumed *atomic.Bool) http.Handler {
+func fixtureHandler(consumed *atomic.Bool, interrupt bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != path || r.Method != http.MethodPost || r.URL.RawQuery != "" {
 			http.Error(w, "fixture refusal", http.StatusNotFound)
@@ -58,6 +59,12 @@ func fixtureHandler(consumed *atomic.Bool) http.Handler {
 			return
 		}
 		var input request
+		if interrupt {
+			// The interruption case must never consume a grant, even if the
+			// guest driver is delayed after observing durable PREPARING.
+			<-r.Context().Done()
+			return
+		}
 		if json.Unmarshal(body, &input) != nil ||
 			input.Secret != grant || len(input.ConnectorID) != 38 ||
 			!bytes.HasPrefix([]byte(input.ConnectorID), []byte("agent_")) ||

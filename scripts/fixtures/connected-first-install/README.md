@@ -79,12 +79,12 @@ guest is `observer-connected-install install <verified-guest-bundle-directory>
 <manifest-sha256> <synthetic-server-id>`. The install binary must report
 `INSTALLED_PENDING_ACCEPTANCE`; that is *not* permission to start a worker.
 
-## Required evidence, each on a fresh overlay
+## Acceptance coverage and remaining limits
 
 1. Before grant entry, prove wrong image/systemd, foreign principals, existing
    unit/target and bad bundle refuse without a PREPARING marker or account edits.
 2. Successful stopped install: validate exact installed config/manifest and
-   ownership/mode/no-ACL of every fixed role; dedicated locked, non-login users
+   ownership/mode/no-ACL of the config, release and ledger roles; dedicated locked, non-login users
    and groups; same ledger inode before/after promotion; no unknown bundle
    members; exact systemd fragments, no drop-ins, `LoadState=loaded`,
    `UnitFileState=disabled`, `ActiveState=inactive` for both workers; no worker
@@ -110,7 +110,8 @@ VM acceptance. Activation and owner-server installation remain separate gates.
 
 ## Bounded manual harness
 
-`run_vm.py` is the reproducible host runner for the matrix above. Run it only
+`run_vm.py` is the reproducible host runner for the three packaged power/reboot
+cases, not every item in the larger acceptance inventory above. Run it only
 on a dedicated KVM test host while all other QEMU guests (including Platform CI)
 are stopped. It refuses non-root execution, an unverified/non-qcow2 Ubuntu base,
 unsafe path ownership, low capacity and any active QEMU process. Inputs must be
@@ -118,14 +119,18 @@ absolute, root-owned regular files with no group/other write permission. The
 checked-out harness files and every input/work-root ancestor must also be
 root-owned and not group/other writable; stage the reviewed PR head in such a
 directory before running it with `sudo`. Supply
-the published Canonical image SHA-256 independently; never accept a digest from
-the image download itself. The work root must already exist and be root-owned
+the published Canonical image SHA-256 independently, plus the reviewed source
+commit, bundle-manifest SHA-256 and synthetic-receiver SHA-256 from the approved build record; never accept
+digests derived only from the payload sidecars. The work root must already exist and be root-owned
 mode 0700. The script never fetches an image or opens a network connection.
 
 ```sh
 sudo python3 scripts/fixtures/connected-first-install/run_vm.py \
   --image /data/hlo-fixture-input/ubuntu-24.04-cloudimg-amd64.img \
   --image-sha256 '<canonical-published-64-hex-sha256>' \
+  --expected-commit '<reviewed-40-hex-source-commit>' \
+  --expected-manifest-sha256 '<reviewed-64-hex-manifest-sha256>' \
+  --expected-receiver-sha256 '<reviewed-64-hex-receiver-sha256>' \
   --archive /data/hlo-fixture-input/home-lab-observer-connected_0.1.0-canary.1_linux_amd64.tar.gz \
   --manifest /data/hlo-fixture-input/connected-manifest.json \
   --checksums /data/hlo-fixture-input/SHA256SUMS \
@@ -145,9 +150,14 @@ cases pass it also removes the validated payload image. It retains bounded
 serial logs and small seeds for audit. On failure it retains the remaining
 images for investigation. `--keep-disks` retains passing images too.
 
-The runner does not claim every hardware flush boundary or installed-worker
-runtime isolation. Its interrupted-case proof is a stopped installer at a
-durable marker followed by an abrupt QEMU kill and reboot. The existing
-synthetic-root tests cover injected file/parent sync failures separately.
-Record this distinction in the PR review and keep activation blocked until its
-own installed-runtime acceptance.
+The runner does not claim every hardware flush boundary, pre-publish hostile
+target scenario, or installed-worker runtime isolation. Its interrupted-case
+proof is a stopped installer with the durable marker but **before any state or
+release root exists**, followed by an abrupt QEMU kill and reboot; a late stop
+is a failure. The synthetic receiver cannot consume a grant in that case.
+The guest compares exact manifest/config/release identity, selected closed-role
+ownership and ACLs, exact unit fragments and effective isolation properties,
+and ledger/credential/config inode plus byte hashes across reboot and retry.
+The existing synthetic-root tests cover injected file/parent sync failures
+separately. Record the distinction in the PR review and keep activation
+blocked until its own installed-runtime acceptance.

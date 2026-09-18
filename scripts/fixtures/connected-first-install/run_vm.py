@@ -19,6 +19,8 @@ MIB = 1024 * 1024
 GIB = 1024 * MIB
 CASE_TIMEOUT = 9 * 60
 CASES = ("success", "interrupt", "success-cut")
+SAFE_PATH = "/usr/sbin:/usr/bin:/sbin:/bin"
+TOOLS: dict[str, str] = {}
 
 
 def refuse(reason: str) -> None:
@@ -56,24 +58,32 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def qemu_process(command: bytes, comm: str) -> bool:
+    executable = Path(os.fsdecode(command)).name
+    return executable.startswith("qemu-system-") or executable in ("qemu-kvm", "kvm") or comm.startswith("qemu-system-") or comm in ("qemu-kvm", "kvm")
+
+
 def no_other_qemu() -> bool:
     for entry in Path("/proc").glob("[0-9]*"):
         try:
             command = (entry / "cmdline").read_bytes().split(b"\0", 1)[0]
-        except (FileNotFoundError, PermissionError, ProcessLookupError):
+            comm = (entry / "comm").read_text().strip()
+        except (FileNotFoundError, ProcessLookupError):
             continue
-        if Path(os.fsdecode(command)).name == "qemu-system-x86_64":
+        except (PermissionError, OSError):
+            return False
+        if qemu_process(command, comm):
             return False
     return True
 
 
 def run(*args: str) -> None:
-    subprocess.run(args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=90)
+    subprocess.run((TOOLS[args[0]], *args[1:]), check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=90, env={"PATH": SAFE_PATH, "LANG": "C"})
 
 
 def image_format(path: Path) -> None:
     output = subprocess.check_output(
-        ["qemu-img", "info", "--output=json", str(path)], stderr=subprocess.DEVNULL, timeout=30
+        [TOOLS["qemu-img"], "info", "--output=json", str(path)], stderr=subprocess.DEVNULL, timeout=30, env={"PATH": SAFE_PATH, "LANG": "C"}
     )
     data = json.loads(output)
     if data.get("format") != "qcow2" or not 1 * GIB <= data.get("virtual-size", 0) <= 12 * GIB:
@@ -82,7 +92,7 @@ def image_format(path: Path) -> None:
         refuse("BASE_IMAGE_BACKING_REFUSED")
 
 
-def check_archive(archive: Path, manifest: Path, checksums: Path) -> None:
+def check_archive(archive: Path, manifest: Path, checksums: Path, expected_commit: str, expected_manifest_sha256: str) -> None:
     if manifest.name != "connected-manifest.json" or checksums.name != "SHA256SUMS" or not archive.name.endswith(".tar.gz"):
         refuse("BUNDLE_NAMES_REFUSED")
     lines = checksums.read_text(encoding="ascii").splitlines()
@@ -92,6 +102,11 @@ def check_archive(archive: Path, manifest: Path, checksums: Path) -> None:
     }
     if len(lines) != 2 or set(lines) != expected:
         refuse("BUNDLE_CHECKSUM_REFUSED")
+    if sha256(manifest) != expected_manifest_sha256:
+        refuse("REVIEWED_MANIFEST_REFUSED")
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    if data.get("commit") != expected_commit or data.get("profile") != "ubuntu24.04-systemd255-amd64-canary" or data.get("os") != "linux" or data.get("arch") != "amd64" or data.get("schema") != "observer-connected-bundle/v2":
+        refuse("REVIEWED_IDENTITY_REFUSED")
 
 
 def capacity(work_root: Path) -> None:
@@ -105,14 +120,15 @@ def capacity(work_root: Path) -> None:
         refuse("VM_CAPACITY_OR_BUSY_REFUSED")
 
 
-def payload_image(instance: Path, archive: Path, manifest: Path, checksums: Path, receiver: Path) -> Path:
+def payload_image(instance: Path, archive: Path, manifest: Path, checksums: Path, receiver: Path, expected_commit: str, expected_manifest_sha256: str, expected_receiver_sha256: str) -> Path:
     directory = instance / "payload"
     directory.mkdir(mode=0o700)
     for source in (archive, manifest, checksums, receiver):
         shutil.copyfile(source, directory / ("connected-first-install-receiver" if source == receiver else source.name))
     scripts = Path(__file__).resolve().parent
-    for name in ("guest.sh", "drive_pty.py"):
+    for name in ("guest.sh", "drive_pty.py", "assert_guest.py"):
         shutil.copyfile(scripts / name, directory / name)
+    (directory / "reviewed-identity.json").write_text(json.dumps({"commit": expected_commit, "manifest_sha256": expected_manifest_sha256, "receiver_sha256": expected_receiver_sha256}, sort_keys=True) + "\n", encoding="ascii")
     (directory / "connected-first-install-receiver").chmod(0o755)
     target = instance / "payload.ext4"
     size = max(512 * MIB, 2 * sum(p.stat().st_size for p in directory.iterdir()) + 128 * MIB)
@@ -158,9 +174,11 @@ def overlay_for(case_dir: Path, base: Path) -> Path:
 
 
 def boot(case_dir: Path, overlay: Path, payload: Path, seed: Path, boot_number: int) -> tuple[subprocess.Popen, Path]:
+    if not no_other_qemu():
+        refuse("VM_BECAME_BUSY_REFUSED")
     console = case_dir / f"console-{boot_number}.log"
     command = [
-        "qemu-system-x86_64", "-name", "hlo-first-install-fixture", "-machine", "q35,accel=kvm",
+        TOOLS["qemu-system-x86_64"], "-name", "hlo-first-install-fixture", "-machine", "q35,accel=kvm",
         "-cpu", "host", "-smp", "2", "-m", "3072", "-display", "none", "-monitor", "none",
         "-serial", f"file:{console}", "-no-reboot", "-no-user-config",
         "-sandbox", "on,obsolete=deny,elevateprivileges=deny,spawn=deny,resourcecontrol=deny",
@@ -170,7 +188,7 @@ def boot(case_dir: Path, overlay: Path, payload: Path, seed: Path, boot_number: 
         "-device", "virtio-rng-pci",
         "-nic", "none",
     ]
-    return subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL), console
+    return subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={"PATH": SAFE_PATH, "LANG": "C"}), console
 
 
 def wait_marker(process: subprocess.Popen, console: Path, wanted: str) -> None:
@@ -250,32 +268,39 @@ def main() -> int:
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--checksums", required=True)
     parser.add_argument("--receiver", required=True)
+    parser.add_argument("--expected-commit", required=True)
+    parser.add_argument("--expected-manifest-sha256", required=True)
+    parser.add_argument("--expected-receiver-sha256", required=True)
     parser.add_argument("--work-root", required=True)
     parser.add_argument("--keep-disks", action="store_true")
     args = parser.parse_args()
     try:
-        if os.geteuid() != 0 or not re.fullmatch(r"[a-f0-9]{64}", args.image_sha256):
+        if os.geteuid() != 0 or not re.fullmatch(r"[a-f0-9]{64}", args.image_sha256) or not re.fullmatch(r"[a-f0-9]{40}", args.expected_commit) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_manifest_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_receiver_sha256):
             refuse("ADMISSION_REFUSED")
         for tool in ("qemu-img", "qemu-system-x86_64", "mkfs.ext4", "cloud-localds"):
-            if shutil.which(tool) is None:
+            found = shutil.which(tool, path=SAFE_PATH)
+            if found is None:
                 refuse("TOOL_MISSING")
+            TOOLS[tool] = str(owned_file(found, 50 * MIB))
         root = Path(args.work_root)
         if not root.is_absolute() or root.is_symlink() or root.resolve(strict=True) != root or not qemu_safe(root):
             refuse("WORK_ROOT_REFUSED")
         info = root.stat()
         if not root.is_dir() or not trusted_ancestors(root) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o700:
             refuse("WORK_ROOT_OWNERSHIP_REFUSED")
-        for name in ("run_vm.py", "guest.sh", "drive_pty.py"):
+        for name in ("run_vm.py", "guest.sh", "drive_pty.py", "assert_guest.py"):
             owned_file(str(Path(__file__).resolve().parent / name), 512 * 1024)
         image = owned_file(args.image, 12 * GIB)
         archive = owned_file(args.archive, 600 * MIB)
         manifest = owned_file(args.manifest, 16 * 1024)
         checksums = owned_file(args.checksums, 4096)
         receiver = owned_file(args.receiver, 20 * MIB)
+        if sha256(receiver) != args.expected_receiver_sha256:
+            refuse("REVIEWED_RECEIVER_REFUSED")
         if sha256(image) != args.image_sha256:
             refuse("BASE_IMAGE_CHECKSUM_REFUSED")
         image_format(image)
-        check_archive(archive, manifest, checksums)
+        check_archive(archive, manifest, checksums, args.expected_commit, args.expected_manifest_sha256)
         lease = root / ".hlo-first-install-vm.lock"
         with lease.open("a+b") as handle:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -283,7 +308,7 @@ def main() -> int:
             instance = Path(tempfile.mkdtemp(prefix="hlo-first-install-", dir=root))
             instance.chmod(0o700)
             (instance / ".hlo-owned-instance").write_text("first-install-vm/v1\n")
-            payload = payload_image(instance, archive, manifest, checksums, receiver)
+            payload = payload_image(instance, archive, manifest, checksums, receiver, args.expected_commit, args.expected_manifest_sha256, args.expected_receiver_sha256)
             for name in CASES:
                 case(instance, name, image, payload, args.keep_disks)
             if not args.keep_disks:

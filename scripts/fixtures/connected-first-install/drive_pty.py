@@ -13,6 +13,8 @@ import time
 GRANT = b"hle_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n"
 SERVER = "srv_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 PREPARING = "/etc/home-lab-observer-connected/preparing.json"
+STATE_ROOT = "/var/lib/home-lab-observer-connected"
+RELEASE_ROOT = "/opt/home-lab-observer-connected"
 
 
 def main() -> int:
@@ -41,13 +43,21 @@ def main() -> int:
             if sys.argv[1] == "interrupt" and os.path.isfile(PREPARING):
                 try:
                     with open(PREPARING, "rb") as marker:
-                        json.load(marker)
+                        record = json.load(marker)
                 except (OSError, ValueError):
                     continue
                 os.kill(child, signal.SIGSTOP)
                 stopped, status = os.waitpid(child, os.WUNTRACED)
                 if stopped != child or not os.WIFSTOPPED(status):
                     print("FIXTURE_DRIVER_STOP_REFUSED", flush=True)
+                    return 1
+                if record != {
+                    "version": "observer-connected-preparing/v1",
+                    "state": "PREPARING",
+                    "server_id": SERVER,
+                    "manifest_sha256": digest,
+                } or os.path.exists(STATE_ROOT) or os.path.exists(RELEASE_ROOT):
+                    print("FIXTURE_DRIVER_PHASE_REFUSED", flush=True)
                     return 1
                 os.sync()
                 print("POWER_CUT_READY", flush=True)
