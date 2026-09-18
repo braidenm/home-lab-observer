@@ -313,6 +313,9 @@ revocation and re-enrollment, not a claimed local anti-rollback guarantee.
 
 The [existing-ledger witness slice](used-ledger-witness.md) is only the logical
 comparison primitive. It does not implement any of these lifecycle states.
+The proposed [durable staging boundary](transition-staging.md) freezes the
+fixed names, ordering and interruption matrix for the next installer review;
+it is not implementation or release evidence.
 
 #### Delivery sequence
 
