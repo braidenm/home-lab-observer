@@ -204,6 +204,68 @@ foreign manager identity remains stopped/recovery-required for explicit handling
 
 ### Implementation order and completion gates
 
+#### Pure journal codec slice
+
+The first implementation slice is a side-effect-free `internal/connectedtransition`
+codec, with no installer import or command wiring. It freezes the canonical compact
+JSON `observer-connected-transition/v1` record (16 KiB maximum): operation,
+previous/next installed configs, optional predecessor completion SHA-256,
+optional previous-code before/after digests, recognized contract digest,
+previous/next resource hash sets (CA, hosts, both units, installed config), and
+the pre-transition ledger logical SHA-256 plus ext4 UUID/directory/database
+inode-and-generation witness. Completion is exactly
+`observer-connected-transition-complete/v1\n` + record SHA-256 hex + `\n`.
+All hashes are lowercase SHA-256; empty predecessor and previous-code values
+mean no prior completed transition/code selection, never an inferred target.
+
+Decoding requires byte-for-byte canonical re-encoding and rejects unknown keys,
+invalid config/ledger witnesses, overflow, wrong operation deltas, and malformed
+hashes. Refresh preserves artifact and previous-code pointer while changing only
+generation/addresses; code selection preserves addresses and all non-artifact
+identity while incrementing generation, and sets previous-code-after to the
+replaced artifact. The codec recomputes the installed-config and fixed-hosts
+hashes from the embedded configs; resource sets remain complete even when
+individual bytes do not change. This codec does not validate actual files, compiled compatibility
+authority, trusted target packages, predecessor chain, or an installed ledger;
+those are installer responsibilities. A future compatibility descriptor must
+retain transition protocol `not-implemented` until those gates are met. A passing codec must not be interpreted
+as permission to select, resume, roll back, or activate code.
+
+#### Independent review refinements (still proposed)
+
+Before wiring the codec into any installed writes, freeze these additional recovery states:
+
+- **Preparing:** publish a bounded preparation witness before staging resources.
+  A crash before authoritative journal publication cannot reconstruct missing new
+  CA bytes. A narrowly scoped `abort-preparation` may remove only verified owned
+  preparation files while active resources still match the completed predecessor.
+  Unknown entries or changed active resources refuse cleanup. It does not undo a
+  published transition; after publication, recovery remains forward-only.
+- **Predecessor retention:** retain exact previous journal and completion bytes
+  in bounded staging before replacing `transition.json`. Their hashes alone do
+  not preserve the evidence needed to validate the predecessor after replacement.
+- **Completed, cleanup pending:** publish and synchronize completion last, then
+  verify and remove only fixed owned staging entries and synchronize that
+  directory. Residual staging blocks a new transition until this cleanup succeeds.
+  Never recursively discard an unrecognized directory to make the next run work.
+- **Durability:** synchronize staged files, staging directory and its parent;
+  synchronize the authoritative journal's parent after publication and each
+  active resource's parent after replacement. Atomic rename alone is not a
+  durable completion guarantee.
+
+The narrow reboot identity profile remains an implementation/review gate. A
+filesystem UUID plus directory/database inode and inode-generation witness is a
+candidate; availability, anchored-descriptor queries, replacement rejection and
+reboot stability need proof on the explicitly supported filesystem. Unsupported
+filesystems must refuse transitions. No local identity scheme here detects a
+restored/cloned filesystem preserving those identifiers: restore requires
+revocation and re-enrollment, not a claimed local anti-rollback guarantee.
+
+The [existing-ledger witness slice](used-ledger-witness.md) is only the logical
+comparison primitive. It does not implement any of these lifecycle states.
+
+#### Delivery sequence
+
 1. Review this ADR/plan; freeze exact compatibility bytes and journal codec with
    pure operation/migration/previous-code tests. Do not add a generic migration API.
 2. Add offline used-state mode and exact manager properties, with real D1 fixtures:
