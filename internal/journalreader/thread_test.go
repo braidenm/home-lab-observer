@@ -4,6 +4,7 @@ package journalreader
 
 import (
 	"context"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -11,8 +12,13 @@ import (
 func TestOpenReadCloseKeepOwningThread(t *testing.T) {
 	j := newJournal(row(queryTime, 0))
 	var owner uint64
+	yields := 0
 	factory := &fakeFactory{journal: j, hook: func() { owner = nativeThreadID() }}
 	j.hook = func(string) {
+		// Scheduling pressure belongs in this small ownership fixture, not every
+		// synthetic operation in the row/byte-budget tests.
+		runtime.Gosched()
+		yields++
 		if nativeThreadID() != owner {
 			t.Fatal("native handle moved away from owning thread")
 		}
@@ -21,7 +27,7 @@ func TestOpenReadCloseKeepOwningThread(t *testing.T) {
 	if _, err := reader.Read(context.Background(), initialRequest()); err != nil {
 		t.Fatal("thread ownership fixture failed")
 	}
-	if owner == 0 || j.closes != 1 {
+	if owner == 0 || j.closes != 1 || yields == 0 || yields != len(j.calls) {
 		t.Fatal("thread ownership lifecycle incomplete")
 	}
 }
