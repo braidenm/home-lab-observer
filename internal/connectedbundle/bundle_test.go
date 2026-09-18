@@ -63,13 +63,25 @@ func TestRealGoBundleVerification(t *testing.T) {
 	}
 }
 
+func canonicalTempDir(t *testing.T) string {
+	t.Helper()
+	// macOS reports its temporary root through /var -> /private/var. The
+	// production verifier must reject symlinked ancestors, so point this
+	// fixture at the same directory through its actual, link-free path.
+	path, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func testRealGoBundleVerification(t *testing.T, schema string) {
 	goExe, err := exec.LookPath("go")
 	if err != nil {
 		t.Fatal("Go compiler required")
 	}
 	source := t.TempDir()
-	bundle := t.TempDir()
+	bundle := canonicalTempDir(t)
 	m := fakeManifest()
 	m.Schema = schema
 	if schema == VersionV2 {
@@ -161,7 +173,7 @@ func testRealGoBundleVerification(t *testing.T, schema string) {
 	}
 	for _, mutation := range []string{"missing", "extra", "linked", "symlink", "resource", "mixed-role", "mixed-commit", "malformed-manifest", "manifest-mode", "actual-manifest-mode", "wrong-digest", "mixed-contract", "unknown-contract"} {
 		t.Run(mutation, func(t *testing.T) {
-			dir := t.TempDir()
+			dir := canonicalTempDir(t)
 			for _, name := range append(Names(), ManifestName) {
 				data, err := os.ReadFile(filepath.Join(bundle, name))
 				if err != nil {
