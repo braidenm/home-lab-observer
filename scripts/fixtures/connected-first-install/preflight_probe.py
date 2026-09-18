@@ -243,6 +243,9 @@ def main() -> int:
     except Refused as error:
         print(marker(error.code), file=sys.stderr, flush=True)
         return 1
+    except Exception:
+        print(marker("UNKNOWN"), file=sys.stderr, flush=True)
+        return 1
     print("HLO_VM_PREFLIGHT_PASS", flush=True)
     return 0
 

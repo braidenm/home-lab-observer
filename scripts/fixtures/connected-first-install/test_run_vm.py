@@ -141,6 +141,10 @@ class HarnessAdmissionTest(unittest.TestCase):
         with mock.patch.object(preflight_probe, "host_nss", side_effect=OSError("hle_private")), contextlib.redirect_stderr(output):
             self.assertEqual(preflight_probe.main(), 1)
         self.assertEqual(output.getvalue(), "HLO_VM_FAIL_PREFLIGHT_HOST\n")
+        output = io.StringIO()
+        with mock.patch.object(preflight_probe, "host_nss", side_effect=RuntimeError("hlc_private")), contextlib.redirect_stderr(output):
+            self.assertEqual(preflight_probe.main(), 1)
+        self.assertEqual(output.getvalue(), "HLO_VM_FAIL_PREFLIGHT_UNKNOWN\n")
 
     @unittest.skipUnless(os.name == "posix", "guest-only bounded pipe semantics")
     def test_preflight_command_kills_on_oversized_output(self):

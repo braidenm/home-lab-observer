@@ -15,7 +15,7 @@ fail() { emit "FAIL_$1"; exit 1; }
 
 baseline() {
   [ "$(id -u)" -eq 0 ] || fail NOT_ROOT
-  for tool in ip openssl update-ca-certificates python3 tar sha256sum systemctl getent findmnt pgrep; do
+  for tool in ip openssl update-ca-certificates python3 tar sha256sum systemctl getent findmnt pgrep cmp; do
     command -v "$tool" >/dev/null || fail GUEST_TOOL
   done
   grep -qx 'ID=ubuntu' /etc/os-release || fail OS
@@ -160,7 +160,28 @@ case "${1:-}" in
     [ "$preflight_status" -eq 22 ] && [[ "$preflight_result" == PREFLIGHT_REFUSED:* ]] || fail BAD_DIGEST_NOT_PREFLIGHT_REFUSED
     [ ! -e /etc/home-lab-observer-connected ] || fail PREFLIGHT_MUTATED
     install_reboot_assertion "$1"
-    python3 "$payload/preflight_probe.py" || fail PREFLIGHT_PROBE
+    preflight_output="$fixture_root/preflight-probe-output"
+    [ ! -e "$preflight_output" ] && [ ! -L "$preflight_output" ] || fail PREFLIGHT_OUTPUT_TARGET
+    if (umask 077; ulimit -f 1; python3 "$payload/preflight_probe.py" > "$preflight_output" 2>&1); then
+      preflight_status=0
+    else
+      preflight_status=$?
+    fi
+    [ -f "$preflight_output" ] && [ ! -L "$preflight_output" ] && [ "$(stat -c '%u:%g:%a:%h' "$preflight_output")" = 0:0:600:1 ] || fail PREFLIGHT_OUTPUT
+    [ "$(stat -c '%s' "$preflight_output")" -le 128 ] || fail PREFLIGHT_OUTPUT
+    if [ "$preflight_status" -eq 0 ]; then
+      printf 'HLO_VM_PREFLIGHT_PASS\n' | cmp -s - "$preflight_output" || fail PREFLIGHT_OUTPUT
+      emit PREFLIGHT_PASS
+    else
+      for preflight_code in HOST NSS TARGETS DNS_TLS PARENT UNKNOWN; do
+        if printf 'HLO_VM_FAIL_PREFLIGHT_%s\n' "$preflight_code" | cmp -s - "$preflight_output"; then
+          emit "FAIL_PREFLIGHT_$preflight_code"
+          exit 1
+        fi
+      done
+      [ -s "$preflight_output" ] || fail PREFLIGHT_PROBE_EMPTY
+      fail PREFLIGHT_PROBE_UNKNOWN
+    fi
     "$payload/connected-first-install-preflight-probe" -test.run='^TestVMReadonlyPreflightStages$' -hlo-vm-readonly-probe=true >/dev/null 2>&1 || fail EXACT_PREFLIGHT_PROBE
     if [ "$1" != interrupt ]; then
       python3 "$payload/drive_pty.py" install "$bundle" "$digest" || fail INSTALL
