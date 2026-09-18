@@ -17,14 +17,34 @@ oversized entries refuse. This check does not establish file ownership,
 durability, legacy-journal migration, ledger identity or worker state; the
 installer must prove those separately from anchored descriptors.
 
-The next read-only Linux inspector must open the fixed stage beneath the
-trusted root-owned config directory through no-follow descriptors, require a
-0700 root-owned stage on the same ext4 device, and require exactly the fixed
-0600 root-owned regular-file members with one link, no ACL and bounded bytes.
-The preparation witness is a separate 0600 config-root file. Only after these
-checks may it call the pure stage validator. A synthetic root fixture on a
-GitHub-hosted runner must exercise wrong mode, symlink, extra entry, byte
-substitution and missing member; this does not prove writes or crash recovery.
+The separate Linux stage-filesystem slice provides anchored `InspectAt` and
+`PublishAt` primitives, not an installer command. Both require root and an
+exact root-owned config directory on ext4. Inspection permits only the fixed
+private stage inventory, modes, ownership, no links/ACLs, bounded regular
+files, and matching canonical proposal/preparation bytes. Publication refuses
+occupied names, writes/syncs the preparation first, then creates/syncs the
+private stage and each fixed member exclusively, and reopens all evidence for
+byte comparison before returning. Any uncertain write or injected post-sync
+interruption leaves the evidence intact and requires recovery; it does not
+silently retry, delete, publish the active journal, or start workers. The
+caller still owes installation lease, stopped-worker, predecessor, private
+ledger, and eventual forward-recovery checks. Root-owned synthetic ext4 tests
+exercise both successful reopen and failures at each durable publication step;
+they do not substitute for VM power-loss proof.
+
+The pure staged classifier accepts only an already valid complete stage, the
+actual active transition journal/receipt bytes, and caller-verified active
+resource hashes plus the private ledger witness. Before publication, the
+journal/receipt must still be the exact retained predecessor pair (or both
+absent for the first new-format transition) and every active resource must
+match the previous set. After publication, the journal must equal the exact
+proposal. A retained predecessor receipt is recognized as *old* evidence, not
+completion of the new proposal; its unexpected absence after publication
+refuses rather than inventing a missing-file transition. A new exact receipt
+is accepted only with all next resources. It reports preparation pending,
+forward recovery required or
+completion cleanup pending. None of these is a worker startup, abort or cleanup
+ permit; filesystem ownership, sync and stopped-worker proofs are external.
 
 ## Fixed evidence
 
