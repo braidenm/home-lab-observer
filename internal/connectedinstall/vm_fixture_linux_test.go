@@ -22,6 +22,7 @@ import (
 	"github.com/braidenm/home-lab-observer/internal/connectedunits"
 	"github.com/braidenm/home-lab-observer/internal/enrollmentcoord"
 	"github.com/braidenm/home-lab-observer/internal/enrollmentstore"
+	"github.com/braidenm/home-lab-observer/internal/remoteprojection"
 	"github.com/braidenm/home-lab-observer/internal/sharedhandoff"
 	"github.com/braidenm/home-lab-observer/internal/uploadstate"
 )
@@ -366,16 +367,73 @@ func TestConnectedVMChild(t *testing.T) {
 		if err != nil {
 			t.Fatal("VM_FIXTURE_HANDOFF_READ_FAILED")
 		}
-		var doc struct {
-			Sections struct {
-				Overview json.RawMessage `json:"overview"`
-			} `json:"sections"`
-		}
-		if json.Unmarshal(body, &doc) != nil || !bytes.Equal(doc.Sections.Overview, []byte(`{"available":false,"reason_code":"HOST_DATA_UNAVAILABLE"}`)) || r.Close() != nil {
+		if !vmUsefulNativeMetrics(body, c.ServerID) || r.Close() != nil {
 			t.Fatal("VM_FIXTURE_COVERAGE_CLAIM_FAILED")
 		}
 	} else {
 		t.Fatal("VM_FIXTURE_CHILD_MODE_REFUSED")
+	}
+}
+
+// Validate the real handoff contract first, then require useful independent
+// sections without promoting namespace-visible disks to whole-host coverage.
+func vmUsefulNativeMetrics(body []byte, server string) bool {
+	if remoteprojection.ValidateNative(body, server) != nil {
+		return false
+	}
+	type quality struct {
+		State string `json:"state"`
+	}
+	var doc struct {
+		Host struct {
+			OS  string `json:"operating_system"`
+			CPU struct {
+				Quality quality `json:"quality"`
+			} `json:"cpu"`
+			Memory struct {
+				Quality quality `json:"quality"`
+			} `json:"memory"`
+			Uptime struct {
+				Quality quality `json:"quality"`
+			} `json:"uptime"`
+			Filesystems struct {
+				Quality quality `json:"quality"`
+				Total   *uint64 `json:"total_count"`
+			} `json:"filesystems"`
+		} `json:"host"`
+	}
+	if json.Unmarshal(body, &doc) != nil {
+		return false
+	}
+	h := doc.Host
+	return h.OS == "Linux" && h.CPU.Quality.State == "AVAILABLE" &&
+		(h.Memory.Quality.State == "AVAILABLE" || h.Memory.Quality.State == "DEGRADED") &&
+		h.Uptime.Quality.State == "AVAILABLE" && h.Filesystems.Total == nil &&
+		h.Filesystems.Quality.State != "AVAILABLE"
+}
+
+func TestVMNativeMetricsAcceptancePredicate(t *testing.T) {
+	complete, err := os.ReadFile("../../schemas/remote/fixtures/native-host-complete.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	partial, err := os.ReadFile("../../schemas/remote/fixtures/native-host-partial-cap.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const server = "srv_0123456789abcdef0123456789abcdef"
+	if !vmUsefulNativeMetrics(bytes.TrimSpace(partial), server) {
+		t.Fatal("useful partial metrics refused")
+	}
+	for name, body := range map[string][]byte{
+		"false complete coverage": bytes.TrimSpace(complete),
+		"foreign server":          bytes.ReplaceAll(bytes.TrimSpace(partial), []byte(server), []byte(vmFixtureServer)),
+		"invalid metric":          bytes.Replace(bytes.TrimSpace(partial), []byte(`"usage_percent":12.5`), []byte(`"usage_percent":null`), 1),
+		"legacy":                  []byte(`{"sections":{"overview":{"available":false,"reason_code":"HOST_DATA_UNAVAILABLE"}}}`),
+	} {
+		if vmUsefulNativeMetrics(body, server) {
+			t.Fatalf("%s accepted", name)
+		}
 	}
 }
 

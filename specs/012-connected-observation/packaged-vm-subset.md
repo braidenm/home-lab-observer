@@ -169,3 +169,17 @@ resources and production workloads were not modified by these fixtures. The
 test VM is no longer running or defined. Only sanitized repository evidence and
 local non-secret build/test artifacts remain; the temporary guest state and key
 are intentionally not recoverable.
+
+## Quality-aware collector follow-up (not yet executed in a VM)
+
+The draft collector now publishes the native quality-aware host contract. The
+next packaged run therefore validates that exact canonical contract and server
+binding, requires Linux CPU and uptime availability plus useful RAM (complete or
+degraded), and refuses any assertion of complete filesystem coverage or a known
+whole-host filesystem total. The old legacy-unavailable assertion is removed;
+historical evidence above continues to describe the older package truthfully.
+
+The acceptance predicate has Linux-native fixture tests covering useful partial
+data, false complete coverage, foreign server binding, invalid metric values and
+the legacy response. These tests do not run a service, establish current packaged
+VM acceptance or prove hosted transport. A fresh admitted VM run is still required.
