@@ -1,0 +1,49 @@
+name: Connected active mode owned fixture
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/connected-active-mode-fixture.yml'
+      - 'internal/connectedactive/**'
+      - 'internal/connectedprofile/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'specs/012-connected-observation/transition-staging.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/connected-active-mode-fixture.yml'
+      - 'internal/connectedactive/**'
+      - 'internal/connectedprofile/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'specs/012-connected-observation/transition-staging.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: connected-active-mode-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  owned-active-mode:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Compile root-owned exact-mode fixture
+        run: go test -c ./internal/connectedprofile -o "$RUNNER_TEMP/connected-active-mode.test"
+      - name: Prove exact mode and linked-file refusals
+        run: >-
+          sudo env -i PATH=/usr/bin:/bin OBSERVER_CONNECTED_ACTIVE_MODE_ACCEPTANCE=1
+          "$RUNNER_TEMP/connected-active-mode.test"
+          -test.run='^TestOwnedExactModeReaderFixture$' -test.count=1 -test.timeout=60s -test.v
