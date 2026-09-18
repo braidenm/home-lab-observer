@@ -16,6 +16,49 @@ import preflight_probe
 
 
 class HarnessAdmissionTest(unittest.TestCase):
+    def test_enrollment_records_are_closed_private_and_bound_without_secret_output(self):
+        if not hasattr(os, "getxattr"):
+            self.skipTest("Linux ACL fixture only")
+        connector = "agent_" + "a" * 32
+        secret = "hlc_" + "B" * 43
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for filename, state in (("attempt.json", "ATTEMPTED"),
+                                    ("credential.json", "CREDENTIAL"), ("ready.json", "READY")):
+                record = {"version": "observer-enrollment/v1", "state": state,
+                          "server_id": assert_guest.SERVER, "connector_id": connector}
+                if state == "CREDENTIAL":
+                    record["secret"] = secret
+                target = root / filename
+                target.write_bytes(json.dumps(record, separators=(",", ":")).encode("ascii"))
+                target.chmod(0o600)
+            lock = root / ".enrollment-lock"
+            lock.write_bytes(b"")
+            lock.chmod(0o600)
+            identities = assert_guest.enrollment_records(root, os.getuid(), os.getgid(), connector, secret)
+            self.assertEqual(set(identities), assert_guest.ENROLLMENT_MEMBERS)
+            self.assertEqual(identities[".enrollment-lock"][1], 0)
+            (root / "foreign-member").write_bytes(b"not a grant")
+            with self.assertRaisesRegex(AssertionError, "^UNKNOWN_MEMBER_ENROLLMENT$") as error:
+                assert_guest.enrollment_records(root, os.getuid(), os.getgid(), connector, secret)
+            self.assertNotIn(secret, str(error.exception))
+            (root / "foreign-member").unlink()
+            with self.assertRaisesRegex(AssertionError, "^ENROLLMENT_RECORD_BINDING$"):
+                assert_guest.enrollment_records(root, os.getuid(), os.getgid(), connector, "hlc_" + "C" * 43)
+            (root / "ready.json").write_bytes(b"x" * 513)
+            with self.assertRaisesRegex(AssertionError, "^ENROLLMENT_RECORD_SIZE$"):
+                assert_guest.enrollment_records(root, os.getuid(), os.getgid(), connector, secret)
+
+    def test_member_stage_label_is_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "private-extra").write_bytes(b"private")
+            with self.assertRaisesRegex(AssertionError, "^UNKNOWN_MEMBER_CONFIG$") as error:
+                assert_guest.names(root, set(), "CONFIG")
+            self.assertNotIn("private-extra", str(error.exception))
+            with self.assertRaisesRegex(AssertionError, "^UNKNOWN_MEMBER_UNKNOWN$"):
+                assert_guest.names(root, set(), "hle_private")
+
     def test_driver_diagnostic_is_allowlisted_and_redacted(self):
         for label, phase in drive_pty.PHASE_LABELS:
             self.assertEqual(drive_pty.classify_failure(b"prefix " + label + b" fixed text"), phase)
@@ -81,10 +124,10 @@ class HarnessAdmissionTest(unittest.TestCase):
             target = directory / "fixed"
             target.write_bytes(b"fixture")
             target.chmod(0o600)
-            assert_guest.names(directory, {"fixed"})
+            assert_guest.names(directory, {"fixed"}, "CONFIG")
             assert_guest.plain(target, 0o600, target.stat().st_uid, target.stat().st_gid)
             with self.assertRaises(AssertionError):
-                assert_guest.names(directory, set())
+                assert_guest.names(directory, set(), "CONFIG")
             target.chmod(0o644)
             with self.assertRaises(AssertionError):
                 assert_guest.plain(target, 0o600, target.stat().st_uid, target.stat().st_gid)

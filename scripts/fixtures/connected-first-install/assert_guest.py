@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import pwd
 import grp
+import re
 import stat
 import subprocess
 import sys
@@ -19,6 +20,9 @@ CONFIG = Path("/etc/home-lab-observer-connected")
 STATE = Path("/var/lib/home-lab-observer-connected")
 RELEASES = Path("/opt/home-lab-observer-connected/releases")
 SERVER = "srv_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+MEMBER_STAGES = frozenset({"BUNDLE", "RELEASES", "RELEASE", "CONFIG", "CREDENTIALS", "STATE",
+                           "ENROLLMENT", "UPLOADER_ROOT", "UPLOADER_ETC", "UPLOADER_STATE", "RECOVERY_CONFIG"})
+ENROLLMENT_MEMBERS = frozenset({".enrollment-lock", "attempt.json", "credential.json", "ready.json"})
 
 
 def need(condition: bool, code: str) -> None:
@@ -49,8 +53,35 @@ def plain(path: Path, mode: int, uid: int, gid: int, directory: bool = False) ->
     return info
 
 
-def names(path: Path, expected: set[str]) -> None:
-    need({entry.name for entry in path.iterdir()} == expected, "UNKNOWN_MEMBER")
+def names(path: Path, expected: set[str], stage: str) -> None:
+    need(stage in MEMBER_STAGES, "UNKNOWN_MEMBER_UNKNOWN")
+    need({entry.name for entry in path.iterdir()} == expected, "UNKNOWN_MEMBER_" + stage)
+
+
+def enrollment_records(path: Path, uid: int, gid: int, connector: str, secret: str) -> dict:
+    """Prove retained one-use records without emitting secret bytes."""
+    names(path, set(ENROLLMENT_MEMBERS), "ENROLLMENT")
+    need(re.fullmatch(r"hlc_[A-Za-z0-9_-]{43}", secret) is not None, "ENROLLMENT_SECRET_BINDING")
+    lock = path / ".enrollment-lock"
+    lock_stat = plain(lock, 0o600, uid, gid)
+    need(lock_stat.st_size == 0, "ENROLLMENT_LOCK")
+    identities = {".enrollment-lock": [lock_stat.st_ino, 0, digest(lock)]}
+    for filename, state in (("attempt.json", "ATTEMPTED"),
+                            ("credential.json", "CREDENTIAL"), ("ready.json", "READY")):
+        source = path / filename
+        info = plain(source, 0o600, uid, gid)
+        need(0 < info.st_size <= 512, "ENROLLMENT_RECORD_SIZE")
+        with source.open("rb") as handle:
+            raw = handle.read(513)
+        need(len(raw) == info.st_size, "ENROLLMENT_RECORD_SIZE")
+        expected = {"version": "observer-enrollment/v1", "state": state,
+                    "server_id": SERVER, "connector_id": connector}
+        if state == "CREDENTIAL":
+            expected["secret"] = secret
+        need(raw == json.dumps(expected, separators=(",", ":")).encode("ascii"),
+             "ENROLLMENT_RECORD_BINDING")
+        identities[filename] = [info.st_ino, info.st_size, hashlib.sha256(raw).hexdigest()]
+    return identities
 
 
 def run(*args: str) -> str:
@@ -92,7 +123,7 @@ def reviewed() -> tuple[str, str, dict]:
     bundle = Path((FIXTURE / "bundle-path").read_text().strip())
     need(bundle.is_dir() and digest(bundle / "connected-manifest.json") == expected, "EXTRACTED_MANIFEST")
     expected_files = {entry["name"] for entry in manifest["files"]}
-    names(bundle, expected_files | {"connected-manifest.json"})
+    names(bundle, expected_files | {"connected-manifest.json"}, "BUNDLE")
     for entry in manifest["files"]:
         target = bundle / entry["name"]
         plain(target, entry["mode"], 0, 0)
@@ -104,9 +135,9 @@ def snapshot() -> dict:
     _, expected, manifest = reviewed()
     release = RELEASES / expected
     plain(RELEASES, 0o755, 0, 0, True)
-    names(RELEASES, {expected})
+    names(RELEASES, {expected}, "RELEASES")
     plain(release, 0o755, 0, 0, True)
-    names(release, {entry["name"] for entry in manifest["files"]} | {"connected-manifest.json"})
+    names(release, {entry["name"] for entry in manifest["files"]} | {"connected-manifest.json"}, "RELEASE")
     plain(release / "connected-manifest.json", 0o644, 0, 0)
     for entry in manifest["files"]:
         target = release / entry["name"]
@@ -114,7 +145,7 @@ def snapshot() -> dict:
         need(target.stat().st_size == entry["size"] and digest(target) == entry["sha256"], "RELEASE_FILE")
     need(digest(release / "connected-manifest.json") == expected, "RELEASE_MANIFEST")
     plain(CONFIG, 0o755, 0, 0, True)
-    names(CONFIG, {"preparing.json", "installed.json", "credentials"})
+    names(CONFIG, {"preparing.json", "installed.json", "credentials"}, "CONFIG")
     plain(CONFIG / "preparing.json", 0o600, 0, 0)
     marker = json.loads((CONFIG / "preparing.json").read_text())
     need(marker == {"version": "observer-connected-preparing/v1", "state": "PREPARING", "server_id": SERVER, "manifest_sha256": expected}, "PREPARING_BINDING")
@@ -128,23 +159,24 @@ def snapshot() -> dict:
     need(profile["collector_uid"] == collector.pw_uid and profile["uploader_uid"] == uploader.pw_uid and profile["uploader_gid"] == uploader.pw_gid and profile["shared_gid"] == shared.gr_gid, "PRINCIPAL_BINDING")
     need(profile["addresses"] == ["93.184.216.34"] and profile["connector_id"].startswith("agent_"), "NETWORK_BINDING")
     plain(CONFIG / "credentials", 0o700, 0, 0, True)
-    names(CONFIG / "credentials", {"connector.json"})
+    names(CONFIG / "credentials", {"connector.json"}, "CREDENTIALS")
     credential = CONFIG / "credentials/connector.json"
     credential_stat = plain(credential, 0o600, 0, 0)
     credential_record = json.loads(credential.read_text())
     need(credential_record.get("version") == "observer-connected-credential/v1" and credential_record.get("server_id") == SERVER and credential_record.get("connector_id") == profile["connector_id"] and credential_record.get("secret", "").startswith("hlc_"), "CREDENTIAL_BINDING")
     plain(STATE, 0o755, 0, 0, True)
-    names(STATE, {"handoff", "collector-status", "uploader-status", "enrollment", "ledger", "uploader-root"})
+    names(STATE, {"handoff", "collector-status", "uploader-status", "enrollment", "ledger", "uploader-root"}, "STATE")
     plain(STATE / "handoff", 0o750, collector.pw_uid, shared.gr_gid, True)
     plain(STATE / "collector-status", 0o700, collector.pw_uid, shared.gr_gid, True)
     plain(STATE / "uploader-status", 0o700, uploader.pw_uid, uploader.pw_gid, True)
     plain(STATE / "enrollment", 0o700, 0, 0, True)
-    names(STATE / "enrollment", set())
+    enrollment = enrollment_records(STATE / "enrollment", uploader.pw_uid, uploader.pw_gid,
+                                    profile["connector_id"], credential_record.get("secret", ""))
     uploader_root = STATE / "uploader-root"
     plain(uploader_root, 0o755, 0, 0, True)
-    names(uploader_root, {"bin", "etc", "state", "handoff", "activation"})
-    names(uploader_root / "etc", {"ssl", "home-lab-observer-connected", "hosts", "resolv.conf", "nsswitch.conf"})
-    names(uploader_root / "state", {"enrollment", "ledger", "status"})
+    names(uploader_root, {"bin", "etc", "state", "handoff", "activation"}, "UPLOADER_ROOT")
+    names(uploader_root / "etc", {"ssl", "home-lab-observer-connected", "hosts", "resolv.conf", "nsswitch.conf"}, "UPLOADER_ETC")
+    names(uploader_root / "state", {"enrollment", "ledger", "status"}, "UPLOADER_STATE")
     ledger = STATE / "ledger"
     ledger_stat = plain(ledger, 0o700, uploader.pw_uid, uploader.pw_gid, True)
     ledger_files = {}
@@ -179,13 +211,15 @@ def snapshot() -> dict:
     need("RootDirectory=" + str(STATE / "uploader-root") in effective_uploader and "connector.json" in effective_uploader and str(STATE / "ledger") in effective_uploader and "NoNewPrivileges=yes\n" in effective_uploader and "IPAddressDeny=any\n" in effective_uploader, "UPLOADER_EFFECTIVE")
     transient = run("/usr/bin/systemctl", "show", "--property=LoadState", "--property=ActiveState", "--property=Transient", "--property=FragmentPath", "home-lab-observer-connected-enrollment.service")
     need("LoadState=not-found\n" in transient and "ActiveState=inactive\n" in transient and "Transient=no\n" in transient and "FragmentPath=\n" in transient, "TRANSIENT_RETAINED")
-    return {"installed": [installed_stat.st_ino, installed_stat.st_size, digest(installed)], "credential": [credential_stat.st_ino, credential_stat.st_size, digest(credential)], "ledger": [ledger_stat.st_ino, ledger_files]}
+    return {"installed": [installed_stat.st_ino, installed_stat.st_size, digest(installed)],
+            "credential": [credential_stat.st_ino, credential_stat.st_size, digest(credential)],
+            "enrollment": enrollment, "ledger": [ledger_stat.st_ino, ledger_files]}
 
 
 def recovery() -> None:
     _, expected, _ = reviewed()
     plain(CONFIG, 0o755, 0, 0, True)
-    names(CONFIG, {"preparing.json"})
+    names(CONFIG, {"preparing.json"}, "RECOVERY_CONFIG")
     plain(CONFIG / "preparing.json", 0o600, 0, 0)
     marker = json.loads((CONFIG / "preparing.json").read_text())
     need(marker == {"version": "observer-connected-preparing/v1", "state": "PREPARING", "server_id": SERVER, "manifest_sha256": expected}, "RECOVERY_MARKER")
