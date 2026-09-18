@@ -153,6 +153,14 @@ cases pass it also removes the validated payload image. It retains bounded
 serial logs and small seeds for audit. On failure it retains the remaining
 images for investigation. `--keep-disks` retains passing images too.
 
+Before entering the one-use synthetic grant, the guest runs a fixture-only,
+read-only prerequisite classifier for host/NSS, owned-target absence, the
+guest-only DNS/TLS endpoint and parent-slice policy. It emits fixed categories
+without raw host output or secrets. This is diagnostic evidence only; passing
+it does not authorize installation or replace the installer's own preflight.
+Stage and independently hash `preflight_probe.py` with the four existing
+harness scripts when using a manually transferred checkout.
+
 If the installer fails, the PTY driver emits only an allowlisted phase name,
 normalized exit number and prompt-seen bit. Its raw output remains a bounded
 in-memory buffer and is never copied into serial evidence; unknown or mixed

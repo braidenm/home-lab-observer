@@ -131,7 +131,7 @@ def payload_image(instance: Path, archive: Path, manifest: Path, checksums: Path
     for source in (archive, manifest, checksums, receiver):
         shutil.copyfile(source, directory / ("connected-first-install-receiver" if source == receiver else source.name))
     scripts = Path(__file__).resolve().parent
-    for name in ("guest.sh", "drive_pty.py", "assert_guest.py"):
+    for name in ("guest.sh", "drive_pty.py", "assert_guest.py", "preflight_probe.py"):
         shutil.copyfile(scripts / name, directory / name)
     (directory / "reviewed-identity.json").write_text(json.dumps({"commit": expected_commit, "manifest_sha256": expected_manifest_sha256, "archive_sha256": expected_archive_sha256, "receiver_sha256": expected_receiver_sha256}, sort_keys=True) + "\n", encoding="ascii")
     (directory / "connected-first-install-receiver").chmod(0o755)
@@ -296,7 +296,7 @@ def main() -> int:
         info = root.stat()
         if not root.is_dir() or not trusted_ancestors(root) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o700:
             refuse("WORK_ROOT_OWNERSHIP_REFUSED")
-        for name in ("run_vm.py", "guest.sh", "drive_pty.py", "assert_guest.py"):
+        for name in ("run_vm.py", "guest.sh", "drive_pty.py", "assert_guest.py", "preflight_probe.py"):
             owned_file(str(Path(__file__).resolve().parent / name), 512 * 1024)
         image = owned_file(args.image, 12 * GIB)
         archive = owned_file(args.archive, 600 * MIB)
