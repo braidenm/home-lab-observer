@@ -6,9 +6,31 @@ import unittest
 
 import run_vm
 import assert_guest
+import drive_pty
 
 
 class HarnessAdmissionTest(unittest.TestCase):
+    def test_driver_diagnostic_is_allowlisted_and_redacted(self):
+        for label, phase in drive_pty.PHASE_LABELS:
+            self.assertEqual(drive_pty.classify_failure(b"prefix " + label + b" fixed text"), phase)
+        private = b"hle_" + b"A" * 43 + b" hlc_" + b"B" * 43
+        self.assertEqual(drive_pty.classify_failure(private), "UNRECOGNIZED")
+        marker = drive_pty.failure_marker(private, 22, False)
+        self.assertEqual(marker, "FIXTURE_DRIVER_FAILURE PHASE=UNRECOGNIZED EXIT=22 PROMPT=0")
+        self.assertNotIn("hle_", marker)
+        self.assertNotIn("hlc_", marker)
+        self.assertEqual(drive_pty.classify_failure(b"PREFLIGHT_REFUSED: LOCAL_SETUP_INCOMPLETE:"), "UNRECOGNIZED")
+        self.assertEqual(drive_pty.normalized_exit(22), 22)
+        self.assertEqual(drive_pty.normalized_exit(-9), 137)
+
+    def test_driver_output_overflow_never_retains_extra_bytes(self):
+        output = bytearray(b"x" * (drive_pty.MAX_OUTPUT - 1))
+        self.assertFalse(drive_pty.append_bounded(output, b"private"))
+        self.assertEqual(len(output), drive_pty.MAX_OUTPUT - 1)
+        self.assertTrue(drive_pty.append_bounded(output, b"y"))
+        self.assertEqual(len(output), drive_pty.MAX_OUTPUT)
+        self.assertFalse(drive_pty.append_bounded(output, b"z"))
+
     def test_ext4_type_is_explicit_after_resolving_mke2fs(self):
         command = run_vm.ext4_command(Path("/safe/payload"), Path("/safe/payload.ext4"))
         self.assertEqual(command[:3], ("mkfs.ext4", "-t", "ext4"))

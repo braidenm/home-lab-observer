@@ -153,6 +153,11 @@ cases pass it also removes the validated payload image. It retains bounded
 serial logs and small seeds for audit. On failure it retains the remaining
 images for investigation. `--keep-disks` retains passing images too.
 
+If the installer fails, the PTY driver emits only an allowlisted phase name,
+normalized exit number and prompt-seen bit. Its raw output remains a bounded
+in-memory buffer and is never copied into serial evidence; unknown or mixed
+responses are `UNRECOGNIZED`. Preserve a failed overlay and stop for review.
+
 The runner does not claim every hardware flush boundary, pre-publish hostile
 target scenario, or installed-worker runtime isolation. Its interrupted-case
 proof is a stopped installer with the durable marker but **before any state or

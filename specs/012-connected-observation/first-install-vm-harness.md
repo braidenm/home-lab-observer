@@ -20,6 +20,10 @@ test address only on loopback and trusts a throwaway guest-only TLS certificate 
 origin. A fixed synthetic one-use grant is entered through a pseudo-terminal after the installer's
 no-echo prompt. The receiver accepts one exact enrollment exchange and no upload. No grant, credential,
 HTTP request body or raw environment is printed to the serial evidence channel.
+On an install failure, the PTY driver retains at most 8 KiB of output in memory
+and emits only an allowlisted phase enum, normalized numeric exit status and
+prompt-seen bit. Unknown or mixed output is `UNRECOGNIZED`; neither raw PTY
+bytes nor the synthetic grant or credential are emitted.
 
 The minimum matrix is: refused preflight without grant; successful stopped install and exact unit,
 principal, ledger and filesystem assertions; normal reboot and stopped retry refusal; abrupt QEMU
