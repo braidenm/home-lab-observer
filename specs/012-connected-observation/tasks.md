@@ -34,5 +34,6 @@
   - [x] Add the same-process uploader-side startup rendezvous as an unused Linux library; root transaction and installed enforcement remain open.
   - [x] Add pure fixed-stage byte admission for the proposal, CA bytes and exact predecessor chain; this does not establish filesystem ownership or durability.
   - [x] Classify complete staged evidence without treating a retained predecessor receipt as new completion; this does not permit abort, cleanup or worker startup.
+  - [x] Derive exact previous/next config, hosts and reviewed unit bytes from the record and stage CA; active filesystem verification and writes remain open.
   - [x] Add independent anchored ext4 stage inspection and exclusive publication primitives with root synthetic interruption tests; not wired to installer commands.
 - [ ] Specify richer remote quality-aware read models; keep Kubernetes deferred and actions in Spec 011.
