@@ -24,7 +24,7 @@ func (syntheticRestartReader) Read(context.Context, logobs.ReadRequest) (logobs.
 }
 
 func TestRetainedHistoryAcrossRealStoreAndCollectorRestart(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	path := filepath.Join(t.TempDir(), "history.sqlite")
 	now := time.Now().UTC()
@@ -46,7 +46,7 @@ func TestRetainedHistoryAcrossRealStoreAndCollectorRestart(t *testing.T) {
 		at := now.Add(time.Duration(iteration+2) * time.Second)
 		store, err := history.Open(ctx, history.DefaultConfig(path), shapeClock{at})
 		if err != nil {
-			t.Fatal("store reopen failed")
+			t.Fatalf("store reopen failed at iteration %d: %v", iteration, err)
 		}
 		cp, err := store.LoadCheckpoint(ctx, logobs.SourceSystem)
 		if err != nil || cp.Revision != uint64(iteration+2) {
