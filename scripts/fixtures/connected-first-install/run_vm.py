@@ -125,16 +125,22 @@ def ext4_command(directory: Path, target: Path) -> tuple[str, ...]:
     return ("mkfs.ext4", "-t", "ext4", "-F", "-q", "-L", "HLOFIX", "-d", str(directory), str(target))
 
 
-def payload_image(instance: Path, archive: Path, manifest: Path, checksums: Path, receiver: Path, expected_commit: str, expected_manifest_sha256: str, expected_archive_sha256: str, expected_receiver_sha256: str) -> Path:
+def check_probe(probe: Path, expected_digest: str) -> None:
+    if probe.name != "connected-first-install-preflight-probe" or sha256(probe) != expected_digest:
+        refuse("REVIEWED_PROBE_REFUSED")
+
+
+def payload_image(instance: Path, archive: Path, manifest: Path, checksums: Path, receiver: Path, probe: Path, expected_commit: str, expected_manifest_sha256: str, expected_archive_sha256: str, expected_receiver_sha256: str, expected_probe_sha256: str) -> Path:
     directory = instance / "payload"
     directory.mkdir(mode=0o700)
-    for source in (archive, manifest, checksums, receiver):
+    for source in (archive, manifest, checksums, receiver, probe):
         shutil.copyfile(source, directory / ("connected-first-install-receiver" if source == receiver else source.name))
     scripts = Path(__file__).resolve().parent
     for name in ("guest.sh", "drive_pty.py", "assert_guest.py", "preflight_probe.py"):
         shutil.copyfile(scripts / name, directory / name)
-    (directory / "reviewed-identity.json").write_text(json.dumps({"commit": expected_commit, "manifest_sha256": expected_manifest_sha256, "archive_sha256": expected_archive_sha256, "receiver_sha256": expected_receiver_sha256}, sort_keys=True) + "\n", encoding="ascii")
+    (directory / "reviewed-identity.json").write_text(json.dumps({"commit": expected_commit, "manifest_sha256": expected_manifest_sha256, "archive_sha256": expected_archive_sha256, "receiver_sha256": expected_receiver_sha256, "probe_sha256": expected_probe_sha256}, sort_keys=True) + "\n", encoding="ascii")
     (directory / "connected-first-install-receiver").chmod(0o755)
+    (directory / "connected-first-install-preflight-probe").chmod(0o755)
     target = instance / "payload.ext4"
     size = max(512 * MIB, 2 * sum(p.stat().st_size for p in directory.iterdir()) + 128 * MIB)
     if size > 1200 * MIB:
@@ -273,15 +279,17 @@ def main() -> int:
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--checksums", required=True)
     parser.add_argument("--receiver", required=True)
+    parser.add_argument("--probe", required=True)
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--expected-manifest-sha256", required=True)
     parser.add_argument("--expected-archive-sha256", required=True)
     parser.add_argument("--expected-receiver-sha256", required=True)
+    parser.add_argument("--expected-probe-sha256", required=True)
     parser.add_argument("--work-root", required=True)
     parser.add_argument("--keep-disks", action="store_true")
     args = parser.parse_args()
     try:
-        if os.geteuid() != 0 or not re.fullmatch(r"[a-f0-9]{64}", args.image_sha256) or not re.fullmatch(r"[a-f0-9]{40}", args.expected_commit) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_manifest_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_archive_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_receiver_sha256):
+        if os.geteuid() != 0 or not re.fullmatch(r"[a-f0-9]{64}", args.image_sha256) or not re.fullmatch(r"[a-f0-9]{40}", args.expected_commit) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_manifest_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_archive_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_receiver_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_probe_sha256):
             refuse("ADMISSION_REFUSED")
         for tool in ("qemu-img", "qemu-system-x86_64", "mkfs.ext4", "cloud-localds"):
             found = shutil.which(tool, path=SAFE_PATH)
@@ -303,8 +311,10 @@ def main() -> int:
         manifest = owned_file(args.manifest, 16 * 1024)
         checksums = owned_file(args.checksums, 4096)
         receiver = owned_file(args.receiver, 20 * MIB)
+        probe = owned_file(args.probe, 100 * MIB)
         if sha256(receiver) != args.expected_receiver_sha256:
             refuse("REVIEWED_RECEIVER_REFUSED")
+        check_probe(probe, args.expected_probe_sha256)
         if sha256(image) != args.image_sha256:
             refuse("BASE_IMAGE_CHECKSUM_REFUSED")
         image_format(image)
@@ -316,7 +326,7 @@ def main() -> int:
             instance = Path(tempfile.mkdtemp(prefix="hlo-first-install-", dir=root))
             instance.chmod(0o700)
             (instance / ".hlo-owned-instance").write_text("first-install-vm/v1\n")
-            payload = payload_image(instance, archive, manifest, checksums, receiver, args.expected_commit, args.expected_manifest_sha256, args.expected_archive_sha256, args.expected_receiver_sha256)
+            payload = payload_image(instance, archive, manifest, checksums, receiver, probe, args.expected_commit, args.expected_manifest_sha256, args.expected_archive_sha256, args.expected_receiver_sha256, args.expected_probe_sha256)
             for name in CASES:
                 case(instance, name, image, payload, args.keep_disks)
             if not args.keep_disks:

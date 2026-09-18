@@ -1,4 +1,4 @@
-# Disposable first-install acceptance (not yet executed)
+# Disposable first-install acceptance (not yet passed)
 
 This fixture is a gate for the stopped Linux connected installer, not an owner-host
 installation recipe. A helper passing on WSL or a hosted CI runner does **not**
@@ -55,6 +55,15 @@ Build the receiver separately with `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go
 build -trimpath -o <new-staging-path>/connected-first-install-receiver
 ./scripts/fixtures/connected-first-install`. Transfer it on the same read-only
 virtual media, but **not** as a member of the verified connected bundle.
+Build the separately pinned read-only stage probe from the same exact source
+commit with `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go test -c -trimpath
+-buildvcs=false -ldflags "-X github.com/braidenm/home-lab-observer/internal/connectedinstall.vmSourceCommit=$CANARY_COMMIT"
+-o <new-staging-path>/connected-first-install-preflight-probe
+./internal/connectedinstall`. It is a fixture-only test executable, not a
+release member or installer command. The host runner requires its independent
+SHA-256 pin; the probe also compares its embedded commit with the verified
+bundle manifest. The guest runs only its fixed opt-in test before the grant prompt;
+ordinary package tests skip it.
 
 ## Guest-only network and enrollment
 
@@ -134,10 +143,12 @@ sudo python3 scripts/fixtures/connected-first-install/run_vm.py \
   --expected-manifest-sha256 '<reviewed-64-hex-manifest-sha256>' \
   --expected-archive-sha256 '<reviewed-64-hex-archive-sha256>' \
   --expected-receiver-sha256 '<reviewed-64-hex-receiver-sha256>' \
+  --expected-probe-sha256 '<reviewed-64-hex-probe-sha256>' \
   --archive /data/hlo-fixture-input/home-lab-observer-connected_0.1.0-canary.1_linux_amd64.tar.gz \
   --manifest /data/hlo-fixture-input/connected-manifest.json \
   --checksums /data/hlo-fixture-input/SHA256SUMS \
   --receiver /data/hlo-fixture-input/connected-first-install-receiver \
+  --probe /data/hlo-fixture-input/connected-first-install-preflight-probe \
   --work-root /data/hlo-first-install-acceptance
 ```
 
@@ -158,6 +169,10 @@ read-only prerequisite classifier for host/NSS, owned-target absence, the
 guest-only DNS/TLS endpoint and parent-slice policy. It emits fixed categories
 without raw host output or secrets. This is diagnostic evidence only; passing
 it does not authorize installation or replace the installer's own preflight.
+An independently pinned fixture-only Go test executable then calls the exact
+same-package bundle, host, target, endpoint and parent checks used by
+`CheckRequest`; it also emits only fixed stage labels. Neither diagnostic
+receives a grant or changes the installed preflight policy.
 Stage and independently hash `preflight_probe.py` with the four existing
 harness scripts when using a manually transferred checkout.
 
