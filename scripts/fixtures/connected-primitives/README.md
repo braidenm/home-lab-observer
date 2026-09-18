@@ -34,6 +34,8 @@ ACL/readability inside RootDirectory. Its Python-only public runtime mounts are
 deliberately broader than the final uploader profile, so it is not a confidentiality
 acceptance test for that profile.
 
-Root's original synthetic WSL systemd255.4 probes passed these syscall and credential
-semantics on 2026-09-11. This checked-in adaptation and hosted workflow require their
-own execution evidence; neither is claimed passed merely from that earlier probe.
+The checked-in fixture passed its manual Ubuntu 24.04/systemd255 amd64 run on
+2026-09-18: [workflow evidence](https://github.com/braidenm/home-lab-observer/actions/runs/35332652182).
+This proves only the synthetic operations above; final installed worker mounts,
+credentials, TLS, enrollment and upload still require disposable-VM acceptance.
+The earlier WSL systemd255.4 probes passed on 2026-09-11 but are separate evidence.
