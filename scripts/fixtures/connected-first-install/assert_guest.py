@@ -63,7 +63,7 @@ def payload_assert() -> None:
     archive_files = list(PAYLOAD.glob("*.tar.gz"))
     need(len(archive_files) == 1, "ARCHIVE_COUNT")
     archive = archive_files[0]
-    need(digest(archive) == identity["archive_sha256"] and digest(PAYLOAD / "connected-manifest.json") == expected and digest(PAYLOAD / "connected-first-install-receiver") == identity["receiver_sha256"], "PAYLOAD_PIN")
+    need(digest(archive) == identity["archive_sha256"] and digest(PAYLOAD / "connected-manifest.json") == expected and digest(PAYLOAD / "connected-first-install-receiver") == identity["receiver_sha256"] and digest(PAYLOAD / "connected-first-install-preflight-probe") == identity["probe_sha256"], "PAYLOAD_PIN")
     manifest = json.loads((PAYLOAD / "connected-manifest.json").read_text())
     need(manifest["commit"] == identity["commit"] and manifest["schema"] == "observer-connected-bundle/v2", "PAYLOAD_IDENTITY")
     expected_files = {entry["name"]: (entry["size"], entry["mode"], entry["sha256"]) for entry in manifest["files"]}
@@ -82,8 +82,8 @@ def payload_assert() -> None:
 
 def reviewed() -> tuple[str, str, dict]:
     identity = json.loads((PAYLOAD / "reviewed-identity.json").read_text())
-    commit, expected, receiver, archive = identity["commit"], identity["manifest_sha256"], identity["receiver_sha256"], identity["archive_sha256"]
-    need(len(commit) == 40 and len(expected) == 64 and len(receiver) == 64 and len(archive) == 64, "REVIEWED_IDENTITY")
+    commit, expected, receiver, archive, probe = identity["commit"], identity["manifest_sha256"], identity["receiver_sha256"], identity["archive_sha256"], identity["probe_sha256"]
+    need(len(commit) == 40 and len(expected) == 64 and len(receiver) == 64 and len(archive) == 64 and len(probe) == 64, "REVIEWED_IDENTITY")
     payload_assert()
     source = PAYLOAD / "connected-manifest.json"
     need(digest(source) == expected, "REVIEWED_MANIFEST")

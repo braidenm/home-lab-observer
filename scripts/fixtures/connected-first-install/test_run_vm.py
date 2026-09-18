@@ -127,6 +127,20 @@ class HarnessAdmissionTest(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 run_vm.check_archive(archive, manifest, checksums, commit, digest, archive_digest)
 
+    def test_fixture_only_probe_requires_independent_pin_and_fixed_name(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            probe = directory / "connected-first-install-preflight-probe"
+            probe.write_bytes(b"fixture-only")
+            digest = hashlib.sha256(probe.read_bytes()).hexdigest()
+            run_vm.check_probe(probe, digest)
+            with self.assertRaises(RuntimeError):
+                run_vm.check_probe(probe, "0" * 64)
+            renamed = directory / "unreviewed-probe"
+            renamed.write_bytes(probe.read_bytes())
+            with self.assertRaises(RuntimeError):
+                run_vm.check_probe(renamed, digest)
+
     def test_no_matching_marker_is_not_success(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "console.log"

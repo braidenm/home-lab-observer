@@ -32,6 +32,15 @@ installer authority: a pass does not replace `CheckRequest` or establish VM
 acceptance; the installed command still owns admission. Unknown and oversized
 manager output is a fixed refusal. A preflight refusal in the installer after
 classifier pass remains a hard no-go pending further diagnosis.
+For that case only, the separately SHA-pinned, fixture-only Linux test binary
+from the exact source commit runs the connected install package's actual
+read-only bundle, host, target, DNS/TLS, parent and aggregate `CheckRequest`
+functions before the grant prompt. It has fixed guest paths and a single
+opt-in test name, binds its embedded source commit to the verified bundle
+manifest, emits only code-owned stage labels and never joins the
+release archive. This closes diagnostic parity without relaxing or instrumenting
+the production installer's refusal boundary. A probe pass is still not
+installation acceptance.
 
 The minimum matrix is: refused preflight without grant; successful stopped install and exact unit,
 principal, ledger and filesystem assertions; normal reboot and stopped retry refusal; abrupt QEMU

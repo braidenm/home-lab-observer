@@ -156,6 +156,7 @@ case "${1:-}" in
     [ ! -e /etc/home-lab-observer-connected ] || fail PREFLIGHT_MUTATED
     install_reboot_assertion "$1"
     python3 "$payload/preflight_probe.py" || fail PREFLIGHT_PROBE
+    "$payload/connected-first-install-preflight-probe" -test.run='^TestVMReadonlyPreflightStages$' -hlo-vm-readonly-probe=true >/dev/null 2>&1 || fail EXACT_PREFLIGHT_PROBE
     if [ "$1" != interrupt ]; then
       python3 "$payload/drive_pty.py" install "$bundle" "$digest" || fail INSTALL
       installed_assertions
