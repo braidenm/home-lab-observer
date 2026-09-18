@@ -159,11 +159,16 @@ including hidden mounts and drift invalidation. Never expose a user checkbox tha
 ## Readiness, operator experience and rollback
 
 Provide a fixed local status command reading bounded status records, not an HTTP listener or arbitrary file endpoint.
-States distinguish PREPARING, ENROLLED, COLLECTING, WAITING_FIRST_UPLOAD, PENDING, RETRYING, RATE_LIMITED,
+States distinguish PREPARING, ENROLLED, COLLECTING, STOPPED, WAITING_FIRST_UPLOAD, PENDING, RETRYING, RATE_LIMITED,
 CREDENTIAL_REJECTED, RECOVERY_REQUIRED and ACKNOWLEDGED_FRESH/STALE. Compose C2's closed outcomes/counters and
 handoff age/validation with D1 facts; no raw errors, payloads, credentials or unbounded per-identity metrics. Atomic
 bounded records are not new durable delivery authority. Print remote acknowledgement time separately from process
 liveness. The first successful connection can take at least one minute plus collection/network time.
+The uploader replaces a retained fresh acknowledgement with non-fresh STOPPED as soon as it owns the status lease;
+that means no upload loop has been admitted, even while startup checks are in progress. It writes
+WAITING_FIRST_UPLOAD only after same-process startup, credential and ledger setup succeed. A startup refusal leaves
+STOPPED and a failed manager invocation, not a fabricated queued upload or damaged-ledger diagnosis. A status reader
+must still correlate manager liveness and invocation identity; this record alone cannot prove survival after abrupt death.
 
 Platform Demo's logged-in owner server page should show received freshness, the numeric-only profile and unavailable
 disk coverage honestly, plus exact install/status/stop/restart/refresh/revoke/uninstall instructions. An offline worker
