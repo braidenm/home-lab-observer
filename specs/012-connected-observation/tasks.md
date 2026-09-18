@@ -23,6 +23,7 @@
 - [x] Add fixed-host endpoint resolution and exact loaded-systemd IP-policy admission as an unused library; kernel enforcement and installed startup remain acceptance gates.
 - [ ] Integrate catalog, enrollment, OS-aware installation and authorized hosted views.
   - [x] Add the unreleased Linux collector command root with closed launch admission and collector-only dependency checks; this does not install or activate a worker.
+  - [x] Add the unreleased Linux uploader command root with fixed launch modes, strict credential binding and uploader-only dependency checks; installed enforcement and network acceptance remain open.
 - [ ] Verify packaged platforms, migration/rollback and an explicitly authorized owner canary.
   - [x] Add the private binding-checked existing-ledger result codec; no operator exposure or promotion authority.
   - [x] Freeze the current code-owned connected compatibility descriptor and resource/state hashes; recognition grants no code-selection authority.
