@@ -7,6 +7,7 @@ package connectedactive
 import (
 	"bytes"
 	"errors"
+	"os"
 
 	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
 	"github.com/braidenm/home-lab-observer/internal/connectedresources"
@@ -21,32 +22,33 @@ const root = connectedprofile.StateDirectory + "/uploader-root"
 type fixedResource struct {
 	path  string
 	limit int64
+	mode  os.FileMode
 }
 
 var fixed = [5]fixedResource{
-	{root + "/etc/ssl/certs/ca-certificates.crt", connectedtransition.MaxCABytes},
-	{root + "/etc/hosts", 4096},
-	{"/etc/systemd/system/" + connectedunits.CollectorUnit, connectedunits.MaxRenderedBytes},
-	{"/etc/systemd/system/" + connectedunits.UploaderUnit, connectedunits.MaxRenderedBytes},
-	{connectedprofile.ConfigPath, connectedprofile.MaxConfigBytes},
+	{root + "/etc/ssl/certs/ca-certificates.crt", connectedtransition.MaxCABytes, 0644},
+	{root + "/etc/hosts", 4096, 0644},
+	{"/etc/systemd/system/" + connectedunits.CollectorUnit, connectedunits.MaxRenderedBytes, 0644},
+	{"/etc/systemd/system/" + connectedunits.UploaderUnit, connectedunits.MaxRenderedBytes, 0644},
+	{connectedprofile.ConfigPath, connectedprofile.MaxConfigBytes, 0644},
 }
 
 // Read uses the profile's anchored no-follow, root-owned, non-writable reader.
 // A caller must hold the installation lease and separately prove that both
-// owned workers are stopped. Exact modes, ext4 and ledger evidence remain
-// mandatory before any replacement or staging cleanup.
+// owned workers are stopped. Ext4 and ledger evidence remain mandatory before
+// any replacement or staging cleanup.
 func Read() (connectedresources.Set, error) {
-	return readWith(connectedprofile.ReadRootFile)
+	return readWith(connectedprofile.ReadRootFileMode)
 }
 
 // Private seam verifies path selection and bounds without touching host paths.
-func readWith(read func(string, int64) ([]byte, error)) (connectedresources.Set, error) {
+func readWith(read func(string, int64, os.FileMode) ([]byte, error)) (connectedresources.Set, error) {
 	if read == nil {
 		return connectedresources.Set{}, ErrUnavailable
 	}
 	var data [5][]byte
 	for i, item := range fixed {
-		b, err := read(item.path, item.limit)
+		b, err := read(item.path, item.limit, item.mode)
 		if err != nil || len(b) == 0 || int64(len(b)) > item.limit {
 			return connectedresources.Set{}, ErrUnavailable
 		}

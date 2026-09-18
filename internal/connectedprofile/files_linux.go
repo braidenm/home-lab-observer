@@ -13,6 +13,19 @@ import (
 // ReadRootFile traverses only root-owned, non-writable real directories. No
 // worker-controlled pathname or symbolic link becomes an installed authority.
 func ReadRootFile(path string, limit int64) ([]byte, error) {
+	return readRootFile(path, limit, 0)
+}
+
+// ReadRootFileMode additionally requires an exact installed file mode. It is
+// for fixed, code-owned resources whose expected mode is part of admission.
+func ReadRootFileMode(path string, limit int64, mode os.FileMode) ([]byte, error) {
+	if mode != 0600 && mode != 0644 {
+		return nil, ErrUnsafe
+	}
+	return readRootFile(path, limit, mode)
+}
+
+func readRootFile(path string, limit int64, mode os.FileMode) ([]byte, error) {
 	if !strings.HasPrefix(path, "/") || limit <= 0 || limit > 1024*1024 {
 		return nil, ErrUnsafe
 	}
@@ -40,7 +53,8 @@ func ReadRootFile(path string, limit int64) ([]byte, error) {
 		if unix.Fstat(fd, &s) != nil || s.Uid != 0 || s.Mode&0022 != 0 || s.Mode&07000 != 0 || !noACL(fd) {
 			return nil, ErrUnsafe
 		}
-		if i == len(parts)-1 && (s.Mode&unix.S_IFMT != unix.S_IFREG || s.Nlink != 1 || s.Size > limit || s.Size < 1) {
+		if i == len(parts)-1 && (s.Mode&unix.S_IFMT != unix.S_IFREG || s.Nlink != 1 || s.Size > limit || s.Size < 1 ||
+			(mode != 0 && os.FileMode(s.Mode&0777) != mode)) {
 			return nil, ErrUnsafe
 		}
 	}
