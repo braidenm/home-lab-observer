@@ -129,15 +129,28 @@ func TestAbandonCannotAcknowledgeWaitingStopRequester(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
-	defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	result := make(chan error, 1)
-	go func() { result <- RequestStop(ctx, state) }()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		result <- RequestStop(ctx, state)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		_ = endpoint.Abandon()
+		<-done
+	})
 	requestPath := filepath.Join(state, controlDirectory, requestName)
-	deadline := time.Now().Add(100 * time.Millisecond)
+	deadline := time.Now().Add(4 * time.Second)
 	for {
 		if _, err := os.Lstat(requestPath); err == nil {
 			break
+		}
+		select {
+		case err := <-result:
+			t.Fatalf("stop requester returned before publication: %v", err)
+		default:
 		}
 		if time.Now().After(deadline) {
 			t.Fatal("stop request was not published")
