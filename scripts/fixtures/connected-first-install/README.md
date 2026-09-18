@@ -25,7 +25,9 @@ contacts the Platform Demo service.
   receiver on a **read-only virtual CD**. Mount that CD read-only inside the
   guest, verify the checksums again and copy the archive into the guest's own
   ext4 filesystem. Extract into a fresh, root-owned 0755 directory and verify
-  the manifest again. No host-shared filesystem is permitted.
+  the manifest again. The archive is flat (no embedded top-level directory);
+  the guest verifies exact regular members and hashes before extraction into
+  its own fixed release directory. No host-shared filesystem is permitted.
 
 One way to produce the three-binary bundle from the reviewed checkout on a
 Linux/amd64 build machine with Go 1.27 is below. It creates a new private
@@ -120,7 +122,7 @@ checked-out harness files and every input/work-root ancestor must also be
 root-owned and not group/other writable; stage the reviewed PR head in such a
 directory before running it with `sudo`. Supply
 the published Canonical image SHA-256 independently, plus the reviewed source
-commit, bundle-manifest SHA-256 and synthetic-receiver SHA-256 from the approved build record; never accept
+commit, bundle-manifest SHA-256, archive SHA-256 and synthetic-receiver SHA-256 from the approved build record; never accept
 digests derived only from the payload sidecars. The work root must already exist and be root-owned
 mode 0700. The script never fetches an image or opens a network connection.
 
@@ -130,6 +132,7 @@ sudo python3 scripts/fixtures/connected-first-install/run_vm.py \
   --image-sha256 '<canonical-published-64-hex-sha256>' \
   --expected-commit '<reviewed-40-hex-source-commit>' \
   --expected-manifest-sha256 '<reviewed-64-hex-manifest-sha256>' \
+  --expected-archive-sha256 '<reviewed-64-hex-archive-sha256>' \
   --expected-receiver-sha256 '<reviewed-64-hex-receiver-sha256>' \
   --archive /data/hlo-fixture-input/home-lab-observer-connected_0.1.0-canary.1_linux_amd64.tar.gz \
   --manifest /data/hlo-fixture-input/connected-manifest.json \

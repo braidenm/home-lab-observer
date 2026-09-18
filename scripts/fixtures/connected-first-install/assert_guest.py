@@ -11,6 +11,7 @@ import grp
 import stat
 import subprocess
 import sys
+import tarfile
 
 PAYLOAD = Path("/mnt/hlo-first-install")
 FIXTURE = Path("/var/lib/hlo-first-install-fixture")
@@ -56,11 +57,34 @@ def run(*args: str) -> str:
     return subprocess.check_output(args, text=True, timeout=10, stderr=subprocess.DEVNULL)
 
 
+def payload_assert() -> None:
+    identity = json.loads((PAYLOAD / "reviewed-identity.json").read_text())
+    expected = identity["manifest_sha256"]
+    archive_files = list(PAYLOAD.glob("*.tar.gz"))
+    need(len(archive_files) == 1, "ARCHIVE_COUNT")
+    archive = archive_files[0]
+    need(digest(archive) == identity["archive_sha256"] and digest(PAYLOAD / "connected-manifest.json") == expected and digest(PAYLOAD / "connected-first-install-receiver") == identity["receiver_sha256"], "PAYLOAD_PIN")
+    manifest = json.loads((PAYLOAD / "connected-manifest.json").read_text())
+    need(manifest["commit"] == identity["commit"] and manifest["schema"] == "observer-connected-bundle/v2", "PAYLOAD_IDENTITY")
+    expected_files = {entry["name"]: (entry["size"], entry["mode"], entry["sha256"]) for entry in manifest["files"]}
+    expected_files["connected-manifest.json"] = ((PAYLOAD / "connected-manifest.json").stat().st_size, 0o644, expected)
+    with tarfile.open(archive, "r:gz") as entries:
+        members = entries.getmembers()
+        need(len(members) == len(expected_files) and {member.name for member in members} == set(expected_files), "ARCHIVE_MEMBERS")
+        for member in members:
+            size, mode, wanted = expected_files[member.name]
+            need(member.isfile() and member.size == size and member.mode == mode and member.uid == 0 and member.gid == 0 and member.name == Path(member.name).name, "ARCHIVE_MEMBER_METADATA")
+            file = entries.extractfile(member)
+            need(file is not None, "ARCHIVE_MEMBER_READ")
+            content = file.read(size + 1)
+            need(len(content) == size and hashlib.sha256(content).hexdigest() == wanted, "ARCHIVE_MEMBER_BYTES")
+
+
 def reviewed() -> tuple[str, str, dict]:
     identity = json.loads((PAYLOAD / "reviewed-identity.json").read_text())
-    commit, expected, receiver = identity["commit"], identity["manifest_sha256"], identity["receiver_sha256"]
-    need(len(commit) == 40 and len(expected) == 64 and len(receiver) == 64, "REVIEWED_IDENTITY")
-    need(digest(PAYLOAD / "connected-first-install-receiver") == receiver, "REVIEWED_RECEIVER")
+    commit, expected, receiver, archive = identity["commit"], identity["manifest_sha256"], identity["receiver_sha256"], identity["archive_sha256"]
+    need(len(commit) == 40 and len(expected) == 64 and len(receiver) == 64 and len(archive) == 64, "REVIEWED_IDENTITY")
+    payload_assert()
     source = PAYLOAD / "connected-manifest.json"
     need(digest(source) == expected, "REVIEWED_MANIFEST")
     manifest = json.loads(source.read_text())
@@ -153,7 +177,8 @@ def snapshot() -> dict:
     effective_uploader = run("/usr/bin/systemctl", "show", "--property=RootDirectory", "--property=BindPaths", "--property=BindReadOnlyPaths", "--property=LoadCredential", "--property=NoNewPrivileges", "--property=IPAddressDeny", units[1])
     need("PrivateNetwork=yes\n" in effective_collector and "RootDirectory=\n" in effective_collector and "LoadCredential=\n" in effective_collector and "BindPaths=\n" in effective_collector and "NoNewPrivileges=yes\n" in effective_collector, "COLLECTOR_EFFECTIVE")
     need("RootDirectory=" + str(STATE / "uploader-root") in effective_uploader and "connector.json" in effective_uploader and str(STATE / "ledger") in effective_uploader and "NoNewPrivileges=yes\n" in effective_uploader and "IPAddressDeny=any\n" in effective_uploader, "UPLOADER_EFFECTIVE")
-    need("ActiveState=inactive" in run("/usr/bin/systemctl", "show", "--property=ActiveState", "home-lab-observer-connected-enrollment.service"), "TRANSIENT_ACTIVE")
+    transient = run("/usr/bin/systemctl", "show", "--property=LoadState", "--property=ActiveState", "--property=Transient", "--property=FragmentPath", "home-lab-observer-connected-enrollment.service")
+    need("LoadState=not-found\n" in transient and "ActiveState=inactive\n" in transient and "Transient=no\n" in transient and "FragmentPath=\n" in transient, "TRANSIENT_RETAINED")
     return {"installed": [installed_stat.st_ino, installed_stat.st_size, digest(installed)], "credential": [credential_stat.st_ino, credential_stat.st_size, digest(credential)], "ledger": [ledger_stat.st_ino, ledger_files]}
 
 
@@ -185,7 +210,9 @@ def recovery() -> None:
 
 def main() -> None:
     mode = sys.argv[1]
-    if mode == "preflight":
+    if mode == "payload":
+        payload_assert()
+    elif mode == "preflight":
         reviewed()
     elif mode == "capture":
         data = snapshot()

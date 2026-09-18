@@ -4,7 +4,7 @@ Status: implementation in progress. The harness is manual, never a PR CI job or 
 
 An operator supplies a checksum-verified official Ubuntu 24.04 amd64 cloud image, the exact reviewed
 three-binary connected bundle and a dedicated empty work directory on a KVM host. The harness refuses
-unless the operator supplies the independently reviewed source commit, manifest digest and receiver
+unless the operator supplies the independently reviewed source commit, manifest digest, archive digest and receiver
 digest; it binds
 those values to the sidecar, guest-extracted bundle, installed release and installed config. The host
 resolves only root-owned tools from a fixed system PATH and treats unreadable process state as busy.

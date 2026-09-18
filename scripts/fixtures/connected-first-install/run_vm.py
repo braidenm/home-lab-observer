@@ -92,7 +92,7 @@ def image_format(path: Path) -> None:
         refuse("BASE_IMAGE_BACKING_REFUSED")
 
 
-def check_archive(archive: Path, manifest: Path, checksums: Path, expected_commit: str, expected_manifest_sha256: str) -> None:
+def check_archive(archive: Path, manifest: Path, checksums: Path, expected_commit: str, expected_manifest_sha256: str, expected_archive_sha256: str) -> None:
     if manifest.name != "connected-manifest.json" or checksums.name != "SHA256SUMS" or not archive.name.endswith(".tar.gz"):
         refuse("BUNDLE_NAMES_REFUSED")
     lines = checksums.read_text(encoding="ascii").splitlines()
@@ -100,7 +100,7 @@ def check_archive(archive: Path, manifest: Path, checksums: Path, expected_commi
         f"{sha256(archive)}  {archive.name}",
         f"{sha256(manifest)}  {manifest.name}",
     }
-    if len(lines) != 2 or set(lines) != expected:
+    if len(lines) != 2 or set(lines) != expected or sha256(archive) != expected_archive_sha256:
         refuse("BUNDLE_CHECKSUM_REFUSED")
     if sha256(manifest) != expected_manifest_sha256:
         refuse("REVIEWED_MANIFEST_REFUSED")
@@ -120,7 +120,7 @@ def capacity(work_root: Path) -> None:
         refuse("VM_CAPACITY_OR_BUSY_REFUSED")
 
 
-def payload_image(instance: Path, archive: Path, manifest: Path, checksums: Path, receiver: Path, expected_commit: str, expected_manifest_sha256: str, expected_receiver_sha256: str) -> Path:
+def payload_image(instance: Path, archive: Path, manifest: Path, checksums: Path, receiver: Path, expected_commit: str, expected_manifest_sha256: str, expected_archive_sha256: str, expected_receiver_sha256: str) -> Path:
     directory = instance / "payload"
     directory.mkdir(mode=0o700)
     for source in (archive, manifest, checksums, receiver):
@@ -128,7 +128,7 @@ def payload_image(instance: Path, archive: Path, manifest: Path, checksums: Path
     scripts = Path(__file__).resolve().parent
     for name in ("guest.sh", "drive_pty.py", "assert_guest.py"):
         shutil.copyfile(scripts / name, directory / name)
-    (directory / "reviewed-identity.json").write_text(json.dumps({"commit": expected_commit, "manifest_sha256": expected_manifest_sha256, "receiver_sha256": expected_receiver_sha256}, sort_keys=True) + "\n", encoding="ascii")
+    (directory / "reviewed-identity.json").write_text(json.dumps({"commit": expected_commit, "manifest_sha256": expected_manifest_sha256, "archive_sha256": expected_archive_sha256, "receiver_sha256": expected_receiver_sha256}, sort_keys=True) + "\n", encoding="ascii")
     (directory / "connected-first-install-receiver").chmod(0o755)
     target = instance / "payload.ext4"
     size = max(512 * MIB, 2 * sum(p.stat().st_size for p in directory.iterdir()) + 128 * MIB)
@@ -270,12 +270,13 @@ def main() -> int:
     parser.add_argument("--receiver", required=True)
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--expected-manifest-sha256", required=True)
+    parser.add_argument("--expected-archive-sha256", required=True)
     parser.add_argument("--expected-receiver-sha256", required=True)
     parser.add_argument("--work-root", required=True)
     parser.add_argument("--keep-disks", action="store_true")
     args = parser.parse_args()
     try:
-        if os.geteuid() != 0 or not re.fullmatch(r"[a-f0-9]{64}", args.image_sha256) or not re.fullmatch(r"[a-f0-9]{40}", args.expected_commit) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_manifest_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_receiver_sha256):
+        if os.geteuid() != 0 or not re.fullmatch(r"[a-f0-9]{64}", args.image_sha256) or not re.fullmatch(r"[a-f0-9]{40}", args.expected_commit) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_manifest_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_archive_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_receiver_sha256):
             refuse("ADMISSION_REFUSED")
         for tool in ("qemu-img", "qemu-system-x86_64", "mkfs.ext4", "cloud-localds"):
             found = shutil.which(tool, path=SAFE_PATH)
@@ -300,7 +301,7 @@ def main() -> int:
         if sha256(image) != args.image_sha256:
             refuse("BASE_IMAGE_CHECKSUM_REFUSED")
         image_format(image)
-        check_archive(archive, manifest, checksums, args.expected_commit, args.expected_manifest_sha256)
+        check_archive(archive, manifest, checksums, args.expected_commit, args.expected_manifest_sha256, args.expected_archive_sha256)
         lease = root / ".hlo-first-install-vm.lock"
         with lease.open("a+b") as handle:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -308,7 +309,7 @@ def main() -> int:
             instance = Path(tempfile.mkdtemp(prefix="hlo-first-install-", dir=root))
             instance.chmod(0o700)
             (instance / ".hlo-owned-instance").write_text("first-install-vm/v1\n")
-            payload = payload_image(instance, archive, manifest, checksums, receiver, args.expected_commit, args.expected_manifest_sha256, args.expected_receiver_sha256)
+            payload = payload_image(instance, archive, manifest, checksums, receiver, args.expected_commit, args.expected_manifest_sha256, args.expected_archive_sha256, args.expected_receiver_sha256)
             for name in CASES:
                 case(instance, name, image, payload, args.keep_disks)
             if not args.keep_disks:
