@@ -16,6 +16,7 @@
 - [ ] Specify and review credential lifecycle and OS isolation; implement without observation/control authority mixing.
   - [x] Specify and test fixed installed-credential decoding and Linux systemd ACL admission as an unused library; packaged mount acceptance remains open.
 - [ ] Implement private handoff, bounded uploader and connection health with failure tests.
+  - [x] Define bounded disposable operational status and its private single-slot Linux writer; not upload or activation authority.
 - [ ] Integrate catalog, enrollment, OS-aware installation and authorized hosted views.
 - [ ] Verify packaged platforms, migration/rollback and an explicitly authorized owner canary.
   - [x] Define and test the bounded pure activation request/response/commit records; no service activation authority.
