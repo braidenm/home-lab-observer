@@ -112,6 +112,36 @@ permit; filesystem ownership, sync and stopped-worker proofs are external.
    `COMPLETE_CLEANUP_PENDING` and blocks another transition; it is not
    permission to repeat the transition or start workers.
 
+### Interrupted active-file replacement
+
+Each of the five fixed active resources needs a proposal-bound, role-specific
+temporary name in its own parent directory:
+`.observer-transition-<role>-<full lowercase SHA-256 of proposal bytes>`,
+where `<role>` is one of `ca`, `hosts`, `collector`, `uploader`, or `config`.
+The old generic `.install-next` slot is not transition evidence and must never
+be silently adopted. Create the temporary file exclusively through an
+anchored descriptor, with exact root ownership, mode, no ACL and one link.
+Write only the code-derived next bytes and sync the file. Then verify that the
+active target is still exactly previous or next
+and retains the same no-follow inode immediately before replacement. Rename
+over the previous target when needed, then sync the parent directory.
+Do not treat file sync as directory-entry durability; Linux documents that
+the containing directory also needs an explicit sync
+([fsync(2)](https://man7.org/linux/man-pages/man2/fsync.2.html)).
+
+On resume after authoritative journal publication, inspect only the
+proposal-bound fixed temporary names. If a temporary file is root-owned,
+unlinked elsewhere, correctly confined and bounded, and the active target
+still matches the proposal's previous or next bytes, discard that one
+temporary file, sync its parent, and regenerate from the retained stage. A
+partial temporary write is not evidence about the active target. An unknown
+name, wrong owner/type/mode/link/ACL, unsupported filesystem, or active bytes
+outside the exact previous/next set remains a stopped recovery refusal. A
+crash after rename but before parent sync must reopen and classify the actual
+target; it must never assume that the rename persisted. After all resources
+match next, exact installed modes, loaded manager properties, package and
+private ledger witnesses must be rechecked before publishing completion.
+
 Before step 3, `abort-preparation` may clean only a verified preparation
 whose authoritative journal was never published, whose active resources and
 ledger still match the completed predecessor, and whose stage contains only
@@ -128,8 +158,10 @@ interruption, reopen from disk in a new process and assert one of:
 abortable unchanged preparation, exact forward-only recovery, completed
 cleanup pending, or explicit refusal. Test old/new/mixed resources, retained
 old receipt, unknown entries, wrong ownership/link/mode, CA substitution,
-ledger logical or inode change, stale proposal, stop failure and concurrent
-commands. A disposable supported ext4 VM must prove normal reboot and
-abrupt power-off at selected in-flight boundaries with a used pending ledger;
+proposal-bound partial/foreign temporary files, power loss on each active
+rename/parent sync, ledger logical or inode change, stale proposal, stop
+failure and concurrent commands. A disposable supported ext4 VM must prove
+normal reboot and abrupt power-off at selected in-flight boundaries with a
+used pending ledger;
 the previously completed stopped-ledger witness is not this proof. No owner
 server canary precedes independent review and these results.

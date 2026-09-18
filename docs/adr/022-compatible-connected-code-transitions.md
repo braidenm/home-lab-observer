@@ -32,6 +32,16 @@ with workers stopped; it never rolls back durable upload state. Every subsequent
 start requires a fresh activation transaction, and no completion record is
 activation authority.
 
+For each active resource, use a fixed role name bound to the full proposed
+journal digest for its temporary file in the same parent directory. Sync the
+new file before replacement and the parent directory after rename. An
+interrupted temporary file may be discarded and regenerated only after the
+exact staged proposal, authoritative journal, unchanged private ledger and
+previous-or-next active target are re-established. The legacy generic
+`.install-next` name is not transition evidence. Unknown or substituted
+resources remain stopped for explicit recovery, never guessed from current
+DNS, host CA, or directory order.
+
 The [detailed transition plan](../../specs/012-connected-observation/compatible-code-transition.md)
 defines compatibility, legacy journal admission, interruption behavior and tests.
 ADR 020 remains authoritative on isolation and ledger preservation; this proposal
