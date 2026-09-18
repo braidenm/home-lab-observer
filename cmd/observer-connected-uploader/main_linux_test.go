@@ -186,8 +186,38 @@ func TestCanceledStartupWaitPersistsStoppedStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	type runResult struct {
+		result uploadloop.Result
+		err    error
+	}
+	done := make(chan runResult, 1)
+	go func() {
+		result, runErr := loop.Run(ctx)
+		done <- runResult{result, runErr}
+	}()
+	deadline := time.NewTimer(5 * time.Second)
+	defer deadline.Stop()
+	probe := time.NewTicker(5 * time.Millisecond)
+	defer probe.Stop()
+	waiting := false
+	for !waiting {
+		select {
+		case <-probe.C:
+			stats := loop.Stats()
+			waiting = stats.Running && stats.NextDelay > 0
+		case <-deadline.C:
+			t.Fatal("startup pacing wait did not begin")
+		}
+	}
 	cancel()
-	result, err := loop.Run(ctx)
+	var stopped runResult
+	select {
+	case stopped = <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("canceled pacing wait did not join")
+	}
+	result, err := stopped.result, stopped.err
 	if result != uploadloop.Canceled || !errors.Is(err, uploadloop.ErrCanceled) {
 		t.Fatal("canceled startup wait was not joined")
 	}
