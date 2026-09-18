@@ -23,9 +23,11 @@ rich standalone dashboard remain unchanged. The fixed installer operations are:
   Neither operation reuses a durable permission receipt or enables boot/automatic restart. A successful result means
   this invocation passed startup checks, not that a remote upload has already been acknowledged. The first upload
   waits at least 60 seconds. These commands remain subject to the unexecuted packaged disposable-VM release gate.
-- `refresh`: validates fixed-host TLS endpoints and CA trust, records a bounded next-generation journal, stops
-  and disables workers, replaces only exact known hosts/CA/unit/config files, verifies loaded endpoint policy and
-  publishes a receipt bound to the exact journal. Services remain stopped; activation is a separate gate. A crash,
+- `refresh`: validates fixed-host TLS endpoints and CA trust, stops and disables the owned workers, compares the
+  private logical ledger and anchored ext4 object identity, then records a bounded next-generation journal. It
+  replaces only exact known hosts/CA/unit/config files, verifies loaded endpoint policy, repeats both ledger
+  comparisons and publishes a receipt bound to the exact journal. Services remain stopped; activation is a
+  separate gate. A crash,
   refused write or missing/mismatched receipt reports `REFRESH_RECOVERY_REQUIRED`, not a ready mixed generation.
 - `uninstall`: stops/disables only exact owned services, quarantines their unit files and retains credentials,
   ledger, accounts, artifacts and diagnostics. The owner must separately revoke registration in Platform Demo.
@@ -68,8 +70,11 @@ dependency-closure regression tests now cover both worker commands. Remaining ac
 under dedicated principals, full repository checks, independent final review and the explicitly unexecuted VM
 reboot/power-loss gates. Do not substitute helper tests or static templates for these requirements.
 
-Current numeric-host/v1 reports the **whole overview unavailable** without proven filesystem coverage. The initial
-canary proves identity/freshness/delivery, not partial hosted charts. Never set the coverage flag just to get charts.
+The draft collector now publishes native quality-aware host metrics: available CPU,
+RAM and uptime remain usable even when filesystem coverage is unproved. The
+receiver accepts that contract in the deployed Platform Demo source, but no
+packaged connected activation or owner canary has run with this producer. Never
+set the coverage flag just to get complete disk charts.
 
 See [the approved composition](installed-composition.md), [acceptance evidence](installed-acceptance.md),
 [bundle contract](connected-bundle.md), and [endpoint policy](endpoint-policy.md).
