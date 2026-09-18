@@ -105,4 +105,9 @@ func TestDeriveRefusesUnverifiedResourceClaims(t *testing.T) {
 	if _, err := Derive(bad, oldCA, newCA); err != ErrInvalid {
 		t.Fatal("invalid next configuration accepted")
 	}
+	code, priorCA, selectedCA := sample(t, "code-select")
+	selectedCA[0] ^= 1
+	if _, err := Derive(code, priorCA, selectedCA); err != ErrInvalid {
+		t.Fatal("code selection changed fixed CA")
+	}
 }
