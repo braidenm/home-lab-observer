@@ -67,9 +67,12 @@ ordinary package tests skip it.
 
 ## Guest-only network and enrollment
 
-Inside this isolated guest only, alias `93.184.216.34/32` to loopback and map
-`app.braidenmiller.com` to that alias in guest `/etc/hosts`. Confirm that the
-guest has no external NIC or default route. Generate a throwaway CA and a leaf
+Inside this isolated guest only, alias `93.184.216.34/32` to loopback, with no
+`app.braidenmiller.com` entry in `/etc/hosts`. The pinned synthetic receiver
+answers only that hostname's A query with the alias on guest `127.0.0.1:53`;
+AAAA is NODATA, other names/types are refused, and nothing is forwarded.
+The guest's `/etc/resolv.conf` points only to that loopback resolver with fixed
+timeouts. Confirm that the guest has no external NIC or default route. Generate a throwaway CA and a leaf
 certificate with DNS SAN `app.braidenmiller.com`, trust that CA only in the
 guest's `/etc/ssl/certs/ca-certificates.crt`, and start the checked-in
 `receiver.go` compiled for Linux/amd64 on `93.184.216.34:443`. The receiver

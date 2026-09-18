@@ -99,7 +99,12 @@ prepare_guest() {
   python3 "$payload/assert_guest.py" preflight || fail REVIEWED_PAYLOAD
 
   ip addr add "$alias_ip/32" dev lo || fail LOOPBACK_ALIAS
-  printf '%s %s %s\n' "$alias_ip" app.braidenmiller.com app.braidenmiller.com. >> /etc/hosts
+  ! grep -iq 'app\.braidenmiller\.com' /etc/hosts || fail HOSTS_ALIAS
+  [ -L /etc/resolv.conf ] || [ -f /etc/resolv.conf ] || fail DNS_CONFIG
+  rm -f -- /etc/resolv.conf
+  printf 'nameserver 127.0.0.1\noptions timeout:1 attempts:1 ndots:1\n' > /etc/resolv.conf
+  chmod 0644 /etc/resolv.conf
+  [ ! -L /etc/resolv.conf ] && [ "$(stat -c '%u:%g:%a' /etc/resolv.conf)" = 0:0:644 ] || fail DNS_CONFIG
   openssl req -new -x509 -newkey rsa:2048 -nodes -days 1 \
     -subj '/CN=app.braidenmiller.com' \
     -addext 'subjectAltName=DNS:app.braidenmiller.com' \
