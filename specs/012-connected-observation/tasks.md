@@ -37,4 +37,5 @@
   - [x] Derive exact previous/next config, hosts and reviewed unit bytes from the record and stage CA; active filesystem verification and writes remain open.
   - [x] Read the five fixed root-owned active paths and reject bytes outside the exact previous/next sets; stopped-worker and writable-mode proofs remain open.
   - [x] Add independent anchored ext4 stage inspection and exclusive publication primitives with root synthetic interruption tests; not wired to installer commands.
+  - [x] Read the fixed authoritative transition journal/receipt names under the anchored ext4 config directory; classification and writes remain separate.
 - [ ] Specify richer remote quality-aware read models; keep Kubernetes deferred and actions in Spec 011.
