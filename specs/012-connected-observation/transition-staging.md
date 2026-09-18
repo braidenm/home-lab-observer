@@ -223,7 +223,9 @@ the exact proposal already present with no receipt, refuses unknown journal
 temporary names, and uses an exclusive no-replace rename. It syncs and
 reopens the config directory on normal publication and retry. It does not
 handle a prior new-format transition, establish the caller's lease/worker/
-ledger/resource proofs, or expose an installer command.
+ledger/resource proofs, or expose an installer command. Its bounded temporary
+name scan refuses a config directory with more than 4096 entries; a crowded
+directory needs operator inspection rather than an unbounded allocation.
 
 ### Interrupted active-file replacement
 

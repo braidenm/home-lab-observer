@@ -17,6 +17,7 @@ import (
 )
 
 const journalTempPrefix = ".observer-transition-journal-"
+const maxJournalScanEntries = 4096
 
 // PublishFirstJournalAt is an unused fixed first-transition write primitive.
 // Its future caller must hold the installation lease, prove stopped workers,
@@ -120,8 +121,8 @@ func inspectJournalTempNames(config *os.File, expected string) error {
 	}
 	dir := os.NewFile(uintptr(fd), "journal-temp-scan")
 	defer dir.Close()
-	entries, err := dir.ReadDir(129)
-	if err != nil || len(entries) > 128 {
+	entries, err := dir.ReadDir(maxJournalScanEntries + 1)
+	if err != nil || len(entries) > maxJournalScanEntries {
 		return ErrRecovery
 	}
 	for _, entry := range entries {
