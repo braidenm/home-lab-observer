@@ -68,6 +68,16 @@ forward recovery required or
 completion cleanup pending. None of these is a worker startup, abort or cleanup
 permit; filesystem ownership, sync and stopped-worker proofs are external.
 
+A read-only composition now requires the stage's decoded record to equal its
+exact canonical proposal, re-derives code-owned previous/next resource bytes,
+rejects active bytes outside those sets, and joins the fixed journal/receipt
+with a caller-supplied private ledger witness in the staged classifier. This
+returns only a diagnostic phase. Its caller must independently establish
+anchored reads, the actual ledger witness, the installation lease and stopped
+workers; no phase grants replacement, cleanup or activation authority. The
+composition accepts detached evidence rather than importing the stage
+filesystem package that also owns publication primitives.
+
 ## Fixed evidence
 
 - `transition-preparing.json` in the root-owned config directory contains
