@@ -88,6 +88,13 @@ class HarnessAdmissionTest(unittest.TestCase):
                 with self.assertRaisesRegex(AssertionError, "^SYSTEMD_PROPERTY_OUTPUT$"):
                     assert_guest.unit_properties("example.service", fields)
 
+    def test_systemd_ip_denial_requires_both_families_in_any_order(self):
+        self.assertTrue(assert_guest.denies_all_ip("0.0.0.0/0 ::/0"))
+        self.assertTrue(assert_guest.denies_all_ip("::/0 0.0.0.0/0"))
+        for value in ("0.0.0.0/0", "::/0", "0.0.0.0/0 ::/0 10.0.0.0/8",
+                      "0.0.0.0/0 0.0.0.0/0", "any", ""):
+            self.assertFalse(assert_guest.denies_all_ip(value))
+
     def test_driver_diagnostic_is_allowlisted_and_redacted(self):
         for label, phase in drive_pty.PHASE_LABELS:
             self.assertEqual(drive_pty.classify_failure(b"prefix " + label + b" fixed text"), phase)
