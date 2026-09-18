@@ -17,7 +17,13 @@ It also runs the exact packaged `validate-existing-ledger` offline mode before
 publication and again before completion. A changed private logical fingerprint
 leaves refresh incomplete and the workers stopped; no pending request is decoded
 into logs or operator output. This interim comparison does not replace the
-required durable pre-transition witness, same-inode proof or recovery codec.
+required durable pre-transition witness or recovery codec. Both reads are now
+paired with an anchored ext4 UUID, directory inode/generation and database
+inode/generation comparison. The installer validates the fixed private ledger
+directory and member set through no-follow descriptors before calling the
+identity primitive. A substitute database with identical logical contents is
+therefore refused before completion. This is an in-process comparison only;
+the interrupted journal still cannot validate it after a reboot.
 Directory order, timestamps and version strings must not select a rollback target.
 Initial installation has no previous release to roll back to.
 

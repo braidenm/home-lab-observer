@@ -193,6 +193,10 @@ func Refresh(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	beforeIdentity, err := installedLedgerIdentity(ctx, c)
+	if err != nil {
+		return ErrRecovery
+	}
 	// The journal is the forward-only publication boundary. Do not publish it
 	// while either owned worker might still be running: a failed stop must leave
 	// the completed predecessor as the only authoritative configuration.
@@ -223,6 +227,10 @@ func Refresh(ctx context.Context) error {
 	}
 	afterLedger, err := existingLedgerFingerprint(ctx, next)
 	if err != nil || afterLedger != beforeLedger {
+		return ErrRecovery
+	}
+	afterIdentity, err := installedLedgerIdentity(ctx, next)
+	if err != nil || afterIdentity != beforeIdentity {
 		return ErrRecovery
 	}
 	if err := putKnown(connectedprofile.ConfigDirectory+"/refresh-complete", oldReceipt, completion(journal), 0600, 256); err != nil {
