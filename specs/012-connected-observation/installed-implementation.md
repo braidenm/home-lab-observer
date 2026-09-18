@@ -76,5 +76,15 @@ receiver accepts that contract in the deployed Platform Demo source, but no
 packaged connected activation or owner canary has run with this producer. Never
 set the coverage flag just to get complete disk charts.
 
+At clean local source `ab9d7d9`, the actual connected collector, uploader and
+installer commands were cross-built for Linux/amd64 with distinct v2 identities
+and packaged by `connectedpack`. The archive SHA-256 is
+`513d0eecc0a0ed40cc989e634a2a5ba811c31bf5c65910b42d54c70f81442116`;
+the canonical manifest SHA-256 is
+`f43f9672f5e1683945426f70e1e9d9f435d0da50a8dcf209b96e6b7206fdc0e9`.
+This was a local build-only verification of current command/package agreement.
+It is not a signed release, a Linux execution, an installed service or an owner
+canary. Subsequent source changes require a fresh package proof.
+
 See [the approved composition](installed-composition.md), [acceptance evidence](installed-acceptance.md),
 [bundle contract](connected-bundle.md), and [endpoint policy](endpoint-policy.md).
