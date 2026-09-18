@@ -73,13 +73,15 @@ recovery_assertions() {
 }
 
 retry_refuses_without_mutation() {
-  local bundle digest before after
+  local bundle digest before after result status
   bundle="$(cat "$fixture_root/bundle-path")"
   digest="$(cat "$fixture_root/manifest-sha")"
   before="$(stat -c '%i:%s:%Y' /etc/home-lab-observer-connected/preparing.json)"
-  if timeout 12 "$bundle/observer-connected-install" install "$bundle" "$digest" "$server" </dev/null >/dev/null 2>&1; then
-    fail RETRY_ADMITTED
-  fi
+  set +e
+  result="$(timeout 12 "$bundle/observer-connected-install" install "$bundle" "$digest" "$server" </dev/null 2>&1)"
+  status=$?
+  set -e
+  [ "$status" -eq 22 ] && [[ "$result" == PREFLIGHT_REFUSED:* ]] || fail RETRY_NOT_PREFLIGHT_REFUSED
   after="$(stat -c '%i:%s:%Y' /etc/home-lab-observer-connected/preparing.json)"
   [ "$before" = "$after" ] || fail RETRY_MUTATED
 }
@@ -146,9 +148,11 @@ case "${1:-}" in
     prepare_guest "$1"
     bundle="$(cat "$fixture_root/bundle-path")"
     digest="$(cat "$fixture_root/manifest-sha")"
-    if "$bundle/observer-connected-install" install "$bundle" "$(printf '%064d' 0)" "$server" </dev/null >/dev/null 2>&1; then
-      fail BAD_DIGEST_ADMITTED
-    fi
+    set +e
+    preflight_result="$(timeout 12 "$bundle/observer-connected-install" install "$bundle" "$(printf '%064d' 0)" "$server" </dev/null 2>&1)"
+    preflight_status=$?
+    set -e
+    [ "$preflight_status" -eq 22 ] && [[ "$preflight_result" == PREFLIGHT_REFUSED:* ]] || fail BAD_DIGEST_NOT_PREFLIGHT_REFUSED
     [ ! -e /etc/home-lab-observer-connected ] || fail PREFLIGHT_MUTATED
     install_reboot_assertion "$1"
     if [ "$1" != interrupt ]; then
