@@ -1,0 +1,330 @@
+#!/usr/bin/env python3
+"""Read-only, secret-redacting assertions inside the disposable no-NIC VM."""
+
+import errno
+import hashlib
+import json
+import os
+from pathlib import Path
+import pwd
+import grp
+import re
+import stat
+import subprocess
+import sys
+import tarfile
+
+PAYLOAD = Path("/mnt/hlo-first-install")
+FIXTURE = Path("/var/lib/hlo-first-install-fixture")
+CONFIG = Path("/etc/home-lab-observer-connected")
+STATE = Path("/var/lib/home-lab-observer-connected")
+RELEASES = Path("/opt/home-lab-observer-connected/releases")
+SERVER = "srv_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+MEMBER_STAGES = frozenset({"BUNDLE", "RELEASES", "RELEASE", "CONFIG", "CREDENTIALS", "STATE",
+                           "ENROLLMENT", "UPLOADER_ROOT", "UPLOADER_ETC", "UPLOADER_STATE",
+                           "UPLOADER_DEV", "UPLOADER_RUN", "UPLOADER_SYSTEMD", "RECOVERY_CONFIG"})
+ENROLLMENT_MEMBERS = frozenset({".enrollment-lock", "attempt.json", "credential.json", "ready.json"})
+
+
+def need(condition: bool, code: str) -> None:
+    if not condition:
+        raise AssertionError(code)
+
+
+def digest(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def plain(path: Path, mode: int, uid: int, gid: int, directory: bool = False) -> os.stat_result:
+    info = path.lstat()
+    need(stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode), "TYPE")
+    need(info.st_uid == uid and info.st_gid == gid and stat.S_IMODE(info.st_mode) == mode, "OWNERSHIP")
+    need(directory or info.st_nlink == 1, "HARDLINK")
+    for attr in ("system.posix_acl_access", "system.posix_acl_default"):
+        try:
+            os.getxattr(path, attr, follow_symlinks=False)
+        except OSError as error:
+            need(error.errno in (errno.ENODATA, errno.ENOTSUP), "ACL_QUERY")
+        else:
+            need(False, "ACL")
+    return info
+
+
+def names(path: Path, expected: set[str], stage: str) -> None:
+    need(stage in MEMBER_STAGES, "UNKNOWN_MEMBER_UNKNOWN")
+    need({entry.name for entry in path.iterdir()} == expected, "UNKNOWN_MEMBER_" + stage)
+
+
+def systemd_root_scaffold(root: Path) -> None:
+    """Verify the empty mount-point directories systemd creates for RootDirectory=."""
+    for name, mode in (("root", 0o750), ("usr", 0o755), ("var", 0o755),
+                       ("proc", 0o555), ("sys", 0o555), ("dev", 0o555),
+                       ("run", 0o555)):
+        path = root / name
+        plain(path, mode, 0, 0, True)
+        if name in ("root", "usr", "var", "proc", "sys"):
+            names(path, set(), "UPLOADER_ROOT")
+    names(root / "dev", {"mqueue"}, "UPLOADER_DEV")
+    plain(root / "dev/mqueue", 0o755, 0, 0, True)
+    names(root / "dev/mqueue", set(), "UPLOADER_DEV")
+    names(root / "run", {"systemd"}, "UPLOADER_RUN")
+    plain(root / "run/systemd", 0o755, 0, 0, True)
+    names(root / "run/systemd", {"incoming"}, "UPLOADER_SYSTEMD")
+    plain(root / "run/systemd/incoming", 0o755, 0, 0, True)
+    names(root / "run/systemd/incoming", set(), "UPLOADER_SYSTEMD")
+
+
+def enrollment_records(path: Path, uid: int, gid: int, connector: str, secret: str) -> dict:
+    """Prove retained one-use records without emitting secret bytes."""
+    names(path, set(ENROLLMENT_MEMBERS), "ENROLLMENT")
+    need(re.fullmatch(r"hlc_[A-Za-z0-9_-]{43}", secret) is not None, "ENROLLMENT_SECRET_BINDING")
+    lock = path / ".enrollment-lock"
+    lock_stat = plain(lock, 0o600, uid, gid)
+    need(lock_stat.st_size == 0, "ENROLLMENT_LOCK")
+    identities = {".enrollment-lock": [lock_stat.st_ino, 0, digest(lock)]}
+    for filename, state in (("attempt.json", "ATTEMPTED"),
+                            ("credential.json", "CREDENTIAL"), ("ready.json", "READY")):
+        source = path / filename
+        info = plain(source, 0o600, uid, gid)
+        need(0 < info.st_size <= 512, "ENROLLMENT_RECORD_SIZE")
+        with source.open("rb") as handle:
+            raw = handle.read(513)
+        need(len(raw) == info.st_size, "ENROLLMENT_RECORD_SIZE")
+        expected = {"version": "observer-enrollment/v1", "state": state,
+                    "server_id": SERVER, "connector_id": connector}
+        if state == "CREDENTIAL":
+            expected["secret"] = secret
+        need(raw == json.dumps(expected, separators=(",", ":")).encode("ascii"),
+             "ENROLLMENT_RECORD_BINDING")
+        identities[filename] = [info.st_ino, info.st_size, hashlib.sha256(raw).hexdigest()]
+    return identities
+
+
+def run(*args: str) -> str:
+    return subprocess.check_output(args, text=True, timeout=10, stderr=subprocess.DEVNULL)
+
+
+def unit_properties(unit: str, fields: tuple[str, ...]) -> dict[str, str]:
+    output = run("/usr/bin/systemctl", "show", *("--property=" + field for field in fields), unit)
+    need(len(output) <= 4096, "SYSTEMD_PROPERTY_OUTPUT")
+    values = {}
+    for line in output.splitlines():
+        key, separator, value = line.partition("=")
+        need(separator == "=" and key in fields and key not in values,
+             "SYSTEMD_PROPERTY_OUTPUT")
+        values[key] = value
+    need(set(values) == set(fields), "SYSTEMD_PROPERTY_OUTPUT")
+    return values
+
+
+def denies_all_ip(value: str) -> bool:
+    """Match systemd's IPv4/IPv6 expansion without relying on display order."""
+    return sorted(value.split()) == ["0.0.0.0/0", "::/0"]
+
+
+def payload_assert() -> None:
+    identity = json.loads((PAYLOAD / "reviewed-identity.json").read_text())
+    expected = identity["manifest_sha256"]
+    archive_files = list(PAYLOAD.glob("*.tar.gz"))
+    need(len(archive_files) == 1, "ARCHIVE_COUNT")
+    archive = archive_files[0]
+    need(digest(archive) == identity["archive_sha256"] and digest(PAYLOAD / "connected-manifest.json") == expected and digest(PAYLOAD / "connected-first-install-receiver") == identity["receiver_sha256"] and digest(PAYLOAD / "connected-first-install-preflight-probe") == identity["probe_sha256"], "PAYLOAD_PIN")
+    manifest = json.loads((PAYLOAD / "connected-manifest.json").read_text())
+    need(manifest["commit"] == identity["commit"] and manifest["schema"] == "observer-connected-bundle/v2", "PAYLOAD_IDENTITY")
+    expected_files = {entry["name"]: (entry["size"], entry["mode"], entry["sha256"]) for entry in manifest["files"]}
+    expected_files["connected-manifest.json"] = ((PAYLOAD / "connected-manifest.json").stat().st_size, 0o644, expected)
+    with tarfile.open(archive, "r:gz") as entries:
+        members = entries.getmembers()
+        need(len(members) == len(expected_files) and {member.name for member in members} == set(expected_files), "ARCHIVE_MEMBERS")
+        for member in members:
+            size, mode, wanted = expected_files[member.name]
+            need(member.isfile() and member.size == size and member.mode == mode and member.uid == 0 and member.gid == 0 and member.name == Path(member.name).name, "ARCHIVE_MEMBER_METADATA")
+            file = entries.extractfile(member)
+            need(file is not None, "ARCHIVE_MEMBER_READ")
+            content = file.read(size + 1)
+            need(len(content) == size and hashlib.sha256(content).hexdigest() == wanted, "ARCHIVE_MEMBER_BYTES")
+
+
+def reviewed() -> tuple[str, str, dict]:
+    identity = json.loads((PAYLOAD / "reviewed-identity.json").read_text())
+    commit, expected, receiver, archive, probe = identity["commit"], identity["manifest_sha256"], identity["receiver_sha256"], identity["archive_sha256"], identity["probe_sha256"]
+    need(len(commit) == 40 and len(expected) == 64 and len(receiver) == 64 and len(archive) == 64 and len(probe) == 64, "REVIEWED_IDENTITY")
+    payload_assert()
+    source = PAYLOAD / "connected-manifest.json"
+    need(digest(source) == expected, "REVIEWED_MANIFEST")
+    manifest = json.loads(source.read_text())
+    need(manifest["commit"] == commit and manifest["schema"] == "observer-connected-bundle/v2" and manifest["profile"] == "ubuntu24.04-systemd255-amd64-canary", "MANIFEST_IDENTITY")
+    bundle = Path((FIXTURE / "bundle-path").read_text().strip())
+    need(bundle.is_dir() and digest(bundle / "connected-manifest.json") == expected, "EXTRACTED_MANIFEST")
+    expected_files = {entry["name"] for entry in manifest["files"]}
+    names(bundle, expected_files | {"connected-manifest.json"}, "BUNDLE")
+    for entry in manifest["files"]:
+        target = bundle / entry["name"]
+        plain(target, entry["mode"], 0, 0)
+        need(target.stat().st_size == entry["size"] and digest(target) == entry["sha256"], "BUNDLE_FILE")
+    return commit, expected, manifest
+
+
+def snapshot() -> dict:
+    _, expected, manifest = reviewed()
+    release = RELEASES / expected
+    plain(RELEASES, 0o755, 0, 0, True)
+    names(RELEASES, {expected}, "RELEASES")
+    plain(release, 0o755, 0, 0, True)
+    names(release, {entry["name"] for entry in manifest["files"]} | {"connected-manifest.json"}, "RELEASE")
+    plain(release / "connected-manifest.json", 0o644, 0, 0)
+    for entry in manifest["files"]:
+        target = release / entry["name"]
+        plain(target, entry["mode"], 0, 0)
+        need(target.stat().st_size == entry["size"] and digest(target) == entry["sha256"], "RELEASE_FILE")
+    need(digest(release / "connected-manifest.json") == expected, "RELEASE_MANIFEST")
+    plain(CONFIG, 0o755, 0, 0, True)
+    names(CONFIG, {"preparing.json", "installed.json", "credentials"}, "CONFIG")
+    plain(CONFIG / "preparing.json", 0o600, 0, 0)
+    marker = json.loads((CONFIG / "preparing.json").read_text())
+    need(marker == {"version": "observer-connected-preparing/v1", "state": "PREPARING", "server_id": SERVER, "manifest_sha256": expected}, "PREPARING_BINDING")
+    installed = CONFIG / "installed.json"
+    installed_stat = plain(installed, 0o644, 0, 0)
+    profile = json.loads(installed.read_text())
+    collector = pwd.getpwnam("hlo-connected-collector")
+    uploader = pwd.getpwnam("hlo-connected-uploader")
+    shared = grp.getgrnam("hlo-connected-read")
+    need(profile["version"] == "observer-connected-install/v1" and profile["state"] == "INSTALLED_READY" and profile["server_id"] == SERVER and profile["artifact_sha256"] == expected and profile["policy_generation"] == 1, "CONFIG_BINDING")
+    need(profile["collector_uid"] == collector.pw_uid and profile["uploader_uid"] == uploader.pw_uid and profile["uploader_gid"] == uploader.pw_gid and profile["shared_gid"] == shared.gr_gid, "PRINCIPAL_BINDING")
+    need(profile["addresses"] == ["93.184.216.34"] and profile["connector_id"].startswith("agent_"), "NETWORK_BINDING")
+    plain(CONFIG / "credentials", 0o700, 0, 0, True)
+    names(CONFIG / "credentials", {"connector.json"}, "CREDENTIALS")
+    credential = CONFIG / "credentials/connector.json"
+    credential_stat = plain(credential, 0o600, 0, 0)
+    credential_record = json.loads(credential.read_text())
+    need(credential_record.get("version") == "observer-connected-credential/v1" and credential_record.get("server_id") == SERVER and credential_record.get("connector_id") == profile["connector_id"] and credential_record.get("secret", "").startswith("hlc_"), "CREDENTIAL_BINDING")
+    plain(STATE, 0o755, 0, 0, True)
+    names(STATE, {"handoff", "collector-status", "uploader-status", "enrollment", "ledger", "uploader-root"}, "STATE")
+    plain(STATE / "handoff", 0o750, collector.pw_uid, shared.gr_gid, True)
+    plain(STATE / "collector-status", 0o700, collector.pw_uid, shared.gr_gid, True)
+    plain(STATE / "uploader-status", 0o700, uploader.pw_uid, uploader.pw_gid, True)
+    plain(STATE / "enrollment", 0o700, 0, 0, True)
+    enrollment = enrollment_records(STATE / "enrollment", uploader.pw_uid, uploader.pw_gid,
+                                    profile["connector_id"], credential_record.get("secret", ""))
+    uploader_root = STATE / "uploader-root"
+    plain(uploader_root, 0o755, 0, 0, True)
+    names(uploader_root, {"bin", "etc", "state", "handoff", "activation",
+                          "root", "usr", "var", "proc", "sys", "dev", "run"}, "UPLOADER_ROOT")
+    systemd_root_scaffold(uploader_root)
+    names(uploader_root / "etc", {"ssl", "home-lab-observer-connected", "hosts", "resolv.conf", "nsswitch.conf"}, "UPLOADER_ETC")
+    names(uploader_root / "state", {"enrollment", "ledger", "status"}, "UPLOADER_STATE")
+    ledger = STATE / "ledger"
+    ledger_stat = plain(ledger, 0o700, uploader.pw_uid, uploader.pw_gid, True)
+    ledger_files = {}
+    for entry in ledger.iterdir():
+        need(entry.is_file() and not entry.is_symlink(), "LEDGER_TYPE")
+        info = plain(entry, 0o600, uploader.pw_uid, uploader.pw_gid)
+        ledger_files[entry.name] = [info.st_ino, info.st_size, digest(entry)]
+    need(bool(ledger_files), "LEDGER_EMPTY")
+    units = ("home-lab-observer-connected-collector.service", "home-lab-observer-connected-uploader.service")
+    substitutions = {
+        "CollectorUID": str(collector.pw_uid),
+        "UploaderUID": str(uploader.pw_uid),
+        "UploaderGID": str(uploader.pw_gid),
+        "SharedGID": str(shared.gr_gid),
+        "ArtifactSHA256": expected,
+        "AddressRules": "IPAddressAllow=93.184.216.34/32\n",
+    }
+    for unit in units:
+        text = Path("/etc/systemd/system", unit).read_text()
+        template = (release / (unit + ".tmpl")).read_text()
+        for key, value in substitutions.items():
+            template = template.replace("{{." + key + "}}", value)
+        need("{{" not in template and text == template, "UNIT_PROFILE")
+        need("LoadState=loaded" in run("/usr/bin/systemctl", "show", "--property=LoadState", unit), "UNIT_LOAD")
+    collector_unit = Path("/etc/systemd/system/home-lab-observer-connected-collector.service").read_text()
+    uploader_unit = Path("/etc/systemd/system/home-lab-observer-connected-uploader.service").read_text()
+    need("PrivateNetwork=yes\n" in collector_unit and "LoadCredential=" not in collector_unit and "InaccessiblePaths=-/etc/home-lab-observer-connected/credentials" in collector_unit, "COLLECTOR_ISOLATION")
+    need("RootDirectory=" + str(STATE / "uploader-root") in uploader_unit and "LoadCredential=connector.json:/etc/home-lab-observer-connected/credentials/connector.json" in uploader_unit and "IPAddressDeny=any\n" in uploader_unit and "IPAddressAllow=93.184.216.34/32\n" in uploader_unit, "UPLOADER_ISOLATION")
+    # systemd 255 renders LoadCredential as [unprintable], including when empty.
+    # Exact unit bytes, no pending daemon reload, the effective fragment path,
+    # and no drop-ins prove the credential directives; printable properties
+    # prove the remaining policy.
+    collector_properties = unit_properties(units[0], ("FragmentPath", "DropInPaths", "NeedDaemonReload",
+        "PrivateNetwork", "RootDirectory", "BindPaths", "NoNewPrivileges"))
+    uploader_properties = unit_properties(units[1], ("FragmentPath", "DropInPaths", "NeedDaemonReload",
+        "RootDirectory", "BindPaths", "BindReadOnlyPaths", "NoNewPrivileges", "IPAddressDeny"))
+    need(collector_properties == {
+        "FragmentPath": "/etc/systemd/system/" + units[0], "DropInPaths": "",
+        "NeedDaemonReload": "no",
+        "PrivateNetwork": "yes", "RootDirectory": "", "BindPaths": "",
+        "NoNewPrivileges": "yes",
+    }, "COLLECTOR_EFFECTIVE")
+    for label, valid in (
+        ("FRAGMENT", uploader_properties["FragmentPath"] == "/etc/systemd/system/" + units[1]),
+        ("DROPINS", uploader_properties["DropInPaths"] == ""),
+        ("RELOAD", uploader_properties["NeedDaemonReload"] == "no"),
+        ("ROOT", uploader_properties["RootDirectory"] == str(STATE / "uploader-root")),
+        ("LEDGER", str(STATE / "ledger") in uploader_properties["BindPaths"]),
+        ("RELEASE", str(release) in uploader_properties["BindReadOnlyPaths"]),
+        ("PRIVILEGES", uploader_properties["NoNewPrivileges"] == "yes"),
+        ("DENY", denies_all_ip(uploader_properties["IPAddressDeny"])),
+    ):
+        need(valid, "UPLOADER_EFFECTIVE_" + label)
+    transient = run("/usr/bin/systemctl", "show", "--property=LoadState", "--property=ActiveState", "--property=Transient", "--property=FragmentPath", "home-lab-observer-connected-enrollment.service")
+    need("LoadState=not-found\n" in transient and "ActiveState=inactive\n" in transient and "Transient=no\n" in transient and "FragmentPath=\n" in transient, "TRANSIENT_RETAINED")
+    return {"installed": [installed_stat.st_ino, installed_stat.st_size, digest(installed)],
+            "credential": [credential_stat.st_ino, credential_stat.st_size, digest(credential)],
+            "enrollment": enrollment, "ledger": [ledger_stat.st_ino, ledger_files]}
+
+
+def recovery() -> None:
+    _, expected, _ = reviewed()
+    plain(CONFIG, 0o755, 0, 0, True)
+    names(CONFIG, {"preparing.json"}, "RECOVERY_CONFIG")
+    plain(CONFIG / "preparing.json", 0o600, 0, 0)
+    marker = json.loads((CONFIG / "preparing.json").read_text())
+    need(marker == {"version": "observer-connected-preparing/v1", "state": "PREPARING", "server_id": SERVER, "manifest_sha256": expected}, "RECOVERY_MARKER")
+    need(not STATE.exists() and not (RELEASES.parent).exists(), "RECOVERY_LATE_CUT")
+    for unit in ("home-lab-observer-connected-collector.service", "home-lab-observer-connected-uploader.service", "home-lab-observer-connected-enrollment.service"):
+        need("LoadState=not-found" in run("/usr/bin/systemctl", "show", "--property=LoadState", unit), "RECOVERY_UNIT")
+    for name in ("hlo-connected-collector", "hlo-connected-uploader"):
+        try:
+            pwd.getpwnam(name)
+        except KeyError:
+            pass
+        else:
+            need(False, "RECOVERY_ACCOUNT")
+    for name in ("hlo-connected-read", "hlo-connected-uploader"):
+        try:
+            grp.getgrnam(name)
+        except KeyError:
+            pass
+        else:
+            need(False, "RECOVERY_GROUP")
+
+
+def main() -> None:
+    mode = sys.argv[1]
+    if mode == "payload":
+        payload_assert()
+    elif mode == "preflight":
+        reviewed()
+    elif mode == "capture":
+        data = snapshot()
+        (FIXTURE / "snapshot.json").write_text(json.dumps(data, sort_keys=True))
+    elif mode == "verify":
+        before = json.loads((FIXTURE / "snapshot.json").read_text())
+        need(snapshot() == before, "REBOOT_CHANGED_STATE")
+    elif mode == "recovery":
+        recovery()
+    else:
+        raise AssertionError("MODE")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (AssertionError, OSError, KeyError, ValueError, subprocess.SubprocessError) as error:
+        code = str(error) if isinstance(error, AssertionError) else "ASSERTION_OPERATION"
+        print(f"FIXTURE_ASSERT_{code}", file=sys.stderr)
+        raise SystemExit(1)

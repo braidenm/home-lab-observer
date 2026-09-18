@@ -1,4 +1,4 @@
-# Disposable first-install acceptance (not yet executed)
+# Disposable first-install acceptance (not yet passed)
 
 This fixture is a gate for the stopped Linux connected installer, not an owner-host
 installation recipe. A helper passing on WSL or a hosted CI runner does **not**
@@ -25,7 +25,9 @@ contacts the Platform Demo service.
   receiver on a **read-only virtual CD**. Mount that CD read-only inside the
   guest, verify the checksums again and copy the archive into the guest's own
   ext4 filesystem. Extract into a fresh, root-owned 0755 directory and verify
-  the manifest again. No host-shared filesystem is permitted.
+  the manifest again. The archive is flat (no embedded top-level directory);
+  the guest verifies exact regular members and hashes before extraction into
+  its own fixed release directory. No host-shared filesystem is permitted.
 
 One way to produce the three-binary bundle from the reviewed checkout on a
 Linux/amd64 build machine with Go 1.27 is below. It creates a new private
@@ -53,12 +55,24 @@ Build the receiver separately with `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go
 build -trimpath -o <new-staging-path>/connected-first-install-receiver
 ./scripts/fixtures/connected-first-install`. Transfer it on the same read-only
 virtual media, but **not** as a member of the verified connected bundle.
+Build the separately pinned read-only stage probe from the same exact source
+commit with `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go test -c -trimpath
+-buildvcs=false -ldflags "-X github.com/braidenm/home-lab-observer/internal/connectedinstall.vmSourceCommit=$CANARY_COMMIT"
+-o <new-staging-path>/connected-first-install-preflight-probe
+./internal/connectedinstall`. It is a fixture-only test executable, not a
+release member or installer command. The host runner requires its independent
+SHA-256 pin; the probe also compares its embedded commit with the verified
+bundle manifest. The guest runs only its fixed opt-in test before the grant prompt;
+ordinary package tests skip it.
 
 ## Guest-only network and enrollment
 
-Inside this isolated guest only, alias `93.184.216.34/32` to loopback and map
-`app.braidenmiller.com` to that alias in guest `/etc/hosts`. Confirm that the
-guest has no external NIC or default route. Generate a throwaway CA and a leaf
+Inside this isolated guest only, alias `93.184.216.34/32` to loopback, with no
+`app.braidenmiller.com` entry in `/etc/hosts`. The pinned synthetic receiver
+answers only that hostname's A query with the alias on guest `127.0.0.1:53`;
+AAAA is NODATA, other names/types are refused, and nothing is forwarded.
+The guest's `/etc/resolv.conf` points only to that loopback resolver with fixed
+timeouts. Confirm that the guest has no external NIC or default route. Generate a throwaway CA and a leaf
 certificate with DNS SAN `app.braidenmiller.com`, trust that CA only in the
 guest's `/etc/ssl/certs/ca-certificates.crt`, and start the checked-in
 `receiver.go` compiled for Linux/amd64 on `93.184.216.34:443`. The receiver
@@ -79,12 +93,12 @@ guest is `observer-connected-install install <verified-guest-bundle-directory>
 <manifest-sha256> <synthetic-server-id>`. The install binary must report
 `INSTALLED_PENDING_ACCEPTANCE`; that is *not* permission to start a worker.
 
-## Required evidence, each on a fresh overlay
+## Acceptance coverage and remaining limits
 
 1. Before grant entry, prove wrong image/systemd, foreign principals, existing
    unit/target and bad bundle refuse without a PREPARING marker or account edits.
 2. Successful stopped install: validate exact installed config/manifest and
-   ownership/mode/no-ACL of every fixed role; dedicated locked, non-login users
+   ownership/mode/no-ACL of the config, release and ledger roles; dedicated locked, non-login users
    and groups; same ledger inode before/after promotion; no unknown bundle
    members; exact systemd fragments, no drop-ins, `LoadState=loaded`,
    `UnitFileState=disabled`, `ActiveState=inactive` for both workers; no worker
@@ -107,3 +121,79 @@ Do not delete any overlay or image until its resolved absolute path is confirmed
 inside the dedicated temporary VM directory and the evidence is captured. Report
 each case as pass, fail or not executed; do not upgrade helper evidence into full
 VM acceptance. Activation and owner-server installation remain separate gates.
+
+## Bounded manual harness
+
+`run_vm.py` is the reproducible host runner for the three packaged power/reboot
+cases, not every item in the larger acceptance inventory above. Run it only
+on a dedicated KVM test host while all other QEMU guests (including Platform CI)
+are stopped. It refuses non-root execution, an unverified/non-qcow2 Ubuntu base,
+unsafe path ownership, low capacity and any active QEMU process. Inputs must be
+absolute, root-owned regular files with no group/other write permission. The
+checked-out harness files and every input/work-root ancestor must also be
+root-owned and not group/other writable; stage the reviewed PR head in such a
+directory before running it with `sudo`. Supply
+the published Canonical image SHA-256 independently, plus the reviewed source
+commit, bundle-manifest SHA-256, archive SHA-256 and synthetic-receiver SHA-256 from the approved build record; never accept
+digests derived only from the payload sidecars. The work root must already exist and be root-owned
+mode 0700. The script never fetches an image or opens a network connection.
+
+```sh
+sudo python3 scripts/fixtures/connected-first-install/run_vm.py \
+  --image /data/hlo-fixture-input/ubuntu-24.04-cloudimg-amd64.img \
+  --image-sha256 '<canonical-published-64-hex-sha256>' \
+  --expected-commit '<reviewed-40-hex-source-commit>' \
+  --expected-manifest-sha256 '<reviewed-64-hex-manifest-sha256>' \
+  --expected-archive-sha256 '<reviewed-64-hex-archive-sha256>' \
+  --expected-receiver-sha256 '<reviewed-64-hex-receiver-sha256>' \
+  --expected-probe-sha256 '<reviewed-64-hex-probe-sha256>' \
+  --archive /data/hlo-fixture-input/home-lab-observer-connected_0.1.0-canary.1_linux_amd64.tar.gz \
+  --manifest /data/hlo-fixture-input/connected-manifest.json \
+  --checksums /data/hlo-fixture-input/SHA256SUMS \
+  --receiver /data/hlo-fixture-input/connected-first-install-receiver \
+  --probe /data/hlo-fixture-input/connected-first-install-preflight-probe \
+  --work-root /data/hlo-first-install-acceptance
+```
+
+The host launcher makes one fresh 12 GiB copy-on-write overlay per case, a
+read-only ext4 payload image and separate cloud-init seed. It starts 2-vCPU,
+3-GiB QEMU guests with `-nic none`, no host share, bounded serial evidence and
+per-boot deadlines. The three cases are success/reboot, a power cut after the
+durable PREPARING marker, and a power cut after a successful stopped install.
+Guest startup includes a wrong-digest preflight refusal. The launcher removes
+temporary payload source copies after creating the read-only image. On each
+passing case it removes only that case's validated overlay file; after all
+cases pass it also removes the validated payload image. It retains bounded
+serial logs and small seeds for audit. On failure it retains the remaining
+images for investigation. `--keep-disks` retains passing images too.
+
+Before entering the one-use synthetic grant, the guest runs a fixture-only,
+read-only prerequisite classifier for host/NSS, owned-target absence, the
+guest-only DNS/TLS endpoint and parent-slice policy. It emits fixed categories
+without raw host output or secrets. This is diagnostic evidence only; passing
+it does not authorize installation or replace the installer's own preflight.
+An independently pinned fixture-only Go test executable then calls the exact
+same-package bundle, host, target, endpoint and parent checks used by
+`CheckRequest`; its endpoint step separates root CA read, Go absolute-host DNS,
+public-address validation, Go TLS and final production `Resolve` parity into
+fixed labels. It emits no raw Go error or certificate data. Neither diagnostic
+receives a grant or changes the installed preflight policy.
+Stage and independently hash `preflight_probe.py` with the four existing
+harness scripts when using a manually transferred checkout.
+
+If the installer fails, the PTY driver emits only an allowlisted phase name,
+normalized exit number and prompt-seen bit. Its raw output remains a bounded
+in-memory buffer and is never copied into serial evidence; unknown or mixed
+responses are `UNRECOGNIZED`. Preserve a failed overlay and stop for review.
+
+The runner does not claim every hardware flush boundary, pre-publish hostile
+target scenario, or installed-worker runtime isolation. Its interrupted-case
+proof is a stopped installer with the durable marker but **before any state or
+release root exists**, followed by an abrupt QEMU kill and reboot; a late stop
+is a failure. The synthetic receiver cannot consume a grant in that case.
+The guest compares exact manifest/config/release identity, selected closed-role
+ownership and ACLs, exact unit fragments and effective isolation properties,
+and ledger/credential/config inode plus byte hashes across reboot and retry.
+The existing synthetic-root tests cover injected file/parent sync failures
+separately. Record the distinction in the PR review and keep activation
+blocked until its own installed-runtime acceptance.
