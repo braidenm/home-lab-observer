@@ -55,7 +55,10 @@ descriptor open. Ordinary unsupported hosts skip only that native fixture;
 `OBSERVER_EXT4_ACCEPTANCE=1` makes missing support a failure. No root, mounts,
 host ledger or service changes are needed. Non-Linux tests prove refusal.
 
-Reboot/simulated-power-loss evidence remains a separate packaged VM gate. A
+The bounded packaged VM test in [packaged-vm-subset.md](packaged-vm-subset.md)
+compared the exact physical witness before and after a normal reboot and an
+abrupt VM power-off/start, together with the logical synthetic ledger witness.
+This is stopped-state ext4 evidence, not an interrupted transition/recovery gate. A
 restored or cloned filesystem preserving UUID/inode/generation cannot be detected
 here; backup restoration requires revoked credentials and re-enrollment, not a
 claimed anti-rollback guarantee. No accepted ADR is amended by this prerequisite.
@@ -67,4 +70,5 @@ On 2026-09-17 the Linux amd64 fixture passed five repetitions on WSL kernel
 enabled (not skipped). Windows pure/stub tests and vet, Linux synthetic/native
 tests and vet, and Linux arm64/macOS arm64 test compilation passed. Cross-compilation
 is not native ARM or macOS execution. No reboot, mounts, services, real ledger,
-credentials or device scans were involved; packaged recovery evidence is pending.
+credentials or device scans were involved in that local fixture. The separate
+packaged stopped-state VM evidence above does not establish refresh recovery.

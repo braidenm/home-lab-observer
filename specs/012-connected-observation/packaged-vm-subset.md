@@ -1,10 +1,10 @@
 # F1 packaged VM subset: synthetic stopped state and collector
 
-Status: bounded plan independently reviewed 2026-09-17; the fourth fresh execution
-passed the complete reviewed synthetic subset after correcting principal and
-transient-unit startup issues. No steady uploader or production exchange occurred.
-This is partial acceptance, not a successful real enrollment/Install transaction,
-uploader activation, rollback, reboot recovery or completed F1.
+Status: the reviewed synthetic subset passed in a disposable VM. A later packaged
+quality-aware collector/used-ledger run and a stopped-state reboot/power-off
+identity check also passed, as detailed below. No steady uploader or production
+exchange occurred. This is partial acceptance, not a successful real enrollment/
+Install transaction, uploader activation, transition recovery or completed F1.
 
 ## Safety and admission
 
@@ -170,7 +170,7 @@ test VM is no longer running or defined. Only sanitized repository evidence and
 local non-secret build/test artifacts remain; the temporary guest state and key
 are intentionally not recoverable.
 
-## Quality-aware collector follow-up (not yet executed in a VM)
+## Quality-aware collector and used-ledger follow-up (2026-09-18)
 
 The draft collector now publishes the native quality-aware host contract. The
 next packaged run therefore validates that exact canonical contract and server
@@ -181,8 +181,7 @@ historical evidence above continues to describe the older package truthfully.
 
 The acceptance predicate has Linux-native fixture tests covering useful partial
 data, false complete coverage, foreign server binding, invalid metric values and
-the legacy response. These tests do not run a service, establish current packaged
-VM acceptance or prove hosted transport. A fresh admitted VM run is still required.
+the legacy response. These tests alone do not prove hosted transport.
 
 That fresh run also exercises the unchanged packaged `validate-existing-ledger`
 mode twice through the real offline manager profile. It compares private results
@@ -190,4 +189,39 @@ to the synthetic pristine record fingerprint, retains anchored ext4 directory an
 database identity across both opens, and checks that the named paths still point
 to the promoted objects. Fingerprints and filesystem identifiers never enter test
 output. This adds no steady uploader, HTTP request, steady-uploader activation or real
-credential. It is not yet evidence for used/pending state or reboot stability.
+credential.
+
+The fresh package from source `ab9d7d9` (current branch later advanced with
+documentation and fixture changes only) was built as Linux amd64 with Go 1.27.1,
+CGO disabled. Its archive SHA256 is
+`513d0eecc0a0ed40cc989e634a2a5ba811c31bf5c65910b42d54c70f81442116`;
+canonical manifest SHA256 is
+`f43f9672f5e1683945426f70e1e9d9f435d0da50a8dcf209b96e6b7206fdc0e9`.
+The VM test binary SHA256 is
+`340aae413b7fbcfb6e3e3e4f0b2b40a5a6c8d8d6a917971504c2dcab19a8b7a2`.
+The same packaged fixture passed on two fresh Ubuntu 24.04/systemd255 QEMU guests,
+including the quality-aware current collector output, explicit partial filesystem
+coverage, both offline existing-ledger opens, physical identity anchoring and
+logical pristine-data equality. The second guest completed in 4.45 seconds.
+Both units were then inactive, disabled and PID zero; enrollment unit and
+activation directory were absent. The independent VM network filter allowed only
+the exact task routes and denied unrelated public/private destinations. No
+production request or real grant was made.
+
+The second guest ran a separate test-only reboot witness binary (SHA256
+`c829e4b2f3bae3e4107ff446c71f2883bd8ea0de037714febbfb65400278ee07`).
+It recorded root-private canonical config, ext4 directory/database identity and
+the logical synthetic ledger fingerprint while both workers were stopped and
+disabled. After a normal VM reboot, then after an abrupt VM power-off and start,
+the boot IDs changed and the exact witness comparison passed. This proves the
+stopped synthetic state and ext4 identity survived those two events on this guest.
+It does **not** test an in-flight refresh journal, failed upload recovery,
+credential promotion under power loss, a filesystem restore/clone, a running
+uploader, real enrollment or owner-visible hosted canary. Those gates remain open.
+
+After evidence capture, both exact disposable domains were powered off and
+undefined, their owned images/staging files and task-only network filter were
+removed, and the temporary local SSH private key was deleted. Independent host
+inspection found no remaining defined guest or task-owned staging path. The
+guest ledger is intentionally not recoverable; the sanitized test record and
+non-secret local package artifacts remain.

@@ -5,6 +5,7 @@ package connectedinstall
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -477,6 +478,98 @@ func TestVMNativeMetricsAcceptancePredicate(t *testing.T) {
 			t.Fatalf("%s accepted", name)
 		}
 	}
+}
+
+type vmRebootEvidence struct {
+	Version      string                 `json:"version"`
+	ConfigSHA256 [32]byte               `json:"config_sha256"`
+	Physical     ledgeridentity.Witness `json:"physical"`
+	Logical      [32]byte               `json:"logical"`
+}
+
+const vmRebootEvidencePath = vmFixtureRoot + "/reboot-witness.json"
+
+// These two explicit operations bracket one externally controlled reboot of
+// the owned disposable VM. No product API can create or consume this witness.
+func TestConnectedVMRecordRebootWitness(t *testing.T) {
+	vmAdmission(t, true)
+	evidence := vmCurrentRebootEvidence(t)
+	data, err := json.Marshal(evidence)
+	if err != nil || len(data) > 1024 {
+		t.Fatal("VM_REBOOT_WITNESS_ENCODE_FAILED")
+	}
+	root, err := os.OpenRoot(vmFixtureRoot)
+	if err != nil {
+		t.Fatal("VM_REBOOT_WITNESS_ROOT_FAILED")
+	}
+	defer func() {
+		if root.Close() != nil {
+			t.Error("VM_REBOOT_WITNESS_ROOT_CLOSE_FAILED")
+		}
+	}()
+	if publishNew(root, "reboot-witness.json", data, 0600) != nil {
+		t.Fatal("VM_REBOOT_WITNESS_PUBLISH_FAILED")
+	}
+	t.Log("VM_REBOOT_WITNESS_RECORDED")
+}
+
+func TestConnectedVMCompareRebootWitness(t *testing.T) {
+	vmAdmission(t, true)
+	data, err := connectedprofile.ReadRootFile(vmRebootEvidencePath, 1024)
+	if err != nil {
+		t.Fatal("VM_REBOOT_WITNESS_READ_FAILED")
+	}
+	var expected vmRebootEvidence
+	if json.Unmarshal(data, &expected) != nil || expected.Version != "observer-vm-reboot-witness/v1" || ledgeridentity.Validate(expected.Physical) != nil {
+		t.Fatal("VM_REBOOT_WITNESS_INVALID")
+	}
+	canonical, _ := json.Marshal(expected)
+	if !bytes.Equal(data, canonical) || expected != vmCurrentRebootEvidence(t) {
+		t.Fatal("VM_REBOOT_LEDGER_OR_CONFIG_CHANGED")
+	}
+	t.Log("VM_REBOOT_LEDGER_IDENTITY_STABLE")
+}
+
+func vmCurrentRebootEvidence(t *testing.T) vmRebootEvidence {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	lock, err := acquireLease()
+	if err != nil {
+		t.Fatal("VM_REBOOT_LEASE_FAILED")
+	}
+	defer func() {
+		if lock.Close() != nil {
+			t.Error("VM_REBOOT_LEASE_CLOSE_FAILED")
+		}
+	}()
+	c, err := inspectInstalled()
+	if err != nil || c.ServerID != vmFixtureServer || c.ConnectorID != vmFixtureConnector || c.ArtifactSHA256 != os.Getenv("HLO_DISPOSABLE_BUNDLE_SHA256") {
+		t.Fatal("VM_REBOOT_INSTALL_IDENTITY_FAILED")
+	}
+	for _, unit := range []string{collectorUnit, uploaderUnit} {
+		worker, inspectErr := inspectWorker(ctx, unit)
+		enabled, enabledErr := command(ctx, "/usr/bin/systemctl", []string{"show", "--property=UnitFileState", "--value", unit}, nil, 64)
+		if inspectErr != nil || worker.Active != "inactive" || worker.PID != 0 || enabledErr != nil || string(enabled) != "disabled\n" {
+			t.Fatal("VM_REBOOT_WORKER_NOT_STOPPED")
+		}
+	}
+	if _, err := os.Lstat(activationParent); !os.IsNotExist(err) {
+		t.Fatal("VM_REBOOT_ACTIVATION_PRESENT")
+	}
+	physical, err := installedLedgerIdentity(ctx, c)
+	if err != nil {
+		t.Fatal("VM_REBOOT_PHYSICAL_WITNESS_FAILED")
+	}
+	logical, err := existingLedgerFingerprint(ctx, c)
+	if err != nil {
+		t.Fatal("VM_REBOOT_LOGICAL_WITNESS_FAILED")
+	}
+	config, err := connectedprofile.Encode(c)
+	if err != nil {
+		t.Fatal("VM_REBOOT_CONFIG_FAILED")
+	}
+	return vmRebootEvidence{"observer-vm-reboot-witness/v1", sha256.Sum256(config), physical, logical}
 }
 
 // Diagnostic rerun keeps stdin empty: no synthetic credential can be returned.
