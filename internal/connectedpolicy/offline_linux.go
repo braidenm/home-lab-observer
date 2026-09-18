@@ -20,10 +20,19 @@ func ValidateOffline(ctx context.Context, unit string, expected OfflineExpectati
 	if _, err := offlineExpected(expected); err != nil {
 		return ErrUnsafe
 	}
+	return inspectTransient(ctx, unit, offlineFields, func(data []byte) error {
+		return validateOffline(data, expected)
+	})
+}
+
+// inspectTransient reads a manager-owned invocation while stdin is still empty.
+// Both enrollment modes require the same D-Bus proof that no credential array
+// can be injected by a manager drop-in or transient override.
+func inspectTransient(ctx context.Context, unit string, fields []string, validate func([]byte) error) error {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	args := []string{"show", "--no-pager"}
-	for _, field := range offlineFields {
+	for _, field := range fields {
 		args = append(args, "--property="+field)
 	}
 	args = append(args, "--", unit)
@@ -33,14 +42,9 @@ func ValidateOffline(ctx context.Context, unit string, expected OfflineExpectati
 	cmd.Stdout = &output
 	cmd.Stderr = io.Discard
 	cmd.WaitDelay = time.Second
-	if cmd.Run() != nil || ctx.Err() != nil {
+	if cmd.Run() != nil || ctx.Err() != nil || validate(output.buffer.Bytes()) != nil {
 		return ErrUnsafe
 	}
-	if validateOffline(output.buffer.Bytes(), expected) != nil {
-		return ErrUnsafe
-	}
-	// systemctl renders credential arrays as [unprintable], even when empty.
-	// Query their typed D-Bus values instead. Never buffer a credential value.
 	const object = "/org/freedesktop/systemd1/unit/home_2dlab_2dobserver_2dconnected_2denrollment_2eservice"
 	credentials := exec.CommandContext(ctx, "/usr/bin/busctl", "--system", "--no-pager", "get-property", "org.freedesktop.systemd1", object, "org.freedesktop.systemd1.Service", "LoadCredential", "LoadCredentialEncrypted", "SetCredential", "SetCredentialEncrypted", "ImportCredential")
 	credentials.Env = cmd.Env
