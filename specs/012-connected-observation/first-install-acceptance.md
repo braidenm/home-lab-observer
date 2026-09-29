@@ -1,10 +1,10 @@
 # Connected First-Install Acceptance Record
 
-Date: 2026-09-18
+Date: 2026-09-29
 
 ## Accepted scope
 
-The exact package built from commit `8dd7eeb79625076e70966431ffb1ad98dd29b47b` completed the manually invoked,
+The exact package built from commit `cd505700200b3496eabce2a3bc8c1e0a2674c688` completed the manually invoked,
 no-NIC Ubuntu 24.04/systemd 255 disposable-VM matrix. This accepts only a first connected Linux install that remains
 disabled and inactive. It does not accept worker activation, a production endpoint canary, refresh, rollback,
 uninstall, Docker actions, or an owner-host installation.
@@ -19,15 +19,16 @@ runners.
 | Input | SHA-256 |
 | --- | --- |
 | Canonical Ubuntu 24.04 server cloud image | `612b2c0cc1bc413a6cb8c38fd611794caf0f2b436c50013d8b3794db12ad7354` |
-| Connected manifest | `dffb054afef6c78d715536f10319b77d51ee8fa048a1db077579b1e8bc818d86` |
-| Connected archive | `4489f4e842b76ee83ba1b906654a709bf9e3f8844385d3014c64f11ba73d5c38` |
+| Connected manifest | `3eed68e7ce26bdd2680a0d950d9f7be646be0f9faae34f2b0b5ba75b9f37d863` |
+| Connected archive | `e63bd4f26c17d9ad9a40ac1d78da859f064c2b8a1e34079b9a4e64becdbffcbf` |
 | Synthetic receiver | `8686f8ab9370435619de5c2b134f4488945ef5e0ccb98aea7bf0f4441fc3e5a3` |
-| Exact production-policy probe | `068244895912f0869bc56621bd73ab6c7a6447d119fe1de3f844a110d76aa34f` |
+| Exact production-policy probe | `4f878750032a06039691cb7d09937bfd77abb4aff7ff809ae3243561436367f7` |
+| Canonical five-file harness manifest | `c568a9ba7979202b3dcb598c400adc049d11d9bd1debf438fd42d36b13de3fa8` |
 
-The historical `8dd7eeb` run did not independently bind the harness sources, so it is not by itself sufficient for the
-current release gate. The current reviewed five-file canonical harness manifest is
-`c568a9ba7979202b3dcb598c400adc049d11d9bd1debf438fd42d36b13de3fa8`; an exact-head replay must supply that digest
-through `--expected-harness-sha256` and record the resulting fixed markers in the pull request before merge.
+The historical `8dd7eeb` run did not independently bind the harness sources and is retained only as superseded
+evidence. The 2026-09-29 replay supplied the reviewed five-file digest through `--expected-harness-sha256`, verified
+every input before payload creation, passed all three cases without another QEMU guest or platform workload running,
+and terminated with `HLO_VM_ALL_PASS`.
 
 ## Case results
 
