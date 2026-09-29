@@ -47,7 +47,12 @@
   - [x] Add the unused typed first-install preparing marker publisher with root-owned residue/refusal tests; no installer command calls it.
   - [x] Add the unused fixed config-directory creator with root-owned sync-failure residue tests; no installer command calls it.
   - [x] Add the unused fixed state-root creator with root-owned ancestor and sync-failure refusal tests; no installer command calls it.
-  - [ ] Compose the fixed first-install command through one-use enrollment and durable stopped installed metadata; independent security and packaged VM acceptance remain separate gates.
+  - [x] Compose the fixed first-install command through one-use enrollment and durable stopped installed metadata;
+    independent security review and packaged disposable-VM acceptance passed on 2026-09-18. Activation remains a
+    separate gate; see [the acceptance record](first-install-acceptance.md).
+  - [x] Add and run the manually invoked, network-isolated disposable Ubuntu VM harness for packaged
+    stopped-install/reboot/power-cut evidence; no owner-host install or PR-CI claim. All three exact-head cases passed;
+    see [the acceptance record](first-install-acceptance.md).
   - [x] Add independent anchored ext4 stage inspection and exclusive publication primitives with root synthetic interruption tests; not wired to installer commands.
   - [x] Read the fixed authoritative transition journal/receipt names under the anchored ext4 config directory; classification and writes remain separate.
   - [x] Read both fixed legacy refresh names as separate anchored ext4 evidence with a privileged refusal fixture; stage comparison is a separate check.
