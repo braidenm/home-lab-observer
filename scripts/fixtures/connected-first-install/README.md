@@ -120,7 +120,9 @@ guest is `observer-connected-install install <verified-guest-bundle-directory>
 Do not delete any overlay or image until its resolved absolute path is confirmed
 inside the dedicated temporary VM directory and the evidence is captured. Report
 each case as pass, fail or not executed; do not upgrade helper evidence into full
-VM acceptance. Activation and owner-server installation remain separate gates.
+VM acceptance. Activation and owner-server installation remain separate gates. The accepted exact-head run and its
+bounded claims are recorded in
+[`specs/012-connected-observation/first-install-acceptance.md`](../../../specs/012-connected-observation/first-install-acceptance.md).
 
 ## Bounded manual harness
 
