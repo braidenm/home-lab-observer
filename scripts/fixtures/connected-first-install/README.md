@@ -1,8 +1,10 @@
-# Disposable first-install acceptance (not yet passed)
+# Disposable first-install acceptance (stopped install accepted)
 
-This fixture is a gate for the stopped Linux connected installer, not an owner-host
-installation recipe. A helper passing on WSL or a hosted CI runner does **not**
-substitute for the packaged Ubuntu 24.04/systemd 255 VM run and independent review.
+This fixture is the accepted gate for the stopped Linux connected installer, not an
+owner-host installation recipe. The accepted package and bounded result are recorded in
+[`first-install-acceptance.md`](../../../specs/012-connected-observation/first-install-acceptance.md).
+A helper passing on WSL or a hosted CI runner does **not** substitute for the packaged
+Ubuntu 24.04/systemd 255 VM run and independent review.
 Do not run the installer or this fixture on the Home Lab host. Do not transfer a
 real enrollment grant, connector credential, user data or server snapshot into the
 guest. The fixture receiver contains a synthetic one-use value only and never
