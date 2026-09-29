@@ -224,6 +224,22 @@ class HarnessAdmissionTest(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 run_vm.check_probe(renamed, digest)
 
+    def test_harness_digest_binds_every_reviewed_source_by_fixed_name_and_order(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            for index, name in enumerate(run_vm.HARNESS_FILES):
+                (directory / name).write_bytes(f"reviewed-{index}".encode("ascii"))
+            manifest = "".join(
+                f"{hashlib.sha256((directory / name).read_bytes()).hexdigest()}  {name}\n"
+                for name in run_vm.HARNESS_FILES
+            )
+            digest = hashlib.sha256(manifest.encode("ascii")).hexdigest()
+            self.assertEqual(run_vm.harness_sha256(directory), digest)
+            run_vm.check_harness(directory, digest)
+            (directory / "guest.sh").write_bytes(b"tampered")
+            with self.assertRaisesRegex(RuntimeError, "^REVIEWED_HARNESS_REFUSED$"):
+                run_vm.check_harness(directory, digest)
+
     def test_no_matching_marker_is_not_success(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "console.log"

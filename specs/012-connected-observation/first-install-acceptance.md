@@ -24,6 +24,11 @@ runners.
 | Synthetic receiver | `8686f8ab9370435619de5c2b134f4488945ef5e0ccb98aea7bf0f4441fc3e5a3` |
 | Exact production-policy probe | `068244895912f0869bc56621bd73ab6c7a6447d119fe1de3f844a110d76aa34f` |
 
+The historical `8dd7eeb` run did not independently bind the harness sources, so it is not by itself sufficient for the
+current release gate. The current reviewed five-file canonical harness manifest is
+`c568a9ba7979202b3dcb598c400adc049d11d9bd1debf438fd42d36b13de3fa8`; an exact-head replay must supply that digest
+through `--expected-harness-sha256` and record the resulting fixed markers in the pull request before merge.
+
 ## Case results
 
 | Case | Fixed evidence | Result |
@@ -33,8 +38,9 @@ runners.
 | Power cut after successful stopped install and reboot | `HLO_VM_SUCCESS_READY_FOR_CUT`, `HLO_VM_SUCCESS_REBOOT_PASS` | Pass |
 
 Each guest had no NIC or host share. The harness proved exact bundle/config/unit identity, closed ownership/mode/ACL
-roles, disabled and inactive services, ledger/config/credential identity across reboot, refusal on retry, and no worker
-activation. Only fixed allowlisted markers were promoted into this record; grants, credentials, raw console content,
+roles, disabled and inactive services, ledger/config/credential identity across reboot, refusal on retry, and no running
+worker process at the fixture's observation points. This bounded evidence does not establish historical non-activation
+between observations. Only fixed allowlisted markers were promoted into this record; grants, credentials, raw console content,
 host paths, and infrastructure identifiers are excluded.
 
 ## Residual gates

@@ -19,6 +19,7 @@ MIB = 1024 * 1024
 GIB = 1024 * MIB
 CASE_TIMEOUT = 9 * 60
 CASES = ("success", "interrupt", "success-cut")
+HARNESS_FILES = ("run_vm.py", "guest.sh", "drive_pty.py", "assert_guest.py", "preflight_probe.py")
 SAFE_PATH = "/usr/sbin:/usr/bin:/sbin:/bin"
 TOOLS: dict[str, str] = {}
 
@@ -56,6 +57,17 @@ def sha256(path: Path) -> str:
         for block in iter(lambda: source.read(MIB), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def harness_sha256(directory: Path) -> str:
+    """Digest a canonical manifest of every reviewed host/guest harness source."""
+    manifest = "".join(f"{sha256(directory / name)}  {name}\n" for name in HARNESS_FILES)
+    return hashlib.sha256(manifest.encode("ascii")).hexdigest()
+
+
+def check_harness(directory: Path, expected_digest: str) -> None:
+    if harness_sha256(directory) != expected_digest:
+        refuse("REVIEWED_HARNESS_REFUSED")
 
 
 def qemu_process(command: bytes, comm: str) -> bool:
@@ -130,15 +142,15 @@ def check_probe(probe: Path, expected_digest: str) -> None:
         refuse("REVIEWED_PROBE_REFUSED")
 
 
-def payload_image(instance: Path, archive: Path, manifest: Path, checksums: Path, receiver: Path, probe: Path, expected_commit: str, expected_manifest_sha256: str, expected_archive_sha256: str, expected_receiver_sha256: str, expected_probe_sha256: str) -> Path:
+def payload_image(instance: Path, archive: Path, manifest: Path, checksums: Path, receiver: Path, probe: Path, expected_commit: str, expected_manifest_sha256: str, expected_archive_sha256: str, expected_receiver_sha256: str, expected_probe_sha256: str, expected_harness_sha256: str) -> Path:
     directory = instance / "payload"
     directory.mkdir(mode=0o700)
     for source in (archive, manifest, checksums, receiver, probe):
         shutil.copyfile(source, directory / ("connected-first-install-receiver" if source == receiver else source.name))
     scripts = Path(__file__).resolve().parent
-    for name in ("guest.sh", "drive_pty.py", "assert_guest.py", "preflight_probe.py"):
+    for name in HARNESS_FILES[1:]:
         shutil.copyfile(scripts / name, directory / name)
-    (directory / "reviewed-identity.json").write_text(json.dumps({"commit": expected_commit, "manifest_sha256": expected_manifest_sha256, "archive_sha256": expected_archive_sha256, "receiver_sha256": expected_receiver_sha256, "probe_sha256": expected_probe_sha256}, sort_keys=True) + "\n", encoding="ascii")
+    (directory / "reviewed-identity.json").write_text(json.dumps({"commit": expected_commit, "manifest_sha256": expected_manifest_sha256, "archive_sha256": expected_archive_sha256, "receiver_sha256": expected_receiver_sha256, "probe_sha256": expected_probe_sha256, "harness_sha256": expected_harness_sha256}, sort_keys=True) + "\n", encoding="ascii")
     (directory / "connected-first-install-receiver").chmod(0o755)
     (directory / "connected-first-install-preflight-probe").chmod(0o755)
     target = instance / "payload.ext4"
@@ -285,11 +297,12 @@ def main() -> int:
     parser.add_argument("--expected-archive-sha256", required=True)
     parser.add_argument("--expected-receiver-sha256", required=True)
     parser.add_argument("--expected-probe-sha256", required=True)
+    parser.add_argument("--expected-harness-sha256", required=True)
     parser.add_argument("--work-root", required=True)
     parser.add_argument("--keep-disks", action="store_true")
     args = parser.parse_args()
     try:
-        if os.geteuid() != 0 or not re.fullmatch(r"[a-f0-9]{64}", args.image_sha256) or not re.fullmatch(r"[a-f0-9]{40}", args.expected_commit) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_manifest_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_archive_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_receiver_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_probe_sha256):
+        if os.geteuid() != 0 or not re.fullmatch(r"[a-f0-9]{64}", args.image_sha256) or not re.fullmatch(r"[a-f0-9]{40}", args.expected_commit) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_manifest_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_archive_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_receiver_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_probe_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_harness_sha256):
             refuse("ADMISSION_REFUSED")
         for tool in ("qemu-img", "qemu-system-x86_64", "mkfs.ext4", "cloud-localds"):
             found = shutil.which(tool, path=SAFE_PATH)
@@ -304,8 +317,10 @@ def main() -> int:
         info = root.stat()
         if not root.is_dir() or not trusted_ancestors(root) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o700:
             refuse("WORK_ROOT_OWNERSHIP_REFUSED")
-        for name in ("run_vm.py", "guest.sh", "drive_pty.py", "assert_guest.py", "preflight_probe.py"):
+        scripts = Path(__file__).resolve().parent
+        for name in HARNESS_FILES:
             owned_file(str(Path(__file__).resolve().parent / name), 512 * 1024)
+        check_harness(scripts, args.expected_harness_sha256)
         image = owned_file(args.image, 12 * GIB)
         archive = owned_file(args.archive, 600 * MIB)
         manifest = owned_file(args.manifest, 16 * 1024)
@@ -326,7 +341,7 @@ def main() -> int:
             instance = Path(tempfile.mkdtemp(prefix="hlo-first-install-", dir=root))
             instance.chmod(0o700)
             (instance / ".hlo-owned-instance").write_text("first-install-vm/v1\n")
-            payload = payload_image(instance, archive, manifest, checksums, receiver, probe, args.expected_commit, args.expected_manifest_sha256, args.expected_archive_sha256, args.expected_receiver_sha256, args.expected_probe_sha256)
+            payload = payload_image(instance, archive, manifest, checksums, receiver, probe, args.expected_commit, args.expected_manifest_sha256, args.expected_archive_sha256, args.expected_receiver_sha256, args.expected_probe_sha256, args.expected_harness_sha256)
             for name in CASES:
                 case(instance, name, image, payload, args.keep_disks)
             if not args.keep_disks:

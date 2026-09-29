@@ -138,9 +138,18 @@ checked-out harness files and every input/work-root ancestor must also be
 root-owned and not group/other writable; stage the reviewed PR head in such a
 directory before running it with `sudo`. Supply
 the published Canonical image SHA-256 independently, plus the reviewed source
-commit, bundle-manifest SHA-256, archive SHA-256 and synthetic-receiver SHA-256 from the approved build record; never accept
+commit, bundle-manifest SHA-256, archive SHA-256, synthetic-receiver SHA-256, and the canonical five-file harness
+manifest SHA-256 from the approved build record; never accept
 digests derived only from the payload sidecars. The work root must already exist and be root-owned
 mode 0700. The script never fetches an image or opens a network connection.
+
+Compute the harness digest from an independently reviewed checkout. The fixed order and names are part of the
+acceptance contract:
+
+```sh
+(cd scripts/fixtures/connected-first-install && \
+  sha256sum run_vm.py guest.sh drive_pty.py assert_guest.py preflight_probe.py | sha256sum)
+```
 
 ```sh
 sudo python3 scripts/fixtures/connected-first-install/run_vm.py \
@@ -151,6 +160,7 @@ sudo python3 scripts/fixtures/connected-first-install/run_vm.py \
   --expected-archive-sha256 '<reviewed-64-hex-archive-sha256>' \
   --expected-receiver-sha256 '<reviewed-64-hex-receiver-sha256>' \
   --expected-probe-sha256 '<reviewed-64-hex-probe-sha256>' \
+  --expected-harness-sha256 '<reviewed-64-hex-canonical-harness-sha256>' \
   --archive /data/hlo-fixture-input/home-lab-observer-connected_0.1.0-canary.1_linux_amd64.tar.gz \
   --manifest /data/hlo-fixture-input/connected-manifest.json \
   --checksums /data/hlo-fixture-input/SHA256SUMS \

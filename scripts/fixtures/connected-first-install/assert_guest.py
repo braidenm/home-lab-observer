@@ -128,6 +128,8 @@ def denies_all_ip(value: str) -> bool:
 
 def payload_assert() -> None:
     identity = json.loads((PAYLOAD / "reviewed-identity.json").read_text())
+    need(set(identity) == {"commit", "manifest_sha256", "archive_sha256", "receiver_sha256",
+                           "probe_sha256", "harness_sha256"}, "REVIEWED_IDENTITY_FIELDS")
     expected = identity["manifest_sha256"]
     archive_files = list(PAYLOAD.glob("*.tar.gz"))
     need(len(archive_files) == 1, "ARCHIVE_COUNT")
@@ -151,8 +153,9 @@ def payload_assert() -> None:
 
 def reviewed() -> tuple[str, str, dict]:
     identity = json.loads((PAYLOAD / "reviewed-identity.json").read_text())
-    commit, expected, receiver, archive, probe = identity["commit"], identity["manifest_sha256"], identity["receiver_sha256"], identity["archive_sha256"], identity["probe_sha256"]
-    need(len(commit) == 40 and len(expected) == 64 and len(receiver) == 64 and len(archive) == 64 and len(probe) == 64, "REVIEWED_IDENTITY")
+    commit, expected, receiver, archive, probe, harness = identity["commit"], identity["manifest_sha256"], identity["receiver_sha256"], identity["archive_sha256"], identity["probe_sha256"], identity["harness_sha256"]
+    need(len(commit) == 40 and all(len(value) == 64 for value in
+                                   (expected, receiver, archive, probe, harness)), "REVIEWED_IDENTITY")
     payload_assert()
     source = PAYLOAD / "connected-manifest.json"
     need(digest(source) == expected, "REVIEWED_MANIFEST")

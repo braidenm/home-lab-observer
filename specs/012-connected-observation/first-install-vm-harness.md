@@ -88,7 +88,8 @@ Synthetic root sync-failure tests remain supplementary; the VM harness must not 
 real hardware cache loss. Isolation assertions for mounts, sockets, credentials and systemd policy
 remain explicit evidence items, with failures a hard no-go.
 
-The executable three-case harness is a prerequisite but not a claim of full acceptance. The larger
+The executable three-case harness is a prerequisite but not a claim of full acceptance. Its five fixed host/guest
+source files must be bound by an independently reviewed canonical-manifest SHA-256 before payload creation. The larger
 manual inventory additionally calls for hostile pre-publish targets, fault injection and runtime
 worker isolation. Exact guest unit fragments, effective systemd properties, no-ACL ownership and
 unknown-member checks narrow that gap; any unexecuted item must still be reported as unexecuted.
