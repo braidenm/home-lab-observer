@@ -105,13 +105,16 @@ prepare_guest() {
   printf 'nameserver 127.0.0.1\noptions timeout:1 attempts:1 ndots:1\n' > /etc/resolv.conf
   chmod 0644 /etc/resolv.conf
   [ ! -L /etc/resolv.conf ] && [ "$(stat -c '%u:%g:%a' /etc/resolv.conf)" = 0:0:644 ] || fail DNS_CONFIG
+  local certificate_sans=DNS:app.braidenmiller.com
+  [ "$1" != bootstrap ] || certificate_sans=DNS:app.braidenmiller.com,DNS:github.com,DNS:release-assets.githubusercontent.com
   openssl req -new -x509 -newkey rsa:2048 -nodes -days 1 \
     -subj '/CN=app.braidenmiller.com' \
-    -addext 'subjectAltName=DNS:app.braidenmiller.com' \
+    -addext "subjectAltName=$certificate_sans" \
     -addext 'basicConstraints=critical,CA:TRUE' \
     -keyout "$fixture_root/key.pem" -out "$fixture_root/cert.pem" >/dev/null 2>&1 || fail CERT
   cp "$fixture_root/cert.pem" /usr/local/share/ca-certificates/hlo-first-install-fixture.crt
   update-ca-certificates >/dev/null 2>&1 || fail TRUST
+  [ "$1" != bootstrap ] || return 0
   local receiver_mode=normal
   [ "$1" != interrupt ] || receiver_mode=interrupt
   [ "$1" != activation ] || receiver_mode=activation
@@ -149,11 +152,22 @@ EOF
 }
 
 case "${1:-}" in
-  success|success-cut|interrupt|activation)
+  success|success-cut|interrupt|activation|bootstrap)
     baseline
     prepare_guest "$1"
     bundle="$(cat "$fixture_root/bundle-path")"
     digest="$(cat "$fixture_root/manifest-sha")"
+    if [ "$1" = bootstrap ]; then
+      install_reboot_assertion bootstrap
+      python3 "$payload/bootstrap_guest.py" || fail BOOTSTRAP
+      installed_assertions
+      python3 "$payload/assert_guest.py" capture || fail DEEP_ASSERT
+      retry_refuses_without_mutation
+      python3 "$payload/assert_guest.py" verify || fail RETRY_MUTATED
+      emit BOOTSTRAP_FIRST_BOOT
+      systemctl reboot
+      exit 0
+    fi
     set +e
     preflight_result="$(timeout 12 "$bundle/observer-connected-install" install "$bundle" "$(printf '%064d' 0)" "$server" </dev/null 2>&1)"
     preflight_status=$?
@@ -223,7 +237,7 @@ case "${1:-}" in
       kill -0 "$receiver_pid" 2>/dev/null || fail RECEIVER
       python3 "$payload/activation_guest.py" reboot || fail ACTIVATION_REBOOT
       emit ACTIVATION_REBOOT_PASS
-    elif [ "$mode" = success ] || [ "$mode" = success-cut ]; then
+    elif [ "$mode" = success ] || [ "$mode" = success-cut ] || [ "$mode" = bootstrap ]; then
       installed_assertions
       python3 "$payload/assert_guest.py" verify || fail REBOOT_STATE
       retry_refuses_without_mutation

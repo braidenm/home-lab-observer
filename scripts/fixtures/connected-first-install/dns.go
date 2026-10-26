@@ -18,6 +18,10 @@ const dnsMaxPacket = 512
 var dnsAlias = [4]byte{93, 184, 216, 34}
 
 func dnsReply(packet []byte) []byte {
+	return dnsReplyFor(packet, false)
+}
+
+func dnsReplyFor(packet []byte, bootstrap bool) []byte {
 	if len(packet) < 17 || len(packet) > dnsMaxPacket {
 		return nil
 	}
@@ -48,8 +52,9 @@ func dnsReply(packet []byte) []byte {
 	response := make([]byte, questionEnd)
 	copy(response, packet[:questionEnd])
 	responseFlags := uint16(0x8400) | (flags & 0x0100) // QR, authoritative, no recursion available.
-	answerA := name == dnsHostname && qclass == 1 && qtype == 1
-	if name != dnsHostname || qclass != 1 || (qtype != 1 && qtype != 28) {
+	allowed := name == dnsHostname || bootstrap && (name == "github.com" || name == "release-assets.githubusercontent.com")
+	answerA := allowed && qclass == 1 && qtype == 1
+	if !allowed || qclass != 1 || (qtype != 1 && qtype != 28) {
 		responseFlags |= 5 // REFUSED: no other name, class or type is served.
 	}
 	binary.BigEndian.PutUint16(response[2:4], responseFlags)
@@ -115,6 +120,10 @@ func dnsEmptyOPT(packet []byte) bool {
 }
 
 func serveDNS(conn net.PacketConn) error {
+	return serveDNSFor(conn, false)
+}
+
+func serveDNSFor(conn net.PacketConn, bootstrap bool) error {
 	var packet [dnsMaxPacket + 1]byte
 	for {
 		if err := conn.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
@@ -132,7 +141,7 @@ func serveDNS(conn net.PacketConn) error {
 		if !ok || !address.IP.IsLoopback() {
 			continue
 		}
-		reply := dnsReply(packet[:length])
+		reply := dnsReplyFor(packet[:length], bootstrap)
 		if reply == nil {
 			continue
 		}

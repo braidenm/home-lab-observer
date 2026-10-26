@@ -3,6 +3,7 @@ import contextlib
 import io
 import json
 import os
+import subprocess
 from pathlib import Path
 import sys
 import tempfile
@@ -14,9 +15,48 @@ import assert_guest
 import drive_pty
 import preflight_probe
 import activation_guest
+import bootstrap_guest
 
 
 class HarnessAdmissionTest(unittest.TestCase):
+    def test_bootstrap_pidfd_acquisition_failure_joins_owned_receiver(self):
+        child = mock.Mock()
+        with mock.patch.object(bootstrap_guest.subprocess, "Popen", return_value=child), mock.patch.object(bootstrap_guest.os, "pidfd_open", side_effect=OSError("fixture acquisition")):
+            with self.assertRaises(OSError):
+                bootstrap_guest.receiver("bootstrap-valid")
+        child.terminate.assert_called_once_with()
+        child.wait.assert_called_once_with(timeout=5)
+
+    def test_bootstrap_group_check_detects_lingering_owned_child(self):
+        child = subprocess.Popen([sys.executable, "-I", "-c", "import time; time.sleep(10)"], start_new_session=True)
+        try:
+            self.assertIn(child.pid, bootstrap_guest.group_members(child.pid))
+        finally:
+            child.terminate()
+            child.wait(timeout=3)
+        self.assertEqual(bootstrap_guest.group_members(child.pid), [])
+
+    def test_bootstrap_requires_independent_helper_pin_and_opt_in_scope(self):
+        with tempfile.TemporaryDirectory() as directory:
+            helper = Path(directory) / "install-connected-linux.sh"
+            helper.write_bytes(b"public helper")
+            digest = hashlib.sha256(helper.read_bytes()).hexdigest()
+            run_vm.check_helper_pin("bootstrap", helper, digest)
+            for scope, file, pin in (("bootstrap", None, digest), ("bootstrap", helper, None), ("bootstrap", helper, "bad"), ("bootstrap", helper, "b" * 64), ("all", helper, digest), ("activation", helper, digest)):
+                with self.assertRaises(RuntimeError):
+                    run_vm.check_helper_pin(scope, file, pin)
+            run_vm.check_helper_pin("all", helper, None)
+
+    def test_bootstrap_owner_command_is_public_fixed_and_secret_free(self):
+        command = bootstrap_guest.owner_command("0.1.0-canary.1", "a" * 64)
+        for required in ("umask 077", "mktemp -d /home/hlo-fixture-owner/observer-setup.XXXXXXXX", "sha256sum --check --strict --status", "sudo -- /bin/bash", "22001:22001:700", "22001:22001:600", "--proto '=https' --proto-redir '=https'"):
+            self.assertIn(required, command)
+        for forbidden in ("hle_", "hlc_", "--insecure", "CURL_CA_BUNDLE", "rm -rf", "curl |", "latest"):
+            self.assertNotIn(forbidden, command)
+        for version, pin in (("latest", "a" * 64), ("0.1.0-canary.01", "a" * 64), ("0.1.0-canary.1", "bad")):
+            with self.assertRaises(ValueError):
+                bootstrap_guest.owner_command(version, pin)
+
     def test_activation_failure_phase_is_allowlisted_not_raw_output(self):
         self.assertEqual(activation_guest.command_failure(b"RECOVERY_REQUIRED: preserve installed state and inspect the owned services before retrying.\n"), "RECOVERY")
         for phase in activation_guest.PHASES:

@@ -19,7 +19,7 @@ MIB = 1024 * 1024
 GIB = 1024 * MIB
 CASE_TIMEOUT = 9 * 60
 CASES = ("success", "interrupt", "success-cut")
-HARNESS_FILES = ("run_vm.py", "guest.sh", "drive_pty.py", "assert_guest.py", "preflight_probe.py", "activation_guest.py")
+HARNESS_FILES = ("run_vm.py", "guest.sh", "drive_pty.py", "assert_guest.py", "preflight_probe.py", "activation_guest.py", "bootstrap_guest.py")
 SAFE_PATH = "/usr/sbin:/usr/bin:/sbin:/bin"
 TOOLS: dict[str, str] = {}
 
@@ -149,7 +149,15 @@ def check_probe(probe: Path, expected_digest: str) -> None:
         refuse("REVIEWED_PROBE_REFUSED")
 
 
-def payload_image(instance: Path, archive: Path, manifest: Path, checksums: Path, receiver: Path, probe: Path, expected_commit: str, expected_manifest_sha256: str, expected_archive_sha256: str, expected_receiver_sha256: str, expected_probe_sha256: str, expected_harness_sha256: str, helper: Path | None = None) -> Path:
+def check_helper_pin(scope: str, helper: Path | None, expected: str | None) -> None:
+    if scope == "bootstrap":
+        if helper is None or expected is None or not re.fullmatch(r"[a-f0-9]{64}", expected) or sha256(helper) != expected:
+            refuse("REVIEWED_HELPER_REFUSED")
+    elif expected is not None:
+        refuse("HELPER_SCOPE_REFUSED")
+
+
+def payload_image(instance: Path, archive: Path, manifest: Path, checksums: Path, receiver: Path, probe: Path, expected_commit: str, expected_manifest_sha256: str, expected_archive_sha256: str, expected_receiver_sha256: str, expected_probe_sha256: str, expected_harness_sha256: str, helper: Path | None = None, expected_helper: str | None = None) -> Path:
     directory = instance / "payload"
     directory.mkdir(mode=0o700)
     for source in (archive, manifest, checksums, receiver, probe):
@@ -161,7 +169,10 @@ def payload_image(instance: Path, archive: Path, manifest: Path, checksums: Path
     scripts = Path(__file__).resolve().parent
     for name in HARNESS_FILES[1:]:
         shutil.copyfile(scripts / name, directory / name)
-    (directory / "reviewed-identity.json").write_text(json.dumps({"commit": expected_commit, "manifest_sha256": expected_manifest_sha256, "archive_sha256": expected_archive_sha256, "receiver_sha256": expected_receiver_sha256, "probe_sha256": expected_probe_sha256, "harness_sha256": expected_harness_sha256}, sort_keys=True) + "\n", encoding="ascii")
+    identity = {"commit": expected_commit, "manifest_sha256": expected_manifest_sha256, "archive_sha256": expected_archive_sha256, "receiver_sha256": expected_receiver_sha256, "probe_sha256": expected_probe_sha256, "harness_sha256": expected_harness_sha256}
+    if expected_helper is not None:
+        identity["helper_sha256"] = expected_helper
+    (directory / "reviewed-identity.json").write_text(json.dumps(identity, sort_keys=True) + "\n", encoding="ascii")
     (directory / "connected-first-install-receiver").chmod(0o755)
     (directory / "connected-first-install-preflight-probe").chmod(0o755)
     target = instance / "payload.ext4"
@@ -268,9 +279,10 @@ def case(instance: Path, name: str, base: Path, payload: Path, keep_disks: bool)
             "interrupt": "HLO_VM_POWER_CUT_READY",
             "success-cut": "HLO_VM_SUCCESS_READY_FOR_CUT",
             "activation": "HLO_VM_ACTIVATION_FIRST_BOOT",
+            "bootstrap": "HLO_VM_BOOTSTRAP_FIRST_BOOT",
         }[name]
         wait_marker(first, console, first_marker)
-        abrupt = name not in ("success", "activation")
+        abrupt = name not in ("success", "activation", "bootstrap")
         if abrupt:
             stop_exact(first, True)
         else:
@@ -310,9 +322,10 @@ def main() -> int:
     parser.add_argument("--expected-receiver-sha256", required=True)
     parser.add_argument("--expected-probe-sha256", required=True)
     parser.add_argument("--expected-harness-sha256", required=True)
+    parser.add_argument("--expected-helper-sha256")
     parser.add_argument("--work-root", required=True)
     parser.add_argument("--keep-disks", action="store_true")
-    parser.add_argument("--scope", choices=("stopped", "activation", "all"), default="stopped")
+    parser.add_argument("--scope", choices=("stopped", "activation", "all", "bootstrap"), default="stopped")
     args = parser.parse_args()
     try:
         if os.geteuid() != 0 or not re.fullmatch(r"[a-f0-9]{64}", args.image_sha256) or not re.fullmatch(r"[a-f0-9]{40}", args.expected_commit) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_manifest_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_archive_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_receiver_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_probe_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_harness_sha256):
@@ -340,6 +353,7 @@ def main() -> int:
         checksums = owned_file(args.checksums, 4096)
         helper_path = checksums.parent / "install-connected-linux.sh"
         helper = owned_file(str(helper_path), 64 * 1024) if helper_path.exists() or helper_path.is_symlink() else None
+        check_helper_pin(args.scope, helper, args.expected_helper_sha256)
         receiver = owned_file(args.receiver, 20 * MIB)
         probe = owned_file(args.probe, 100 * MIB)
         if sha256(receiver) != args.expected_receiver_sha256:
@@ -356,8 +370,8 @@ def main() -> int:
             instance = Path(tempfile.mkdtemp(prefix="hlo-first-install-", dir=root))
             instance.chmod(0o700)
             (instance / ".hlo-owned-instance").write_text("first-install-vm/v1\n")
-            payload = payload_image(instance, archive, manifest, checksums, receiver, probe, args.expected_commit, args.expected_manifest_sha256, args.expected_archive_sha256, args.expected_receiver_sha256, args.expected_probe_sha256, args.expected_harness_sha256, helper)
-            cases = CASES if args.scope == "stopped" else (("activation",) if args.scope == "activation" else (*CASES, "activation"))
+            payload = payload_image(instance, archive, manifest, checksums, receiver, probe, args.expected_commit, args.expected_manifest_sha256, args.expected_archive_sha256, args.expected_receiver_sha256, args.expected_probe_sha256, args.expected_harness_sha256, helper, args.expected_helper_sha256)
+            cases = CASES if args.scope == "stopped" else ((args.scope,) if args.scope in ("activation", "bootstrap") else (*CASES, "activation"))
             for name in cases:
                 case(instance, name, image, payload, args.keep_disks)
             if not args.keep_disks:

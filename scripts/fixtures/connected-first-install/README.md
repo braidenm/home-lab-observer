@@ -137,10 +137,25 @@ bounded claims are recorded in
 
 ## Bounded manual harness
 
+`--scope bootstrap` is a separate manual opt-in for the generated public helper;
+`--scope all` still means only the original stopped/activation cases. Bootstrap
+requires the new three-asset package plus `--expected-helper-sha256` supplied
+independently from the reviewed build. The exact helper is downloaded inside
+the no-NIC guest using its synthetic public GitHub TLS/DNS service, checked as
+UID/GID 22001 in private owner staging, and elevated unchanged through sudo
+with a real terminal. A changed helper, changed archive, HTTP downgrade and
+redirect loop must refuse before enrollment; the final valid cross-host HTTPS
+redirect must install stopped and stay stopped after reboot. Port 80 has an
+actual accept trap; request/enrollment counters and residue are checked between
+joined fixture receivers. See [the scope/proof plan](../../../specs/012-connected-observation/bootstrap-vm-acceptance.md).
+The fixture is not a source of production sudo rules, credentials, CA policy or
+network aliases. Passing it is not public release or owner-host acceptance.
+
 For the separate activation journey use `--scope activation`; the default remains
 `--scope stopped`, and `--scope all` combines them. Pin the current six-file harness
 manifest in this exact order: `run_vm.py guest.sh drive_pty.py assert_guest.py
-preflight_probe.py activation_guest.py`. The activation receiver accepts only
+preflight_probe.py activation_guest.py bootstrap_guest.py`. Historical acceptance
+records retain their original six-file pin. The activation receiver accepts only
 synthetic numeric-host uploads and records bounded counters. Its successful
 stop/start/reboot evidence is separate from the historical stopped-install record;
 reboot still requires an explicit start and does not prove automatic boot support.
@@ -156,7 +171,7 @@ checked-out harness files and every input/work-root ancestor must also be
 root-owned and not group/other writable; stage the reviewed PR head in such a
 directory before running it with `sudo`. Supply
 the published Canonical image SHA-256 independently, plus the reviewed source
-commit, bundle-manifest SHA-256, archive SHA-256, synthetic-receiver SHA-256, and the canonical six-file harness
+commit, bundle-manifest SHA-256, archive SHA-256, synthetic-receiver SHA-256, and the canonical seven-file harness
 manifest SHA-256 from the approved build record; never accept
 digests derived only from the payload sidecars. The work root must already exist and be root-owned
 mode 0700. The script never fetches an image or opens a network connection.
@@ -166,7 +181,7 @@ acceptance contract:
 
 ```sh
 (cd scripts/fixtures/connected-first-install && \
-  sha256sum run_vm.py guest.sh drive_pty.py assert_guest.py preflight_probe.py activation_guest.py | sha256sum)
+  sha256sum run_vm.py guest.sh drive_pty.py assert_guest.py preflight_probe.py activation_guest.py bootstrap_guest.py | sha256sum)
 ```
 
 ```sh

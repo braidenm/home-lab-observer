@@ -27,13 +27,34 @@ type request struct {
 }
 
 func main() {
-	if len(os.Args) != 5 || os.Args[1] != "93.184.216.34:443" || (os.Args[4] != "normal" && os.Args[4] != "interrupt" && os.Args[4] != "activation") {
+	if len(os.Args) != 5 || os.Args[1] != "93.184.216.34:443" || (os.Args[4] != "normal" && os.Args[4] != "interrupt" && os.Args[4] != "activation" && !bootstrapMode(os.Args[4])) {
 		fmt.Fprintln(os.Stderr, "FIXTURE_ARGS_REFUSED")
 		os.Exit(22)
 	}
 	var consumed atomic.Bool
 	interrupt := os.Args[4] == "interrupt"
 	handler := fixtureHandler(&consumed, interrupt)
+	bootstrap := bootstrapMode(os.Args[4])
+	if bootstrap {
+		download, err := loadBootstrapReceiver(os.Args[4])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "FIXTURE_BOOTSTRAP_REFUSED")
+			os.Exit(1)
+		}
+		handler = download.handler(handler)
+		trap, err := net.Listen("tcp4", "93.184.216.34:80")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "FIXTURE_HTTP_TRAP_FAILED")
+			os.Exit(1)
+		}
+		defer trap.Close()
+		go func() {
+			if download.serveHTTPTrap(trap) != nil {
+				fmt.Fprintln(os.Stderr, "FIXTURE_HTTP_TRAP_FAILED")
+				os.Exit(1)
+			}
+		}()
+	}
 	if os.Args[4] == "activation" {
 		admitted, err := restoreFixtureAdmission()
 		if err != nil {
@@ -61,7 +82,7 @@ func main() {
 	}
 	defer dns.Close()
 	go func() {
-		if serveDNS(dns) != nil {
+		if serveDNSFor(dns, bootstrap) != nil {
 			fmt.Fprintln(os.Stderr, "FIXTURE_DNS_FAILED")
 			os.Exit(1)
 		}
