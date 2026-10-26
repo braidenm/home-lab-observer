@@ -1,6 +1,7 @@
 """Unprivileged, owned-process tests of the exact embedded supervisor source."""
 import contextlib
 import io
+import errno
 import os
 import pathlib
 import pty
@@ -8,7 +9,9 @@ import signal
 import subprocess
 import sys
 import tempfile
+import struct
 import time
+from unittest import mock
 
 
 def wait_file(path):
@@ -89,6 +92,103 @@ for phase in ("download", "extract", "install"):
 # after handle teardown, and pre-cancel refusal without launching anything.
 namespace = {"__name__": "fixture"}
 exec(SOURCE, namespace)
+namespace["require_fd_xattrs"]()
+for failure in (OSError(errno.EOPNOTSUPP, "synthetic"), TypeError("synthetic"), OSError(errno.EACCES, "synthetic")):
+    with mock.patch.object(os, "removexattr", side_effect=failure):
+        try:
+            namespace["require_fd_xattrs"]()
+        except (OSError, ValueError):
+            pass
+        else:
+            raise AssertionError("unsupported fd xattrs admitted")
+
+# Real valid inherited access/default ACLs, plus a path swap after open. Ordinary
+# tests own only their private directory; only root UID/GID metadata is faked.
+# Actual root metadata/admission is separately proved by the disposable VM.
+clear_acl = namespace["clear_private_acl"]
+original_fstat = os.fstat
+def root_metadata(fd):
+    fields = list(original_fstat(fd))
+    fields[4] = fields[5] = 0
+    return os.stat_result(fields)
+acl = struct.pack("<I", 2) + b"".join(struct.pack("<HHI", tag, permission, identity) for tag, permission, identity in (
+    (1, 7, 0xffffffff), (2, 7, 100123), (4, 0, 0xffffffff), (16, 0, 0xffffffff), (32, 0, 0xffffffff)))
+with tempfile.TemporaryDirectory() as directory:
+    root = pathlib.Path(directory)
+    os.setxattr(root, "system.posix_acl_default", acl)
+    target = root / "new-private-directory"
+    target.mkdir(mode=0o700)
+    assert set(namespace["ACL_NAMES"]).issubset(os.listxattr(target))
+    os.setxattr(target, "user.hlo-fixture", b"keep")
+    moved = root / "anchored-original"
+    original_remove = os.removexattr
+    def replace_path_then_remove(fd, name):
+        assert type(fd) is int
+        if not moved.exists():
+            target.rename(moved)
+            target.mkdir(mode=0o700)
+        original_remove(fd, name)
+    with mock.patch.object(os, "fstat", side_effect=root_metadata), mock.patch.object(os, "removexattr", side_effect=replace_path_then_remove):
+        clear_acl(target)
+    assert not set(namespace["ACL_NAMES"]).intersection(os.listxattr(moved))
+    assert os.getxattr(moved, "user.hlo-fixture") == b"keep"
+    assert set(namespace["ACL_NAMES"]).issubset(os.listxattr(target))
+    assert moved.stat().st_mode & 0o7777 == 0o700
+
+with tempfile.TemporaryDirectory() as directory:
+    target = pathlib.Path(directory)
+    for error in (errno.EOPNOTSUPP, errno.EPERM, errno.EINVAL):
+        with mock.patch.object(os, "fstat", side_effect=root_metadata), mock.patch.object(os, "removexattr", side_effect=OSError(error, "synthetic")):
+            try:
+                clear_acl(target)
+            except OSError:
+                pass
+            else:
+                raise AssertionError("ACL syscall failure ignored")
+    with mock.patch.object(os, "fstat", side_effect=root_metadata):
+        clear_acl(target)  # ENODATA is the only accepted absence condition.
+    os.chmod(target, 0o755)
+    with mock.patch.object(os, "fstat", side_effect=root_metadata), mock.patch.object(os, "removexattr") as remove:
+        try:
+            clear_acl(target)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("wrong directory mode admitted")
+        remove.assert_not_called()
+    os.chmod(target, 0o700)
+    for uid, gid in ((1, 0), (0, 1)):
+        def foreign_metadata(fd):
+            fields = list(root_metadata(fd))
+            fields[4], fields[5] = uid, gid
+            return os.stat_result(fields)
+        with mock.patch.object(os, "fstat", side_effect=foreign_metadata), mock.patch.object(os, "removexattr") as remove:
+            try:
+                clear_acl(target)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("foreign owner/group admitted")
+            remove.assert_not_called()
+    def changed_metadata(fd, name):
+        os.fchmod(fd, 0o755)
+        raise OSError(errno.ENODATA, "synthetic")
+    with mock.patch.object(os, "fstat", side_effect=root_metadata), mock.patch.object(os, "removexattr", side_effect=changed_metadata):
+        try:
+            clear_acl(target)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("post-removal mode drift admitted")
+    os.chmod(target, 0o700)
+    with mock.patch.object(os, "fstat", side_effect=root_metadata), mock.patch.object(os, "listxattr", return_value=[namespace["ACL_NAMES"][0]]):
+        try:
+            clear_acl(target)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("remaining ACL admitted")
+
 Lifecycle = namespace["Lifecycle"]
 life = Lifecycle()
 original_open = os.pidfd_open

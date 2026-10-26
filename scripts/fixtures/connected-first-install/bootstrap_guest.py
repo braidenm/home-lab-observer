@@ -271,6 +271,8 @@ def main():
                     expected["redirects"] = 6
                 if mode == "bootstrap-valid":
                     expected["enrollments"] = 1
+                if delta != expected:
+                    print("HLO_VM_BOOTSTRAP_COUNTER_DELTA " + " ".join(key.upper() + "=" + str(delta[key]) for key in sorted(FIELDS)), flush=True)
                 need(delta == expected)
             finally:
                 join(process, handle)
