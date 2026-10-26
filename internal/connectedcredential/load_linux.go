@@ -42,7 +42,7 @@ func Load(server, connector string) (CredentialRecord, error) {
 		}
 		switch i {
 		case 0:
-			if s.Mode&07777 != 0755 && s.Mode&07777 != 01777 {
+			if !credentialRunMode(s.Mode & 07777) {
 				return CredentialRecord{}, ErrUnsafe
 			}
 		case 1:
@@ -68,6 +68,13 @@ func Load(server, connector string) (CredentialRecord, error) {
 		return CredentialRecord{}, ErrUnsafe
 	}
 	return DecodeCredential(b, server, connector)
+}
+
+// The installed uploader's inert /run is read-only; older isolated credential
+// fixtures use systemd's ordinary /run or sticky tmpfs. UID/type/no-follow and
+// the exact per-unit credential ACL checks remain mandatory above.
+func credentialRunMode(mode uint32) bool {
+	return mode == 0555 || mode == 0755 || mode == 01777
 }
 
 func workerACL(fd int, uid uint32, permission uint16) bool {

@@ -202,7 +202,7 @@ The actual uploader retains statuses 20/21/22 for credential rejection, terminal
 delivery and unclassified refusal. Upload-only startup adds terminal statuses:
 70 installed config/identity, 71 status-store open, 72 initial status publication,
 73 denied primitives, 74 restricted view, 75 activation-directory admission and
-76 rendezvous. Enrollment modes keep their existing statuses. Unknown stages
+76 rendezvous, 77 credential admission and 78 existing-ledger open. Enrollment modes keep their existing statuses. Unknown stages
 map to 22. All are failures with `Restart=no`; no code weakens a check, activates
 collection or reveals paths, credential bytes, environment or raw OS errors.
 
@@ -215,6 +215,14 @@ only its absence or that exact empty inert directory, never physical credential
 files, links, ACLs, metadata drift or unrelated children. The live per-unit
 credential mount and its UID ACL checks remain unchanged. This repair still needs
 fresh packaged acceptance; diagnostic-copy inspection is not acceptance evidence.
+
+After admitting that inert parent, the fresh packaged run reaches
+`UPLOADER_READY`: request/response, collector readiness, final checks and commit
+complete, then the uploader exits before its upload loop. The credential reader
+previously admitted only `/run` modes 0755/01777 although the exact installed
+physical profile specifies root-owned 0555. Admit that more restrictive mode too;
+do not alter the root/type/no-follow checks or per-unit UID ACL/file admission.
+Keep credential/ledger refusal distinguishable through fixed terminal statuses.
 
 ## Adapter delivery checkpoint, 2026-10-25
 
