@@ -24,3 +24,7 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run test:contracts
+      - name: Check connected candidate policy without building or publishing
+        run: |
+          bash -n scripts/build-connected-linux.sh
+          python3 -I -m unittest discover -s scripts -p test_connected_candidate.py -v
