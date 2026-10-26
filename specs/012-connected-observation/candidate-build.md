@@ -105,3 +105,19 @@ must still pass the same guard on its own exact bytes.
 
 This slice is not exact-artifact installed acceptance, immutable publication,
 anonymous-download proof, real-server enrollment or owner/delegate sharing proof.
+
+## Isolated interpreter cleanliness correction
+
+The first hosted dispatch, [run 40395987272](https://github.com/braidenm/home-lab-observer/actions/runs/40395987272),
+failed the builder's clean-source precondition before packaging or upload. Its
+tests passed, but `python3 -I` ignores `PYTHONDONTWRITEBYTECODE` and imported tests
+created untracked bytecode. This was reproduced with the exact isolated command.
+All controlled isolated Python invocations now explicitly pass `-B`; a workflow
+regression enforces that flag. The same focused suites must leave no bytecode
+behind before the actual builder runs. Keep the clean-source requirement intact;
+do not ignore generated files or delete dirty source inside the release job.
+No candidate, VM acceptance or publication is claimed for the failed dispatch.
+
+[Python 3.12 command-line guidance](https://docs.python.org/3.12/using/cmdline.html)
+documents both isolated mode's ignored environment and explicit `-B` behavior
+(checked 2026-10-26). A new dispatch uses the reviewed merged correction source.

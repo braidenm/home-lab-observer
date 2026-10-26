@@ -46,7 +46,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CANDIDATE_VERSION: ${{ inputs.version }}
-        run: python3 -I scripts/connected_candidate.py authorize --version "$CANDIDATE_VERSION"
+        run: python3 -I -B scripts/connected_candidate.py authorize --version "$CANDIDATE_VERSION"
 
   build:
     needs: authorize
@@ -67,7 +67,7 @@ jobs:
       - name: Focused packaging and identity tests
         run: |
           go test ./cmd/connectedpack ./internal/connectedbootstrap ./internal/connectedbundle ./internal/connectedcompat ./internal/connectedidentity ./internal/connectedunits
-          python3 -I -m unittest discover -s scripts -p test_connected_candidate.py -v
+          python3 -I -B -m unittest discover -s scripts -p test_connected_candidate.py -v
       - name: Build three roles twice and compare every final public byte
         env:
           VERSION: ${{ needs.authorize.outputs.version }}
@@ -94,7 +94,7 @@ jobs:
           RUN_ID: ${{ needs.authorize.outputs.run_id }}
           RUN_ATTEMPT: ${{ needs.authorize.outputs.run_attempt }}
         run: |
-          python3 -I scripts/connected_candidate.py create --directory dist/connected/payload \
+          python3 -I -B scripts/connected_candidate.py create --directory dist/connected/payload \
             --version "$VERSION" --source "$SOURCE" --workflow-id "$WORKFLOW_ID" --run-id "$RUN_ID" --run-attempt "$RUN_ATTEMPT"
       - name: Retain only the five closed candidate files
         id: upload
@@ -126,7 +126,7 @@ jobs:
           path: dist/payload
           merge-multiple: true
       - name: Verify the exact five downloaded files without executing them
-        run: python3 -I scripts/connected_candidate.py verify --directory dist/payload
+        run: python3 -I -B scripts/connected_candidate.py verify --directory dist/payload
       - name: Generate SPDX dependencies from the actual final payload
         uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         env:
@@ -140,7 +140,7 @@ jobs:
           upload-release-assets: false
           dependency-snapshot: false
       - name: Reverify public bytes after the read-only SBOM scan
-        run: python3 -I scripts/connected_candidate.py verify-sbom --directory dist/payload --sbom dist/connected.spdx.json
+        run: python3 -I -B scripts/connected_candidate.py verify-sbom --directory dist/payload --sbom dist/connected.spdx.json
       - name: Attest dependencies for every final candidate subject
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:

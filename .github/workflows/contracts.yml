@@ -27,8 +27,8 @@ jobs:
       - name: Check connected candidate policy without building or publishing
         run: |
           bash -n scripts/build-connected-linux.sh
-          python3 -I -m unittest discover -s scripts -p test_connected_candidate.py -v
+          python3 -I -B -m unittest discover -s scripts -p test_connected_candidate.py -v
       - name: Check pure connected publication admission without provider access
-        run: python3 -I -m unittest discover -s scripts -p test_connected_promotion_policy.py -v
+        run: python3 -I -B -m unittest discover -s scripts -p test_connected_promotion_policy.py -v
       - name: Check owner promotion with synthetic provider operations only
-        run: python3 -I -m unittest discover -s scripts -p test_connected_promote.py -v
+        run: python3 -I -B -m unittest discover -s scripts -p test_connected_promote.py -v
