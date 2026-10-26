@@ -30,3 +30,5 @@ jobs:
           python3 -I -m unittest discover -s scripts -p test_connected_candidate.py -v
       - name: Check pure connected publication admission without provider access
         run: python3 -I -m unittest discover -s scripts -p test_connected_promotion_policy.py -v
+      - name: Check owner promotion with synthetic provider operations only
+        run: python3 -I -m unittest discover -s scripts -p test_connected_promote.py -v
