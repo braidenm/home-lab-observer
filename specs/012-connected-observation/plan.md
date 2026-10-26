@@ -35,3 +35,13 @@ credential lifecycle requirements before installation or owner canary activation
 Review [ADR 014](../../docs/adr/014-linux-connected-canary-workers.md), the [worker plan](worker-plan.md) and
 [pending worker tasks](worker-tasks.md) before implementing connected workers. These proposed slices do not activate
 upload or change the owner-private handoff policy.
+
+## Explicit Linux lifecycle composition
+
+Implement [the start/stop/status contract](activation-lifecycle.md) and ADR 021 in
+the installed command. The root coordinator holds the installation lease and
+verifies exact installed resources, manager invocation, process identity and
+same-process probes before upload admission. Deterministic fault tests cover
+both cleanup attempts, stale status/response, process replacement and uncertain
+commit. This slice adds no HTTP endpoint or telemetry fields. Use exact packaged
+VM acceptance before a separate owner canary; explicit stop preserves the ledger.
