@@ -7,6 +7,19 @@ import (
 	"testing"
 )
 
+func TestCredentialRunModeIsClosedAndIncludesReadOnlyInstalledParent(t *testing.T) {
+	for _, mode := range []uint32{0555, 0755, 01777} {
+		if !credentialRunMode(mode) {
+			t.Fatal("supported manager parent refused")
+		}
+	}
+	for _, mode := range []uint32{0, 0500, 0550, 0644, 0700, 0775, 0777, 02755, 04755, 07777} {
+		if credentialRunMode(mode) {
+			t.Fatal("unrecognized parent mode accepted")
+		}
+	}
+}
+
 func TestExactManagerACL(t *testing.T) {
 	for _, permission := range []uint16{4, 5} {
 		b := make([]byte, 44)

@@ -102,12 +102,12 @@ func run(ctx context.Context) (code int) {
 	}
 	secret, err := connectedcredential.Load(c.ServerID, c.ConnectorID)
 	if err != nil {
-		return 22
+		return 77
 	}
 	binding := uploadstate.Binding{ServerID: c.ServerID, ConnectorID: c.ConnectorID}
 	ledger, err := uploadledger.OpenExisting(ctx, "/state/ledger", binding)
 	if err != nil {
-		return 22
+		return 78
 	}
 	defer func() {
 		if ledger.Close() != nil {
