@@ -104,6 +104,51 @@ func TestPhysicalScaffoldRejectsEveryUnexpectedLeafAndMetadataDrift(t *testing.T
 	if checkPhysicalScaffold(root, uid, gid) != nil {
 		t.Fatal("accepted physical scaffold refused")
 	}
+	credentials := filepath.Join(root, "run/credentials")
+	if err := os.Chmod(filepath.Join(root, "run"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(credentials, 0755); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Chmod(filepath.Join(root, "run"), 0555)
+	if checkPhysicalScaffold(root, uid, gid) != nil {
+		t.Fatal("exact empty systemd credential parent refused")
+	}
+	for _, mode := range []os.FileMode{0700, 0775, 0755 | os.ModeSetgid} {
+		if err := os.Chmod(credentials, mode); err != nil {
+			t.Fatal(err)
+		}
+		if checkPhysicalScaffold(root, uid, gid) == nil {
+			t.Fatal("credential parent metadata drift admitted")
+		}
+	}
+	_ = os.Chmod(credentials, 0755)
+	if err := os.WriteFile(filepath.Join(credentials, "not-emitted"), []byte("synthetic-private-value"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if checkPhysicalScaffold(root, uid, gid) == nil {
+		t.Fatal("physical credential content admitted")
+	}
+	if err := os.Remove(filepath.Join(credentials, "not-emitted")); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Chmod(filepath.Join(root, "run"), 0755)
+	if err := os.Remove(credentials); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("systemd", credentials); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Chmod(filepath.Join(root, "run"), 0555)
+	if checkPhysicalScaffold(root, uid, gid) == nil {
+		t.Fatal("credential parent alias admitted")
+	}
+	_ = os.Chmod(filepath.Join(root, "run"), 0755)
+	if err := os.Remove(credentials); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Chmod(filepath.Join(root, "run"), 0555)
 	foreign := filepath.Join(root, "foreign-top-level")
 	if err := os.Mkdir(foreign, 0755); err != nil {
 		t.Fatal(err)
