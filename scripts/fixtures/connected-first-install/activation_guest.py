@@ -19,7 +19,7 @@ SECRET = Path("/etc/home-lab-observer-connected/credentials/connector.json")
 LEDGER = Path("/var/lib/home-lab-observer-connected/ledger")
 UNITS = ("home-lab-observer-connected-collector.service", "home-lab-observer-connected-uploader.service")
 PHASES = frozenset(("REQUEST", "LEASE", "INSTALLED_STATE", "HOST_PROFILE", "PRINCIPALS", "SERVICE_STATE", "RUNTIME_GATE", "UNKNOWN"))
-FAILURES = frozenset(("RECORD", "OPERATION", "COMMAND", "UPLOAD", "STOP", "PERSISTENCE", "BOUNDS", "INPUT", "BINDING")) | frozenset("COMMAND_" + phase for phase in PHASES)
+FAILURES = frozenset(("RECORD", "OPERATION", "COMMAND", "UPLOAD", "STOP", "PERSISTENCE", "BOUNDS", "INPUT", "BINDING")) | frozenset(operation + "_" + reason for operation in ("START", "STOP", "STATUS") for reason in ("COMMAND", "RECOVERY", *("COMMAND_" + phase for phase in PHASES)))
 
 
 class Refused(Exception):
@@ -38,6 +38,8 @@ def read_json(path: Path) -> dict:
 
 
 def command_failure(data: bytes) -> str:
+    if data == b"RECOVERY_REQUIRED: preserve installed state and inspect the owned services before retrying.\n":
+        return "RECOVERY"
     match = re.fullmatch(rb"OPERATION_REFUSED: ([A-Z_]+)\. Verify the installed bundle, service state and policy\.\n", data)
     if match and match[1].decode("ascii") in PHASES:
         return "COMMAND_" + match[1].decode("ascii")
@@ -64,7 +66,7 @@ def command(binary: Path, operation: str) -> bytes:
             if len(data) > 4096:
                 raise Refused("COMMAND")
         if process.wait(timeout=max(0.1, deadline - time.monotonic())) != 0:
-            raise Refused(command_failure(bytes(data)))
+            raise Refused(operation.upper() + "_" + command_failure(bytes(data)))
         return bytes(data)
     finally:
         if process.poll() is None:
