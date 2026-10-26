@@ -1,0 +1,156 @@
+name: Build connected Linux candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact unused connected version (0.x.y-canary.N)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: connected-linux-candidate
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  GOFLAGS: -buildvcs=false
+  GOTOOLCHAIN: local
+  PYTHONDONTWRITEBYTECODE: '1'
+
+jobs:
+  authorize:
+    if: github.repository_id == '1362278980' && github.repository_owner_id == '44215293' && github.ref == 'refs/heads/main' && github.actor == 'braidenm' && github.triggering_actor == 'braidenm'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    outputs:
+      version: ${{ steps.identity.outputs.version }}
+      source: ${{ steps.identity.outputs.source }}
+      workflow_id: ${{ steps.identity.outputs.workflow_id }}
+      run_id: ${{ steps.identity.outputs.run_id }}
+      run_attempt: ${{ steps.identity.outputs.run_attempt }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Authorize exact current-main owner dispatch and attempt
+        id: identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_VERSION: ${{ inputs.version }}
+        run: python3 -I scripts/connected_candidate.py authorize --version "$CANDIDATE_VERSION"
+
+  build:
+    needs: authorize
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.authorize.outputs.source }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.3'
+          cache: true
+      - name: Focused packaging and identity tests
+        run: |
+          go test ./cmd/connectedpack ./internal/connectedbootstrap ./internal/connectedbundle ./internal/connectedcompat ./internal/connectedidentity ./internal/connectedunits
+          python3 -I -m unittest discover -s scripts -p test_connected_candidate.py -v
+      - name: Build three roles twice and compare every final public byte
+        env:
+          VERSION: ${{ needs.authorize.outputs.version }}
+          SOURCE: ${{ needs.authorize.outputs.source }}
+        run: |
+          mkdir -m 700 dist
+          bash scripts/build-connected-linux.sh "$VERSION" "$SOURCE" dist/connected
+      - name: Scan reachable dependencies of the three released commands
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOARCH: amd64
+          GOAMD64: v1
+          GOWORK: 'off'
+          GOENV: 'off'
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          "$(go env GOPATH)/bin/govulncheck" ./cmd/observer-connected-collector ./cmd/observer-connected-uploader ./cmd/observer-connected-install
+      - name: Bind bounded candidate metadata to the closed payload
+        env:
+          VERSION: ${{ needs.authorize.outputs.version }}
+          SOURCE: ${{ needs.authorize.outputs.source }}
+          WORKFLOW_ID: ${{ needs.authorize.outputs.workflow_id }}
+          RUN_ID: ${{ needs.authorize.outputs.run_id }}
+          RUN_ATTEMPT: ${{ needs.authorize.outputs.run_attempt }}
+        run: |
+          python3 -I scripts/connected_candidate.py create --directory dist/connected/payload \
+            --version "$VERSION" --source "$SOURCE" --workflow-id "$WORKFLOW_ID" --run-id "$RUN_ID" --run-attempt "$RUN_ATTEMPT"
+      - name: Retain only the five closed candidate files
+        id: upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: connected-linux-${{ needs.authorize.outputs.version }}-${{ needs.authorize.outputs.run_id }}-${{ needs.authorize.outputs.run_attempt }}
+          path: dist/connected/payload/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  attest:
+    needs: [authorize, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.authorize.outputs.source }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact_id }}
+          path: dist/payload
+          merge-multiple: true
+      - name: Verify the exact five downloaded files without executing them
+        run: python3 -I scripts/connected_candidate.py verify --directory dist/payload
+      - name: Generate SPDX dependencies from the actual final payload
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        env:
+          SYFT_CHECK_FOR_APP_UPDATE: 'false'
+        with:
+          path: dist/payload/home-lab-observer-connected_${{ needs.authorize.outputs.version }}_linux_amd64.tar.gz
+          syft-version: v1.55.0
+          format: spdx-json
+          output-file: dist/connected.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+          dependency-snapshot: false
+      - name: Reverify public bytes after the read-only SBOM scan
+        run: python3 -I scripts/connected_candidate.py verify-sbom --directory dist/payload --sbom dist/connected.spdx.json
+      - name: Attest dependencies for every final candidate subject
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/payload/*
+          sbom-path: dist/connected.spdx.json
+          show-summary: true
+      - name: Attest provenance of all five files and their exact SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            dist/payload/*
+            dist/connected.spdx.json
+          show-summary: true
