@@ -83,6 +83,16 @@ func checkPhysicalScaffold(root string, uid, gid uint32) error {
 	}
 	for _, spec := range uploaderScaffold {
 		d, err := readViewDirectory(root + "/" + spec.name)
+		// LoadCredential creates this inert parent in RootDirectory. The live
+		// per-unit credential mount is separate; never accept credential bytes,
+		// aliases, writable metadata or unknown children in the physical tree.
+		if spec.name == "run" && slices.Equal(d.entries, []string{"credentials", "systemd"}) {
+			credentials, readErr := readViewDirectory(root + "/run/credentials")
+			if readErr != nil || !safeScaffold(credentials, scaffoldDirectory{"run/credentials", 0755, nil}, uid, gid, false) {
+				return ErrUnsafe
+			}
+			spec.children = []string{"credentials", "systemd"}
+		}
 		if err != nil || !safeScaffold(d, spec, uid, gid, false) {
 			return ErrUnsafe
 		}

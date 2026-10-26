@@ -206,6 +206,16 @@ delivery and unclassified refusal. Upload-only startup adds terminal statuses:
 map to 22. All are failures with `Restart=no`; no code weakens a check, activates
 collection or reveals paths, credential bytes, environment or raw OS errors.
 
+The exact packaged VM then produced uploader status 76 (rendezvous) and root
+cleanup-required. Inspection of a separate journal-replayed diagnostic disk copy
+found systemd's physical `run/credentials` parent (root:root 0755, empty) added by
+the first real `LoadCredential` worker launch. The previous closed physical-tree
+audit cannot pass its pre-request recheck with that parent present. Admit
+only its absence or that exact empty inert directory, never physical credential
+files, links, ACLs, metadata drift or unrelated children. The live per-unit
+credential mount and its UID ACL checks remain unchanged. This repair still needs
+fresh packaged acceptance; diagnostic-copy inspection is not acceptance evidence.
+
 ## Adapter delivery checkpoint, 2026-10-25
 
 The first current-main slice adds only fixed activation record, manager-property and
