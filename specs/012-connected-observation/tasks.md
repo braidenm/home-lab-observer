@@ -37,6 +37,9 @@
   - [x] Add the same-process uploader-side startup rendezvous as an unused Linux library; root transaction and installed enforcement remain open.
   - [x] Add fixed activation record, manager-invocation and dual-stack probe adapters; refuse metadata drift,
     inherited descriptor stores and unexpected fixture connections. This slice adds no service start command.
+  - [x] Compose explicit Linux start/stop/status commands under the installation lease, validate the complete
+    installed identity, and run invocation-bound startup checks before credentials or uploads. Prove cancellation,
+    stale responses, process replacement and uncertain commit cleanup; packaged VM acceptance follows before canary.
   - [x] Add pure fixed-stage byte admission for the proposal, CA bytes and exact predecessor chain; this does not establish filesystem ownership or durability.
   - [x] Classify complete staged evidence without treating a retained predecessor receipt as new completion; this does not permit abort, cleanup or worker startup.
   - [x] Derive exact previous/next config, hosts and reviewed unit bytes from the record and stage CA; active filesystem verification and writes remain open.

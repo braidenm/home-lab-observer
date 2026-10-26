@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -34,8 +35,11 @@ func run(ctx context.Context) int {
 	if _, err := connectedidentity.Resolve(releaseIdentity, "install"); err != nil {
 		return 22
 	}
+	if len(os.Args) == 2 {
+		return runLifecycle(ctx, os.Args[1], os.Stdout, os.Stderr)
+	}
 	if len(os.Args) != 5 || os.Args[1] != "install" {
-		fmt.Fprintln(os.Stderr, "Usage: observer-connected-install install <verified-bundle-directory> <manifest-sha256> <server-id>")
+		fmt.Fprintln(os.Stderr, "Usage: observer-connected-install install <verified-bundle-directory> <manifest-sha256> <server-id> | start | stop | status")
 		return 22
 	}
 	if connectedinstall.CheckRequest(ctx, os.Args[2], os.Args[3], os.Args[4]) != nil {
@@ -61,6 +65,44 @@ func run(ctx context.Context) int {
 	}
 	fmt.Fprintln(os.Stdout, "INSTALLED_PENDING_ACCEPTANCE: services remain stopped; packaged isolation acceptance is required before activation.")
 	return 0
+}
+
+func runLifecycle(ctx context.Context, operation string, output, diagnostic io.Writer) int {
+	var err error
+	switch operation {
+	case "start":
+		err = connectedinstall.Start(ctx)
+		if err == nil {
+			fmt.Fprintln(output, "WAITING_FIRST_UPLOAD: workers started; check status for receiver acknowledgement.")
+		}
+	case "stop":
+		err = connectedinstall.Stop(ctx)
+		if err == nil {
+			fmt.Fprintln(output, "STOPPED: collector and uploader joined; delivery state retained.")
+		}
+	case "status":
+		var status connectedinstall.Status
+		status, err = connectedinstall.ReadStatus(ctx)
+		if err == nil {
+			err = json.NewEncoder(output).Encode(status)
+		}
+	default:
+		fmt.Fprintln(diagnostic, "Usage: observer-connected-install start | stop | status")
+		return 22
+	}
+	if err != nil {
+		return lifecycleFailure(err, diagnostic)
+	}
+	return 0
+}
+
+func lifecycleFailure(err error, diagnostic io.Writer) int {
+	if errors.Is(err, connectedinstall.ErrRecovery) {
+		fmt.Fprintln(diagnostic, "RECOVERY_REQUIRED: preserve installed state and inspect the owned services before retrying.")
+	} else {
+		fmt.Fprintln(diagnostic, "OPERATION_REFUSED: verify the installed bundle, service state and policy.")
+	}
+	return 22
 }
 
 func readGrant(ctx context.Context) ([]byte, error) { return readGrantFrom(ctx, os.Stdin, os.Stderr) }
