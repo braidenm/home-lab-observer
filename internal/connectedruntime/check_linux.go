@@ -117,10 +117,8 @@ func CheckView(collector bool) error {
 		}
 		return nil
 	}
-	for _, path := range []string{"/proc", "/sys", "/var", "/home", "/root"} {
-		if _, err := os.Lstat(path); !os.IsNotExist(err) {
-			return ErrUnsafe
-		}
+	if checkUploaderView(readViewDirectory, unix.Access, os.Lstat) != nil {
+		return ErrUnsafe
 	}
 	for _, path := range []string{"/", "/bin", "/etc", "/handoff", "/activation"} {
 		i, err := os.Lstat(path)

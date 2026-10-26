@@ -18,7 +18,8 @@ CONFIG = Path("/etc/home-lab-observer-connected/installed.json")
 SECRET = Path("/etc/home-lab-observer-connected/credentials/connector.json")
 LEDGER = Path("/var/lib/home-lab-observer-connected/ledger")
 UNITS = ("home-lab-observer-connected-collector.service", "home-lab-observer-connected-uploader.service")
-FAILURES = frozenset(("RECORD", "OPERATION", "COMMAND", "UPLOAD", "STOP", "PERSISTENCE", "BOUNDS", "INPUT", "BINDING"))
+PHASES = frozenset(("REQUEST", "LEASE", "INSTALLED_STATE", "HOST_PROFILE", "PRINCIPALS", "SERVICE_STATE", "RUNTIME_GATE", "UNKNOWN"))
+FAILURES = frozenset(("RECORD", "OPERATION", "COMMAND", "UPLOAD", "STOP", "PERSISTENCE", "BOUNDS", "INPUT", "BINDING")) | frozenset("COMMAND_" + phase for phase in PHASES)
 
 
 class Refused(Exception):
@@ -34,6 +35,13 @@ def read_json(path: Path) -> dict:
     if not isinstance(value, dict):
         raise Refused("RECORD")
     return value
+
+
+def command_failure(data: bytes) -> str:
+    match = re.fullmatch(rb"OPERATION_REFUSED: ([A-Z_]+)\. Verify the installed bundle, service state and policy\.\n", data)
+    if match and match[1].decode("ascii") in PHASES:
+        return "COMMAND_" + match[1].decode("ascii")
+    return "COMMAND"
 
 
 def command(binary: Path, operation: str) -> bytes:
@@ -56,7 +64,7 @@ def command(binary: Path, operation: str) -> bytes:
             if len(data) > 4096:
                 raise Refused("COMMAND")
         if process.wait(timeout=max(0.1, deadline - time.monotonic())) != 0:
-            raise Refused("COMMAND")
+            raise Refused(command_failure(bytes(data)))
         return bytes(data)
     finally:
         if process.poll() is None:
@@ -112,6 +120,8 @@ def exercise(mode: str) -> None:
         if previous["identity"] != before:
             raise Refused("PERSISTENCE")
         prior = previous["sequence"]
+    if json.loads(command(binary, "status")).get("state") != "STOPPED":
+        raise Refused("STOP")
     command(binary, "start")
     first = wait_fresh(binary, prior)
     stopped(binary)
