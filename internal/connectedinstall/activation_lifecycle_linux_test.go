@@ -4,6 +4,7 @@ package connectedinstall
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -71,7 +72,8 @@ func TestActivationCleanupAttemptsBothWorkersAfterManagerTimeout(t *testing.T) {
 		}
 		return inspect(ctx, unit)
 	}
-	if activateStoppedWith(context.Background(), f.config, ops) != ErrRecovery || !secondAttempt || !hasEvent(f.events, "stop:collector") {
+	err := activateStoppedWith(context.Background(), f.config, ops)
+	if !errors.Is(err, ErrRecovery) || LifecyclePhase(err) != "ACTIVATION_CLEANUP" || !secondAttempt || !hasEvent(f.events, "stop:collector") {
 		t.Fatal("first cleanup timeout prevented second owned worker cleanup")
 	}
 }
@@ -116,7 +118,7 @@ func TestActivationPreservesUncertainResponseCleanupClassification(t *testing.T)
 	f := newActivationFixture(t)
 	ops := f.operations()
 	ops.clearResponse = func(connectedprofile.Config) error { return ErrRecovery }
-	if activateStoppedWith(context.Background(), f.config, ops) != ErrRecovery || hasEvent(f.events, "start:uploader") {
+	if !errors.Is(activateStoppedWith(context.Background(), f.config, ops), ErrRecovery) || hasEvent(f.events, "start:uploader") {
 		t.Fatal("uncertain prior-response removal lost recovery classification")
 	}
 }

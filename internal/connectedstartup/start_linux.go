@@ -37,19 +37,22 @@ func Run(parent context.Context, c connectedprofile.Config, status *connectedsta
 	}
 	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 	defer cancel()
-	if connectedruntime.CheckPrimitives(false) != nil || connectedruntime.CheckView(false) != nil {
-		return ErrUnsafe
+	if connectedruntime.CheckPrimitives(false) != nil {
+		return &stageError{73}
+	}
+	if connectedruntime.CheckView(false) != nil {
+		return &stageError{74}
 	}
 	fd, err := unix.Open("/activation", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if err != nil {
-		return ErrUnsafe
+		return &stageError{75}
 	}
 	directory := os.NewFile(uintptr(fd), "activation")
 	defer directory.Close()
 	if !rootDirectory(directory, c.UploaderGID) {
-		return ErrUnsafe
+		return &stageError{75}
 	}
-	return rendezvous(ctx, c, startupPorts{
+	err = rendezvous(ctx, c, startupPorts{
 		read: func(ctx context.Context, name string) ([]byte, error) {
 			return waitRecord(ctx, directory, name, c.UploaderGID)
 		},
@@ -60,6 +63,10 @@ func Run(parent context.Context, c connectedprofile.Config, status *connectedsta
 			return nil
 		}, publish: status.WriteActivationResponse, current: connectedprofile.Load, random: rand.Reader, invocation: os.Getenv("INVOCATION_ID"),
 	})
+	if err != nil {
+		return &stageError{76}
+	}
+	return nil
 }
 
 // Private sequencing seam: production ports above remain fixed and are not a

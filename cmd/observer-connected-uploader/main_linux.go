@@ -83,11 +83,11 @@ func run(ctx context.Context) (code int) {
 	}
 	c, err := connectedprofile.Load()
 	if err != nil || connectedprofile.CheckIdentity(c, false) != nil {
-		return 22
+		return 70
 	}
 	status, err := connectedstatus.Open("/state/status")
 	if err != nil {
-		return 22
+		return 71
 	}
 	defer func() {
 		if status.Close() != nil {
@@ -95,10 +95,10 @@ func run(ctx context.Context) (code int) {
 		}
 	}()
 	if publishPreflightStatus(status, os.Getenv("INVOCATION_ID")) != nil {
-		return 22
+		return 72
 	}
-	if connectedstartup.Run(ctx, c, status) != nil {
-		return 22
+	if err := connectedstartup.Run(ctx, c, status); err != nil {
+		return connectedstartup.ExitCode(err)
 	}
 	secret, err := connectedcredential.Load(c.ServerID, c.ConnectorID)
 	if err != nil {

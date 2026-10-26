@@ -18,8 +18,8 @@ CONFIG = Path("/etc/home-lab-observer-connected/installed.json")
 SECRET = Path("/etc/home-lab-observer-connected/credentials/connector.json")
 LEDGER = Path("/var/lib/home-lab-observer-connected/ledger")
 UNITS = ("home-lab-observer-connected-collector.service", "home-lab-observer-connected-uploader.service")
-PHASES = frozenset(("REQUEST", "LEASE", "INSTALLED_STATE", "HOST_PROFILE", "PRINCIPALS", "SERVICE_STATE", "RUNTIME_GATE", "UNKNOWN"))
-FAILURES = frozenset(("RECORD", "OPERATION", "COMMAND", "UPLOAD", "STOP", "PERSISTENCE", "BOUNDS", "INPUT", "BINDING")) | frozenset(operation + "_" + reason for operation in ("START", "STOP", "STATUS") for reason in ("COMMAND", "RECOVERY", *("COMMAND_" + phase for phase in PHASES)))
+PHASES = frozenset(("REQUEST", "LEASE", "INSTALLED_STATE", "HOST_PROFILE", "PRINCIPALS", "SERVICE_STATE", "RUNTIME_GATE", "ACTIVATION_PREPARE", "ACTIVATION_CLEANUP", "UPLOADER_START", "UPLOADER_AUDIT", "REQUEST_PUBLICATION", "UPLOADER_RESPONSE", "COLLECTOR_START", "COLLECTOR_READY", "FINAL_AUDIT", "COMMIT_PUBLICATION", "UPLOADER_READY", "UNKNOWN"))
+FAILURES = frozenset(("RECORD", "OPERATION", "COMMAND", "UPLOAD", "STOP", "PERSISTENCE", "BOUNDS", "INPUT", "BINDING")) | frozenset(operation + "_" + reason for operation in ("START", "STOP", "STATUS") for reason in ("COMMAND", "RECOVERY", *("COMMAND_" + phase for phase in PHASES), *("RECOVERY_" + phase for phase in PHASES)))
 
 
 class Refused(Exception):
@@ -40,6 +40,9 @@ def read_json(path: Path) -> dict:
 def command_failure(data: bytes) -> str:
     if data == b"RECOVERY_REQUIRED: preserve installed state and inspect the owned services before retrying.\n":
         return "RECOVERY"
+    match = re.fullmatch(rb"RECOVERY_REQUIRED: ([A-Z_]+)\. Preserve installed state and inspect the owned services before retrying\.\n", data)
+    if match and match[1].decode("ascii") in PHASES:
+        return "RECOVERY_" + match[1].decode("ascii")
     match = re.fullmatch(rb"OPERATION_REFUSED: ([A-Z_]+)\. Verify the installed bundle, service state and policy\.\n", data)
     if match and match[1].decode("ascii") in PHASES:
         return "COMMAND_" + match[1].decode("ascii")
