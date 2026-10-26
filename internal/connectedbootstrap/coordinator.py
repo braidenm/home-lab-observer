@@ -1,8 +1,50 @@
 """One transient lifecycle owner; Go alone owns installed state and enrollment."""
 import re
+import errno
 import signal
 import subprocess
 import tempfile
+
+
+ACL_NAMES = ("system.posix_acl_access", "system.posix_acl_default")
+INVALID_LINUX_FD = (1 << 31) - 1
+
+
+def require_fd_xattrs():
+    # Python 3.12 accepts xattr FDs but does not list these functions in
+    # os.supports_fd. Probe an impossible Linux FD, never a real path/inode.
+    for function, args in ((os.listxattr, (INVALID_LINUX_FD,)),
+                           (os.removexattr, (INVALID_LINUX_FD, ACL_NAMES[0]))):
+        try:
+            function(*args)
+        except OSError as error:
+            if error.errno == errno.EBADF:
+                continue
+            raise
+        except (TypeError, NotImplementedError, OverflowError):
+            raise ValueError("fd xattrs required") from None
+        raise ValueError("fd xattrs required")
+
+
+def clear_private_acl(path):
+    directory = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        def validate():
+            info = os.fstat(directory)
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid or info.st_gid or stat.S_IMODE(info.st_mode) != 0o700:
+                raise ValueError("private directory")
+        validate()
+        for name in ACL_NAMES:
+            try:
+                os.removexattr(directory, name)
+            except OSError as error:
+                if error.errno != errno.ENODATA:
+                    raise
+        if set(os.listxattr(directory)).intersection(ACL_NAMES):
+            raise ValueError("acl remains")
+        validate()
+    finally:
+        os.close(directory)
 
 
 class Lifecycle:
@@ -80,7 +122,7 @@ def cleanup(stage, members):
 
 
 def install(lifecycle, members, server_id):
-    if sys.version_info[:2] != (3, 12) or os.geteuid() != 0 or not os.isatty(3):
+    if sys.version_info[:2] != (3, 12) or os.geteuid() != 0 or os.getegid() != 0 or not os.isatty(3):
         raise ValueError("unsupported host")
     if not re.fullmatch(r"srv_[a-f0-9]{32}", server_id):
         raise ValueError("server reference")
@@ -90,12 +132,11 @@ def install(lifecycle, members, server_id):
         signal.pidfd_send_signal(handle, 0)
     finally:
         os.close(handle)
+    require_fd_xattrs()
     version = lifecycle.run(["/usr/bin/curl", "-q", "--version"], capture=True)
     match = re.match(rb"curl ([0-9]+)\.([0-9]+)\.", version)
     if not match or tuple(map(int, match.groups())) < (8, 4):
         raise ValueError("curl 8.4 required")
-    if not os.access("/usr/bin/setfacl", os.X_OK):
-        raise ValueError("acl tools required")
     for parent in ("/", "/var", "/var/lib"):
         info = os.lstat(parent)
         if not stat.S_ISDIR(info.st_mode) or info.st_uid or info.st_gid or info.st_mode & 0o022:
@@ -103,10 +144,10 @@ def install(lifecycle, members, server_id):
     lifecycle.check()
     stage = tempfile.mkdtemp(prefix="home-lab-observer-download.", dir="/var/lib")
     try:
-        lifecycle.run(["/usr/bin/setfacl", "-b", "-k", stage])
+        clear_private_acl(stage)
         bundle = stage + "/bundle"
         os.mkdir(bundle, 0o700)
-        lifecycle.run(["/usr/bin/setfacl", "-b", "-k", bundle])
+        clear_private_acl(bundle)
         archive = stage + "/archive.tar.gz"
         lifecycle.run(["/usr/bin/curl", "-q", "--fail", "--remove-on-error", "--show-error", "--silent",
                        "--proxy", "", "--location", "--proto", "=https", "--proto-redir", "=https",

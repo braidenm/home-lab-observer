@@ -49,8 +49,15 @@ their own digest. The Platform release catalog separately pins all four assets.
    umask, and validates root-owned/non-writable/non-link ancestors `/`, `/var`,
    `/var/lib`. It never adopts a caller-selected staging directory.
 3. Create a fresh exclusive root-owned private staging directory under `/var/lib`.
-   Require existing Bash/curl (>=8.4)/Python 3.12/coreutils/acl tools, never install system packages
-   automatically. Remove inherited ACLs only from newly created bootstrap dirs.
+   Require existing Bash/curl (>=8.4)/Python 3.12/coreutils, never install system
+   packages automatically. Remove inherited access/default POSIX ACLs only from
+   the newly created root:root 0700 bootstrap directories, through opened
+   O_DIRECTORY/NOFOLLOW/CLOEXEC descriptors. Require metadata before and after,
+   accept only ENODATA as already absent, and re-list by fd to prove those two
+   ACL names absent. Preserve unrelated security labels/xattrs. No path fallback
+   or external `setfacl` package is required. Python 3.12's `os.supports_fd` does
+   not enumerate its fd-capable xattr functions; before staging, require both
+   functions to reject Linux's impossible signed-int-maximum FD with EBADF.
 4. Fetch only the exact archive with `-q` as curl's first argument, `--fail`,
    `--remove-on-error`, `--proxy ''` (ambient proxies intentionally unsupported),
    `--location`, `--proto '=https'`, `--proto-redir '=https'`, `--max-redirs 5`,
@@ -147,6 +154,8 @@ HTTP bodies, host observations or arbitrary tool errors in hosted records.
 - [Go archive/tar formats](https://pkg.go.dev/archive/tar#Format): the actual publisher uses `FormatUSTAR` and `TypeReg` in `internal/connectedbundle/archive.go`; validate its exact closed output, not the broader formats a generic tar reader accepts.
 - [Python 3.12 gzip](https://docs.python.org/3.12/library/gzip.html): bounded decompression, CRC/truncation failures and possible concatenated members require explicit total/read/EOF handling; a valid gzip wrapper alone says nothing about safe archive contents.
 - [Python 3.12 subprocess](https://docs.python.org/3.12/library/subprocess.html#popen-constructor), [pidfd_open](https://docs.python.org/3.12/library/os.html#os.pidfd_open) and [pidfd_send_signal](https://docs.python.org/3.12/library/signal.html#signal.pidfd_send_signal): explicit stdin/descriptor inheritance and joined child lifetime; pidfd signalling prevents the PID-reuse race of a numeric-PID wrapper. Supported Ubuntu/Linux supplies these primitives; absence is refusal, not a weaker fallback.
+- [Python 3.12 fd xattrs](https://docs.python.org/3.12/library/os.html#os.removexattr) and [Linux fremovexattr](https://man7.org/linux/man-pages/man2/removexattr.2.html): descriptor-bound removal avoids pathname replacement; ENODATA means the named attribute is absent. The minimal Ubuntu VM exposed the unnecessary external ACL-tools dependency; actual descriptor operations and real inherited ACL fixtures remain mandatory.
+- [Linux 6.8 fd-table limit](https://github.com/torvalds/linux/blob/v6.8/fs/file.c): the supported kernel caps the fd table below signed `INT_MAX`, so that positive integer cannot identify an open target. Requiring EBADF from both xattr functions proves their descriptor argument path without touching an inode; negative listxattr arguments are not used because Python can treat them as its default-directory sentinel.
 
 These are a narrow fixed-artifact implementation choice, not a claim that shell
 scripts are a general privileged package manager. No owner decision is open for
