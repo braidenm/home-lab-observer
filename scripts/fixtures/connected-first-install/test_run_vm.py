@@ -22,6 +22,8 @@ class HarnessAdmissionTest(unittest.TestCase):
         for phase in activation_guest.PHASES:
             data = f"OPERATION_REFUSED: {phase}. Verify the installed bundle, service state and policy.\n".encode("ascii")
             self.assertEqual(activation_guest.command_failure(data), "COMMAND_" + phase)
+            recovery = f"RECOVERY_REQUIRED: {phase}. Preserve installed state and inspect the owned services before retrying.\n".encode("ascii")
+            self.assertEqual(activation_guest.command_failure(recovery), "RECOVERY_" + phase)
         for private in (b"hlc_private", b"OPERATION_REFUSED: SECRET. Verify the installed bundle, service state and policy.\n", b"OPERATION_REFUSED: LEASE. Verify the installed bundle, service state and policy.\nhlc_private"):
             self.assertEqual(activation_guest.command_failure(private), "COMMAND")
 

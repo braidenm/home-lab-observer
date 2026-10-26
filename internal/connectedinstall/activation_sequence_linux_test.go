@@ -290,6 +290,12 @@ func TestActivationTransactionSuccessOrdering(t *testing.T) {
 }
 
 func TestActivationTransactionFaultBoundaries(t *testing.T) {
+	phases := map[string]string{
+		"pin": "ACTIVATION_PREPARE", "clear": "ACTIVATION_PREPARE", "probes": "ACTIVATION_PREPARE", "policy": "ACTIVATION_PREPARE",
+		"start:uploader": "UPLOADER_START", "audit": "UPLOADER_AUDIT", "random": "UPLOADER_AUDIT", "installed": "UPLOADER_AUDIT",
+		"publish:request": "REQUEST_PUBLICATION", "response": "UPLOADER_RESPONSE", "start:collector": "COLLECTOR_START",
+		"status:collector": "COLLECTOR_READY", "finish": "FINAL_AUDIT", "publish:commit": "COMMIT_PUBLICATION", "status:uploader": "UPLOADER_READY",
+	}
 	for _, stage := range []string{"pin", "clear", "probes", "policy", "start:uploader", "audit", "random", "installed", "publish:request", "response", "start:collector", "status:collector", "finish", "publish:commit", "status:uploader"} {
 		t.Run(stage, func(t *testing.T) {
 			f := newActivationFixture(t)
@@ -297,6 +303,9 @@ func TestActivationTransactionFaultBoundaries(t *testing.T) {
 			err := activateStoppedWith(context.Background(), f.config, f.operations())
 			if err == nil {
 				t.Fatal("fault accepted")
+			}
+			if LifecyclePhase(err) != phases[stage] {
+				t.Fatal("fixed transaction refusal stage lost")
 			}
 			if hasEvent(f.events, "start:uploader") && !hasEvent(f.events, "stop:uploader") {
 				t.Fatal("owned uploader not stopped")
@@ -372,7 +381,7 @@ func TestActivationReplacedAndUnknownInvocationNeverStopped(t *testing.T) {
 					}
 				}
 			}
-			if err := activateStoppedWith(context.Background(), f.config, f.operations()); err != ErrRecovery {
+			if err := activateStoppedWith(context.Background(), f.config, f.operations()); !errors.Is(err, ErrRecovery) {
 				t.Fatal("ambiguous ownership not recovery")
 			}
 			if hasEvent(f.events, "stop:uploader") || f.requestWritten || f.commitWritten {
@@ -425,7 +434,7 @@ func TestActivationUncertainCommitStillStopsBothWorkers(t *testing.T) {
 			f.fail = "publish:commit"
 		}
 	}
-	if err := activateStoppedWith(context.Background(), f.config, f.operations()); err != ErrRecovery {
+	if err := activateStoppedWith(context.Background(), f.config, f.operations()); !errors.Is(err, ErrRecovery) {
 		t.Fatal("uncertain publication not recovery")
 	}
 	if !f.commitWritten || !hasEvent(f.events, "stop:uploader") || !hasEvent(f.events, "stop:collector") {
@@ -444,7 +453,7 @@ func TestActivationFinalStatusCannotAdoptReplacedInvocation(t *testing.T) {
 					f.workers[unit] = w
 				}
 			}
-			if err := activateStoppedWith(context.Background(), f.config, f.operations()); err != ErrRecovery {
+			if err := activateStoppedWith(context.Background(), f.config, f.operations()); !errors.Is(err, ErrRecovery) {
 				t.Fatal("replaced invocation accepted as ready")
 			}
 			if !f.commitWritten || hasEvent(f.events, "stop:"+role(unit)) {

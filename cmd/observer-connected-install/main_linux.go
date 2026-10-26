@@ -98,7 +98,7 @@ func runLifecycle(ctx context.Context, operation string, output, diagnostic io.W
 
 func lifecycleFailure(err error, diagnostic io.Writer) int {
 	if errors.Is(err, connectedinstall.ErrRecovery) {
-		fmt.Fprintln(diagnostic, "RECOVERY_REQUIRED: preserve installed state and inspect the owned services before retrying.")
+		fmt.Fprintf(diagnostic, "RECOVERY_REQUIRED: %s. Preserve installed state and inspect the owned services before retrying.\n", connectedinstall.LifecyclePhase(err))
 	} else {
 		fmt.Fprintf(diagnostic, "OPERATION_REFUSED: %s. Verify the installed bundle, service state and policy.\n", connectedinstall.LifecyclePhase(err))
 	}

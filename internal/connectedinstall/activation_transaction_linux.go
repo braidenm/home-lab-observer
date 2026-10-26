@@ -25,6 +25,12 @@ func activateStopped(parent context.Context, c connectedprofile.Config) (result 
 }
 
 func activateStoppedWith(parent context.Context, c connectedprofile.Config, ops activationOperations) (result error) {
+	phase := "ACTIVATION_PREPARE"
+	defer func() {
+		if result != nil {
+			result = &lifecycleError{phase, result}
+		}
+	}()
 	if parent == nil || parent.Err() != nil || c.Validate() != nil {
 		return ErrUnsafe
 	}
@@ -60,6 +66,7 @@ func activateStoppedWith(parent context.Context, c connectedprofile.Config, ops 
 				continue
 			}
 			if stopCapturedWorker(unit, want, ops.inspect, ops.service) != nil {
+				phase = "ACTIVATION_CLEANUP"
 				result = ErrRecovery
 			}
 		}
@@ -67,10 +74,12 @@ func activateStoppedWith(parent context.Context, c connectedprofile.Config, ops 
 	if ops.policy(ctx, uploaderUnit, c.Addresses) != nil {
 		return ErrUnsafe
 	}
+	phase = "UPLOADER_START"
 	if err := startActivationWorkerWith(ctx, uploaderUnit, owned, ops.service, ops.inspect); err != nil {
 		return err
 	}
 	uploader := owned[uploaderUnit]
+	phase = "UPLOADER_AUDIT"
 	identity, err := ops.audit(ctx, uploader.PID, connectedprofile.ReleaseDirectory+"/"+c.ArtifactSHA256+"/observer-connected-uploader")
 	if err != nil || identity.PID != uploader.PID || !ops.sameWorker(ctx, uploaderUnit, uploader) {
 		return ErrUnsafe
@@ -93,10 +102,12 @@ func activateStoppedWith(parent context.Context, c connectedprofile.Config, ops 
 	if !ops.unchanged(ctx, c, config, uploader) || !pair.denied() {
 		return ErrUnsafe
 	}
+	phase = "REQUEST_PUBLICATION"
 	if d.publish("request.json", encoded) != nil {
 		return ErrRecovery
 	}
 	var response connectedactivation.Response
+	phase = "UPLOADER_RESPONSE"
 	for {
 		if !ops.sameWorker(ctx, uploaderUnit, uploader) || !pair.denied() {
 			return ErrUnsafe
@@ -112,10 +123,12 @@ func activateStoppedWith(parent context.Context, c connectedprofile.Config, ops 
 			return ErrUnsafe
 		}
 	}
+	phase = "COLLECTOR_START"
 	if err := startActivationWorkerWith(ctx, collectorUnit, owned, ops.service, ops.inspect); err != nil {
 		return err
 	}
 	collector := owned[collectorUnit]
+	phase = "COLLECTOR_READY"
 	for {
 		if !ops.sameWorker(ctx, collectorUnit, collector) || !ops.sameWorker(ctx, uploaderUnit, uploader) {
 			return ErrUnsafe
@@ -134,6 +147,7 @@ func activateStoppedWith(parent context.Context, c connectedprofile.Config, ops 
 			return ErrUnsafe
 		}
 	}
+	phase = "FINAL_AUDIT"
 	if pair.finish(ctx) != nil || !ops.unchanged(ctx, c, config, uploader) || !ops.sameWorker(ctx, collectorUnit, collector) {
 		return ErrUnsafe
 	}
@@ -146,9 +160,11 @@ func activateStoppedWith(parent context.Context, c connectedprofile.Config, ops 
 	if err != nil || ctx.Err() != nil {
 		return ErrUnsafe
 	}
+	phase = "COMMIT_PUBLICATION"
 	if d.publish("commit.json", encoded) != nil {
 		return ErrRecovery
 	}
+	phase = "UPLOADER_READY"
 	for {
 		if !ops.sameWorker(ctx, uploaderUnit, uploader) || !ops.sameWorker(ctx, collectorUnit, collector) {
 			return ErrUnsafe

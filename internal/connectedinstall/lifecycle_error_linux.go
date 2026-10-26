@@ -14,12 +14,20 @@ func (e *lifecycleError) Unwrap() error { return e.cause }
 
 // LifecyclePhase exposes only code-owned categories, never a wrapped OS error.
 func LifecyclePhase(err error) string {
-	var refusal *lifecycleError
-	if errors.As(err, &refusal) {
+	phase := "UNKNOWN"
+	for cause := err; cause != nil; cause = errors.Unwrap(cause) {
+		refusal, ok := cause.(*lifecycleError)
+		if !ok {
+			continue
+		}
 		switch refusal.phase {
-		case "REQUEST", "LEASE", "INSTALLED_STATE", "HOST_PROFILE", "PRINCIPALS", "SERVICE_STATE", "RUNTIME_GATE":
-			return refusal.phase
+		case "REQUEST", "LEASE", "INSTALLED_STATE", "HOST_PROFILE", "PRINCIPALS", "SERVICE_STATE", "RUNTIME_GATE",
+			"ACTIVATION_PREPARE", "ACTIVATION_CLEANUP", "UPLOADER_START", "UPLOADER_AUDIT", "REQUEST_PUBLICATION", "UPLOADER_RESPONSE",
+			"COLLECTOR_START", "COLLECTOR_READY", "FINAL_AUDIT", "COMMIT_PUBLICATION", "UPLOADER_READY":
+			phase = refusal.phase
+		default:
+			phase = "UNKNOWN"
 		}
 	}
-	return "UNKNOWN"
+	return phase
 }

@@ -188,6 +188,24 @@ No new owner product decision is required for these conservative checks. A
 supported disposable-VM environment and real acceptance evidence are still
 required before live activation; lack of either is reported, not waived.
 
+## Fixed startup diagnostics (2026-10-25)
+
+The optional packaged activation run reproducibly reaches `START_RECOVERY` with
+the uploader exiting its former generic status 22 and the collector inactive.
+Root now preserves the deepest closed transaction phase, including recovery:
+activation preparation/cleanup, uploader start/audit/response/readiness, request
+publication, collector start/readiness, final audit and commit publication. These
+are diagnostics, not successful acceptance. Underlying refusal identity remains
+available through `errors.Is`; raw errors never become CLI output.
+
+The actual uploader retains statuses 20/21/22 for credential rejection, terminal
+delivery and unclassified refusal. Upload-only startup adds terminal statuses:
+70 installed config/identity, 71 status-store open, 72 initial status publication,
+73 denied primitives, 74 restricted view, 75 activation-directory admission and
+76 rendezvous. Enrollment modes keep their existing statuses. Unknown stages
+map to 22. All are failures with `Restart=no`; no code weakens a check, activates
+collection or reveals paths, credential bytes, environment or raw OS errors.
+
 ## Adapter delivery checkpoint, 2026-10-25
 
 The first current-main slice adds only fixed activation record, manager-property and
