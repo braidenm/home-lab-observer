@@ -19,6 +19,7 @@ REPO_URI = "https://github.com/" + REPOSITORY
 WORKFLOW_URI = REPO_URI + "/" + WORKFLOW_PATH + "@refs/heads/main"
 MAX_ARTIFACT_BYTES = 64 * 1024 * 1024
 MAX_JSON_BYTES = 32768
+PREDICATE_TYPES = ("https://slsa.dev/provenance/v1", "https://spdx.dev/Document/v2.3")
 RESULTS = ("helper_corrupt", "archive_corrupt", "http_downgrade", "redirect_loop",
            "valid_stopped_reboot", "useful_upload", "stop_start_sequence",
            "explicit_reboot_start", "retained_identity")
@@ -164,7 +165,7 @@ def unpack_candidate(data, record):
 def validate_provenance(results, candidate, name, expected_digest,
                         predicate_type="https://slsa.dev/provenance/v1"):
     """Apply policy ONLY after gh cryptographic verification succeeds."""
-    require(predicate_type in ("https://slsa.dev/provenance/v1", "https://spdx.dev/Document"))
+    require(predicate_type in PREDICATE_TYPES)
     require(isinstance(results, list) and 0 < len(results) <= 30)
     for result in results:
         verification = result.get("verificationResult", {})

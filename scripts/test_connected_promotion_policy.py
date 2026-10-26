@@ -162,17 +162,28 @@ class PromotionPolicyTests(unittest.TestCase):
 
     def test_sbom_attestation_keeps_same_certificate_and_subject_boundary(self):
         result = self.provenance()
-        result[0]["verificationResult"]["statement"]["predicateType"] = "https://spdx.dev/Document"
+        result[0]["verificationResult"]["statement"]["predicateType"] = "https://spdx.dev/Document/v2.3"
         p.validate_provenance(result, self.c, "candidate.json", "d" * 64,
-                              predicate_type="https://spdx.dev/Document")
+                              predicate_type="https://spdx.dev/Document/v2.3")
         with self.assertRaises(ValueError):
             p.validate_provenance(result, self.c, "candidate.json", "d" * 64)
         with self.assertRaises(ValueError):
             p.validate_provenance(result, self.c, "candidate.json", "e" * 64,
-                                  predicate_type="https://spdx.dev/Document")
+                                  predicate_type="https://spdx.dev/Document/v2.3")
+        for invalid in ("https://spdx.dev/Document", "https://spdx.dev/Document/v2.2",
+                        "https://spdx.dev/Document/v2.3/extra", "https://spdx.dev", "arbitrary"):
+            changed = copy.deepcopy(result)
+            changed[0]["verificationResult"]["statement"]["predicateType"] = invalid
+            with self.subTest(predicate=invalid), self.assertRaises(ValueError):
+                p.validate_provenance(changed, self.c, "candidate.json", "d" * 64,
+                                      predicate_type="https://spdx.dev/Document/v2.3")
+            with self.assertRaises(ValueError):
+                p.validate_provenance(changed, self.c, "candidate.json", "d" * 64,
+                                      predicate_type=invalid)
+        result[0]["verificationResult"]["signature"]["certificate"]["sourceRepositoryIdentifier"] = "1"
         with self.assertRaises(ValueError):
             p.validate_provenance(result, self.c, "candidate.json", "d" * 64,
-                                  predicate_type="arbitrary")
+                                  predicate_type="https://spdx.dev/Document/v2.3")
 
     def release(self):
         return {"id": 900, "tag_name": "v" + self.c["version"],
