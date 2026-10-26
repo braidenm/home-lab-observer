@@ -22,6 +22,7 @@
 | [018](018-shared-read-handoff.md) | Accepted for uninstalled Linux library | Exact-principal shared-read handoff, separate from owner-private storage |
 | [019](019-private-enrollment-persistence.md) | Accepted for unused Linux adapter | Exclusive private enrollment commit witnesses; installed credential promotion remains separate |
 | [020](020-linux-installed-worker-composition.md) | Accepted for implementation | Bounded first installed Linux worker composition; release remains gated |
+| [021](021-connected-activation-evidence.md) | Accepted for implementation | Current invocation and same-process checks before connected upload |
 | [022](022-compatible-connected-code-transitions.md) | Proposed | Explicit verified code selection, used-ledger compatibility and one transition journal |
 
 Accepted ADRs are immutable except for status and supersession links. Material changes require a new ADR.
