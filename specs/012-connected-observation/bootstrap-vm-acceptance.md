@@ -1,7 +1,7 @@
 # Public-helper disposable VM acceptance
 
-Status: independently reviewed plan and fixture implementation;
-actual VM execution remains open. No public release or owner-host installation
+Status: independently reviewed plan and fixture implementation; reviewed d16e521
+artifact passed [actual VM acceptance](bootstrap-acceptance.md). No public release or owner-host installation
 is authorized by these fixture changes alone.
 
 ## Scope

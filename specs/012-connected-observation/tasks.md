@@ -25,7 +25,7 @@
   - [x] Review the [version-pinned public bootstrap design](public-bootstrap.md) independently (PR 115).
   - [x] Generate the fixed helper and final checksums; test canonical/malformed archive admission,
     terminal preservation and joined cancellation. Build-only; no published release or owner install.
-  - [ ] Prove actual helper download/redirect/failed-byte refusal and stopped installation in a disposable VM before publication.
+  - [x] Prove actual helper download/redirect/failed-byte refusal and stopped installation in a disposable VM before publication; reviewed d16e521 artifact passed on 2026-10-26. See [bounded evidence](bootstrap-acceptance.md); future release candidate must match its own installed evidence.
     - [x] Add the independently pinned manual [public-helper VM scope](bootstrap-vm-acceptance.md), with honest-owner sudo handoff and pre-enrollment refusal cases; record actual execution separately.
   - [x] Add the unreleased Linux collector command root with closed launch admission and collector-only dependency checks; this does not install or activate a worker.
   - [x] Add the unreleased Linux uploader command root with fixed launch modes, strict credential binding, non-fresh preflight status and uploader-only dependency checks; installed enforcement and network acceptance remain open.
