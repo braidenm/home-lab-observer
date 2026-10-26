@@ -224,6 +224,10 @@ physical profile specifies root-owned 0555. Admit that more restrictive mode too
 do not alter the root/type/no-follow checks or per-unit UID ACL/file admission.
 Keep credential/ledger refusal distinguishable through fixed terminal statuses.
 
+The repaired exact merged package passed explicit start/upload/stop/start and
+reboot/explicit-start acceptance on 2026-10-26. See [the bounded record](activation-acceptance.md)
+for source, hashes and exclusions; this does not close the other fault/lifecycle gates.
+
 ## Adapter delivery checkpoint, 2026-10-25
 
 The first current-main slice adds only fixed activation record, manager-property and
