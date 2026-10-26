@@ -104,15 +104,22 @@ def image_format(path: Path) -> None:
         refuse("BASE_IMAGE_BACKING_REFUSED")
 
 
-def check_archive(archive: Path, manifest: Path, checksums: Path, expected_commit: str, expected_manifest_sha256: str, expected_archive_sha256: str) -> None:
+def check_archive(archive: Path, manifest: Path, checksums: Path, expected_commit: str, expected_manifest_sha256: str, expected_archive_sha256: str, helper: Path | None = None) -> None:
     if manifest.name != "connected-manifest.json" or checksums.name != "SHA256SUMS" or not archive.name.endswith(".tar.gz"):
         refuse("BUNDLE_NAMES_REFUSED")
     lines = checksums.read_text(encoding="ascii").splitlines()
-    expected = {
+    expected = [
         f"{sha256(archive)}  {archive.name}",
         f"{sha256(manifest)}  {manifest.name}",
-    }
-    if len(lines) != 2 or set(lines) != expected or sha256(archive) != expected_archive_sha256:
+    ]
+    if helper is not None:
+        if helper != checksums.parent / "install-connected-linux.sh":
+            refuse("HELPER_NAME_REFUSED")
+        info = helper.lstat()
+        if not stat.S_ISREG(info.st_mode) or stat.S_IMODE(info.st_mode) != 0o644 or not 1 <= info.st_size <= 64 * 1024:
+            refuse("HELPER_TYPE_OR_SIZE_REFUSED")
+        expected.append(f"{sha256(helper)}  install-connected-linux.sh")
+    if lines != expected or sha256(archive) != expected_archive_sha256:
         refuse("BUNDLE_CHECKSUM_REFUSED")
     if sha256(manifest) != expected_manifest_sha256:
         refuse("REVIEWED_MANIFEST_REFUSED")
@@ -142,11 +149,15 @@ def check_probe(probe: Path, expected_digest: str) -> None:
         refuse("REVIEWED_PROBE_REFUSED")
 
 
-def payload_image(instance: Path, archive: Path, manifest: Path, checksums: Path, receiver: Path, probe: Path, expected_commit: str, expected_manifest_sha256: str, expected_archive_sha256: str, expected_receiver_sha256: str, expected_probe_sha256: str, expected_harness_sha256: str) -> Path:
+def payload_image(instance: Path, archive: Path, manifest: Path, checksums: Path, receiver: Path, probe: Path, expected_commit: str, expected_manifest_sha256: str, expected_archive_sha256: str, expected_receiver_sha256: str, expected_probe_sha256: str, expected_harness_sha256: str, helper: Path | None = None) -> Path:
     directory = instance / "payload"
     directory.mkdir(mode=0o700)
     for source in (archive, manifest, checksums, receiver, probe):
         shutil.copyfile(source, directory / ("connected-first-install-receiver" if source == receiver else source.name))
+    if helper is not None:
+        target_helper = directory / "install-connected-linux.sh"
+        shutil.copyfile(helper, target_helper)
+        target_helper.chmod(0o644)  # data only; direct scopes never invoke it
     scripts = Path(__file__).resolve().parent
     for name in HARNESS_FILES[1:]:
         shutil.copyfile(scripts / name, directory / name)
@@ -327,6 +338,8 @@ def main() -> int:
         archive = owned_file(args.archive, 600 * MIB)
         manifest = owned_file(args.manifest, 16 * 1024)
         checksums = owned_file(args.checksums, 4096)
+        helper_path = checksums.parent / "install-connected-linux.sh"
+        helper = owned_file(str(helper_path), 64 * 1024) if helper_path.exists() or helper_path.is_symlink() else None
         receiver = owned_file(args.receiver, 20 * MIB)
         probe = owned_file(args.probe, 100 * MIB)
         if sha256(receiver) != args.expected_receiver_sha256:
@@ -335,7 +348,7 @@ def main() -> int:
         if sha256(image) != args.image_sha256:
             refuse("BASE_IMAGE_CHECKSUM_REFUSED")
         image_format(image)
-        check_archive(archive, manifest, checksums, args.expected_commit, args.expected_manifest_sha256, args.expected_archive_sha256)
+        check_archive(archive, manifest, checksums, args.expected_commit, args.expected_manifest_sha256, args.expected_archive_sha256, helper)
         lease = root / ".hlo-first-install-vm.lock"
         with lease.open("a+b") as handle:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -343,7 +356,7 @@ def main() -> int:
             instance = Path(tempfile.mkdtemp(prefix="hlo-first-install-", dir=root))
             instance.chmod(0o700)
             (instance / ".hlo-owned-instance").write_text("first-install-vm/v1\n")
-            payload = payload_image(instance, archive, manifest, checksums, receiver, probe, args.expected_commit, args.expected_manifest_sha256, args.expected_archive_sha256, args.expected_receiver_sha256, args.expected_probe_sha256, args.expected_harness_sha256)
+            payload = payload_image(instance, archive, manifest, checksums, receiver, probe, args.expected_commit, args.expected_manifest_sha256, args.expected_archive_sha256, args.expected_receiver_sha256, args.expected_probe_sha256, args.expected_harness_sha256, helper)
             cases = CASES if args.scope == "stopped" else (("activation",) if args.scope == "activation" else (*CASES, "activation"))
             for name in cases:
                 case(instance, name, image, payload, args.keep_disks)

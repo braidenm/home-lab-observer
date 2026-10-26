@@ -37,6 +37,14 @@ staging directory and leaves it intact for audit; do not use a production
 credential or overwrite a prior release. `connectedpack` checks exact members
 and writes the archive plus checksums last.
 
+New packs also include a data-only `install-connected-linux.sh` entry in the
+checksums. The runner admits exactly the legacy two-entry or new three-entry
+form, checks the fixed sibling helper's regular-file type, 0644 mode, 64 KiB
+limit and digest, and carries it on the read-only payload. Existing direct
+scopes never execute that helper. This proves package self-consistency only,
+not independent helper trust, download acceptance or publication readiness;
+those require a separate independently pinned public-download scope.
+
 ```sh
 set -eu
 CANARY_BUILD_DIR="$(mktemp -d)"
