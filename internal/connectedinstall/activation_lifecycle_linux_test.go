@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/braidenm/home-lab-observer/internal/connectedprocess"
+	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
 	"github.com/braidenm/home-lab-observer/internal/connectedstatus"
 )
 
@@ -103,6 +104,20 @@ func TestStatusRequiresCoherentCurrentWorkerPair(t *testing.T) {
 	uploaded.InvocationID = "old"
 	if classifyPairStatus(collector, uploader, collected, uploaded, now).State != "STARTING" {
 		t.Fatal("old invocation represented as current")
+	}
+	uploaded.InvocationID = uploader.Invocation
+	uploaded.State = "COLLECTING"
+	if classifyPairStatus(collector, uploader, collected, uploaded, now).State != "RECOVERY_REQUIRED" {
+		t.Fatal("collector-only state accepted for uploader")
+	}
+}
+
+func TestActivationPreservesUncertainResponseCleanupClassification(t *testing.T) {
+	f := newActivationFixture(t)
+	ops := f.operations()
+	ops.clearResponse = func(connectedprofile.Config) error { return ErrRecovery }
+	if activateStoppedWith(context.Background(), f.config, ops) != ErrRecovery || hasEvent(f.events, "start:uploader") {
+		t.Fatal("uncertain prior-response removal lost recovery classification")
 	}
 }
 

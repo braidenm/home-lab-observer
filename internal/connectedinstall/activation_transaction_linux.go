@@ -41,8 +41,8 @@ func activateStoppedWith(parent context.Context, c connectedprofile.Config, ops 
 		return err
 	}
 	defer d.close()
-	if ops.clearResponse(c) != nil {
-		return ErrUnsafe
+	if err := ops.clearResponse(c); err != nil {
+		return err
 	}
 	pair, err := ops.probes(ctx)
 	if err != nil {
@@ -59,29 +59,9 @@ func activateStoppedWith(parent context.Context, c connectedprofile.Config, ops 
 			if !ok {
 				continue
 			}
-			// Each invocation gets an independent attempt even if the first
-			// manager operation exhausts its deadline.
-			cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
-			got, e := ops.inspect(cleanup, unit)
-			if e != nil {
-				stop()
-				result = ErrRecovery
-				continue
-			}
-			if got.PID == 0 && (got.Active == "inactive" || got.Active == "failed") {
-				stop()
-				continue
-			}
-			if want.Invocation == "" || got.Invocation != want.Invocation || (got.PID != want.PID && want.PID != 0) || ops.service(cleanup, "stop", unit) != nil {
-				stop()
-				result = ErrRecovery
-				continue
-			}
-			joined, e := ops.inspect(cleanup, unit)
-			if e != nil || joined.PID != 0 || joined.Active != "inactive" {
+			if stopCapturedWorker(unit, want, ops.inspect, ops.service) != nil {
 				result = ErrRecovery
 			}
-			stop()
 		}
 	}()
 	if ops.policy(ctx, uploaderUnit, c.Addresses) != nil {

@@ -40,7 +40,10 @@ func Start(ctx context.Context) error {
 	}
 	defer lease.Close()
 	c, err := inspectInstalled()
-	if err != nil || preflight(ctx) != nil || auditPrincipals(ctx, c) != nil {
+	if err != nil {
+		return err
+	}
+	if preflight(ctx) != nil || auditPrincipals(ctx, c) != nil {
 		return ErrUnsafe
 	}
 	if err := stoppedOwnedWorkers(ctx); err != nil {
@@ -62,19 +65,39 @@ func Stop(ctx context.Context) error {
 	if _, err := inspectInstalled(); err != nil {
 		return err
 	}
+	owned := map[string]workerInstance{}
 	for _, unit := range []string{uploaderUnit, collectorUnit} {
-		if _, err := inspectWorker(ctx, unit); err != nil {
+		state, err := inspectWorker(ctx, unit)
+		if err != nil {
 			return ErrUnsafe
 		}
+		owned[unit] = state
 	}
+	var result error
 	for _, unit := range []string{uploaderUnit, collectorUnit} {
-		if workerService(ctx, "stop", unit) != nil {
-			return ErrRecovery
+		if stopCapturedWorker(unit, owned[unit], inspectWorker, workerService) != nil {
+			result = ErrRecovery
 		}
-		state, err := inspectWorker(ctx, unit)
-		if err != nil || state.PID != 0 || state.Active != "inactive" {
-			return ErrRecovery
-		}
+	}
+	return result
+}
+
+func stopCapturedWorker(unit string, want workerInstance, inspect func(context.Context, string) (workerInstance, error), service func(context.Context, string, string) error) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	got, err := inspect(ctx, unit)
+	if err != nil {
+		return ErrRecovery
+	}
+	if got.PID == 0 && (got.Active == "inactive" || got.Active == "failed") {
+		return nil
+	}
+	if want.Invocation == "" || got.Invocation != want.Invocation || (want.PID != 0 && got.PID != want.PID) || service(ctx, "stop", unit) != nil {
+		return ErrRecovery
+	}
+	joined, err := inspect(ctx, unit)
+	if err != nil || joined.PID != 0 || joined.Active != "inactive" {
+		return ErrRecovery
 	}
 	return nil
 }
@@ -316,6 +339,8 @@ func classifyPairStatus(collector, uploader workerInstance, collected, uploaded 
 		result.State = "RECOVERY_REQUIRED"
 	} else if uploaded.State == "STOPPED" {
 		result.State = "STARTING"
+	} else if !uploaderStatusState(uploaded.State) {
+		result.State = "RECOVERY_REQUIRED"
 	} else {
 		record := *uploaded
 		if record.State == "ACKNOWLEDGED_FRESH" && (record.CollectedAt.IsZero() || now.Sub(record.CollectedAt) > connectedstatus.FreshnessWindow || record.CollectedAt.After(now.Add(uploadstate.MaxFuture))) {
@@ -325,4 +350,13 @@ func classifyPairStatus(collector, uploader workerInstance, collected, uploaded 
 		result.State = record.State
 	}
 	return result
+}
+
+func uploaderStatusState(state string) bool {
+	switch state {
+	case "WAITING_FIRST_UPLOAD", "PENDING", "RETRYING", "RATE_LIMITED", "CREDENTIAL_REJECTED", "RECOVERY_REQUIRED", "ACKNOWLEDGED_FRESH", "ACKNOWLEDGED_STALE", "SOURCE_UNAVAILABLE", "INVALID_SNAPSHOT":
+		return true
+	default:
+		return false
+	}
 }
