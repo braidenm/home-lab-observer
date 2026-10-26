@@ -18,6 +18,7 @@ import activation_guest
 
 class HarnessAdmissionTest(unittest.TestCase):
     def test_activation_failure_phase_is_allowlisted_not_raw_output(self):
+        self.assertEqual(activation_guest.command_failure(b"RECOVERY_REQUIRED: preserve installed state and inspect the owned services before retrying.\n"), "RECOVERY")
         for phase in activation_guest.PHASES:
             data = f"OPERATION_REFUSED: {phase}. Verify the installed bundle, service state and policy.\n".encode("ascii")
             self.assertEqual(activation_guest.command_failure(data), "COMMAND_" + phase)
