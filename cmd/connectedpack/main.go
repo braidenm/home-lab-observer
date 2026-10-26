@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/braidenm/home-lab-observer/internal/connectedbootstrap"
 	"github.com/braidenm/home-lab-observer/internal/connectedbundle"
 	"github.com/braidenm/home-lab-observer/internal/connectedcompat"
 	"github.com/braidenm/home-lab-observer/internal/connectedidentity"
@@ -131,7 +132,17 @@ func run(args []string) error {
 	if writeNew(filepath.Join(*output, connectedbundle.ManifestName), manifest) != nil {
 		return connectedbundle.ErrInvalid
 	}
-	checksums := hex.EncodeToString(hash.Sum(nil)) + "  " + archiveName + "\n" + manifestSHA + "  " + connectedbundle.ManifestName + "\n"
+	archiveInfo, err := os.Stat(filepath.Join(*output, archiveName))
+	if err != nil {
+		return connectedbundle.ErrInvalid
+	}
+	archiveSHA := hex.EncodeToString(hash.Sum(nil))
+	installer, err := connectedbootstrap.Render(manifest, archiveSHA, archiveInfo.Size())
+	if err != nil || writeNew(filepath.Join(*output, "install-connected-linux.sh"), installer) != nil {
+		return connectedbundle.ErrInvalid
+	}
+	installerHash := sha256.Sum256(installer)
+	checksums := archiveSHA + "  " + archiveName + "\n" + manifestSHA + "  " + connectedbundle.ManifestName + "\n" + hex.EncodeToString(installerHash[:]) + "  install-connected-linux.sh\n"
 	if writeNew(filepath.Join(*output, "SHA256SUMS"), []byte(checksums)) != nil {
 		return connectedbundle.ErrInvalid
 	}

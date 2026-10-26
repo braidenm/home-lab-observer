@@ -22,6 +22,10 @@
   - [x] Define bounded disposable operational status and its private single-slot Linux writer; not upload or activation authority.
 - [x] Add fixed-host endpoint resolution and exact loaded-systemd IP-policy admission as an unused library; kernel enforcement and installed startup remain acceptance gates.
 - [ ] Integrate catalog, enrollment, OS-aware installation and authorized hosted views.
+  - [x] Review the [version-pinned public bootstrap design](public-bootstrap.md) independently (PR 115).
+  - [x] Generate the fixed helper and final checksums; test canonical/malformed archive admission,
+    terminal preservation and joined cancellation. Build-only; no published release or owner install.
+  - [ ] Prove actual helper download/redirect/failed-byte refusal and stopped installation in a disposable VM before publication.
   - [x] Add the unreleased Linux collector command root with closed launch admission and collector-only dependency checks; this does not install or activate a worker.
   - [x] Add the unreleased Linux uploader command root with fixed launch modes, strict credential binding, non-fresh preflight status and uploader-only dependency checks; installed enforcement and network acceptance remain open.
 - [ ] Verify packaged platforms, migration/rollback and an explicitly authorized owner canary.

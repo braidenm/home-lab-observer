@@ -1,6 +1,7 @@
 # Version-pinned connected Linux bootstrap
 
-Status: proposed, review before implementation. Completes distribution for Spec 012;
+Status: implemented in the build tool, unpublished; disposable-VM/download and
+release gates remain open. Completes distribution for Spec 012;
 it does not waive ADRs 020/021's remaining installed fault/lifecycle gates.
 
 ## Question and context
@@ -26,7 +27,7 @@ administrator or compromised trusted publisher is not solved by a checksum.
 | Choice | Consequences |
 | --- | --- |
 | Keep verified manual bundle staging | Smallest boundary, but root-owned ancestor requirements and several downloads make normal setup error-prone. Retain as technical fallback. |
-| Version-specific Bash bootstrap with fixed isolated Python USTAR reader, then existing Go transaction | Selected: one public script, exact byte/member pins, standard Ubuntu Python 3.12. The tiny extractor is not an installation transaction or generic archive tool. |
+| Version-specific Bash entrypoint with isolated Python lifecycle coordinator and fixed USTAR reader, then existing Go transaction | Selected: one public script, exact byte/member pins, joined child lifetime and standard Ubuntu Python 3.12. The coordinator is not an installation transaction or generic archive/command tool. |
 | Bash plus GNU tar listing/extraction | Fewer source lines but reliable closed header admission is not expressed by parsing a human-oriented verbose listing; prefer explicit bounded raw-header checks. |
 | General package-manager repository | More distribution policy than this fixed beta needs; revisit for signing, upgrades and broader OS support. |
 
@@ -79,6 +80,34 @@ their own digest. The Platform release catalog separately pins all four assets.
    public files/directories, refuses unexpected contents and never recurses into
    configuration, credentials, ledger, existing releases or a caller path.
 
+### Signal ownership correction
+
+Independent implementation review reproduced a Bash EXIT-trap race: direct
+TERM/HUP to a foreground-child wrapper can run cleanup without joining that child.
+Do not add ad-hoc PID-only kill/trap logic. The tiny Bash entrypoint instead
+preserves its original terminal on descriptor 3 and `exec`s the already required
+isolated Python 3.12 coordinator; the wrapper PID therefore becomes the coordinator.
+Python owns only the fixed download, newly created public staging, extraction,
+verified Go-installer invocation and cleanup. Go still exclusively owns grant,
+accounts, credentials, services and the installed transaction.
+
+The implemented coordinator supervises each code-owned external child with `Popen` plus a
+Linux pidfd opened before reaping. INT/TERM/HUP mark cancellation and forward TERM
+through that handle, never a reused numeric PID; wait/join before any cleanup.
+No detached session or background `/dev/null` stdin for enrollment: pass descriptor
+3 explicitly to the Go child, retaining its actual terminal/no-echo behavior.
+Group Ctrl-C may reach both; cancellation remains idempotent. Cancellation between
+spawn and pidfd acquisition is applied immediately after the handle is obtained.
+Unsupported pidfd support fails before creating staging or starting children.
+In-process extraction checks cancellation between bounded I/O chunks. A child
+that has not joined never authorizes cleanup. No forced orphan-producing timeout
+or general externally selected command/path is introduced.
+
+Process fixtures send direct TERM/HUP and group INT during fixed download,
+extraction and installer phases, require no surviving child and cleanup-after-join
+ordering, and prove terminal preservation. Test subprocess deadlines bound CI;
+failure cleanup kills/joins only fixture-owned processes.
+
 ## Proof and operation
 
 Render tests reject invalid/noncanonical versions, commits, unknown contracts,
@@ -117,6 +146,7 @@ HTTP bodies, host observations or arbitrary tool errors in hosted records.
 - [Python 3.12 tarfile security](https://docs.python.org/3.12/library/tarfile.html#extraction-filters): archive members can carry links and special metadata; do not treat generic extraction defaults as a security boundary. This design instead pins the entire publisher archive and checks its exact closed members before extraction.
 - [Go archive/tar formats](https://pkg.go.dev/archive/tar#Format): the actual publisher uses `FormatUSTAR` and `TypeReg` in `internal/connectedbundle/archive.go`; validate its exact closed output, not the broader formats a generic tar reader accepts.
 - [Python 3.12 gzip](https://docs.python.org/3.12/library/gzip.html): bounded decompression, CRC/truncation failures and possible concatenated members require explicit total/read/EOF handling; a valid gzip wrapper alone says nothing about safe archive contents.
+- [Python 3.12 subprocess](https://docs.python.org/3.12/library/subprocess.html#popen-constructor), [pidfd_open](https://docs.python.org/3.12/library/os.html#os.pidfd_open) and [pidfd_send_signal](https://docs.python.org/3.12/library/signal.html#signal.pidfd_send_signal): explicit stdin/descriptor inheritance and joined child lifetime; pidfd signalling prevents the PID-reuse race of a numeric-PID wrapper. Supported Ubuntu/Linux supplies these primitives; absence is refusal, not a weaker fallback.
 
 These are a narrow fixed-artifact implementation choice, not a claim that shell
 scripts are a general privileged package manager. No owner decision is open for

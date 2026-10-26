@@ -247,6 +247,38 @@ class HarnessAdmissionTest(unittest.TestCase):
             digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
             archive_digest = hashlib.sha256(archive.read_bytes()).hexdigest()
             run_vm.check_archive(archive, manifest, checksums, commit, digest, archive_digest)
+            legacy = checksums.read_text()
+            helper = directory / "install-connected-linux.sh"
+            helper.write_bytes(b"public fixture helper, never executed")
+            helper.chmod(0o644)
+            helper_line = f"{hashlib.sha256(helper.read_bytes()).hexdigest()}  {helper.name}\n"
+            with self.assertRaises(RuntimeError):
+                run_vm.check_archive(archive, manifest, checksums, commit, digest, archive_digest, helper)
+            checksums.write_text(legacy + helper_line)
+            run_vm.check_archive(archive, manifest, checksums, commit, digest, archive_digest, helper)
+            with self.assertRaises(RuntimeError):
+                run_vm.check_archive(archive, manifest, checksums, commit, digest, archive_digest)
+            for malformed in (legacy + helper_line * 2, legacy + helper_line.replace(helper.name, "../install-connected-linux.sh"), legacy + helper_line.replace(helper.name, "other.sh"), helper_line + legacy, legacy + "0" * 64 + "  " + helper.name + "\n"):
+                checksums.write_text(malformed)
+                with self.assertRaises(RuntimeError):
+                    run_vm.check_archive(archive, manifest, checksums, commit, digest, archive_digest, helper)
+            checksums.write_text(legacy + helper_line)
+            for mode in (0o755, 0o600):
+                helper.chmod(mode)
+                with self.assertRaises(RuntimeError):
+                    run_vm.check_archive(archive, manifest, checksums, commit, digest, archive_digest, helper)
+            helper.chmod(0o644)
+            helper.write_bytes(b"x" * (64 * 1024 + 1))
+            with self.assertRaises(RuntimeError):
+                run_vm.check_archive(archive, manifest, checksums, commit, digest, archive_digest, helper)
+            helper.unlink()
+            with self.assertRaises(FileNotFoundError):
+                run_vm.check_archive(archive, manifest, checksums, commit, digest, archive_digest, helper)
+            helper.symlink_to(manifest)
+            with self.assertRaises(RuntimeError):
+                run_vm.check_archive(archive, manifest, checksums, commit, digest, archive_digest, helper)
+            helper.unlink()
+            checksums.write_text(legacy)
             with self.assertRaises(RuntimeError):
                 run_vm.check_archive(archive, manifest, checksums, "b" * 40, digest, archive_digest)
             with self.assertRaises(RuntimeError):
@@ -258,6 +290,11 @@ class HarnessAdmissionTest(unittest.TestCase):
             )
             with self.assertRaises(RuntimeError):
                 run_vm.check_archive(archive, manifest, checksums, commit, digest, archive_digest)
+
+    def test_direct_scopes_never_invoke_public_helper(self):
+        directory = Path(__file__).resolve().parent
+        for name in ("guest.sh", "drive_pty.py", "activation_guest.py"):
+            self.assertNotIn("install-connected-linux.sh", (directory / name).read_text())
 
     def test_fixture_only_probe_requires_independent_pin_and_fixed_name(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Home Lab Observer {{.Version}} / {{.Commit}}
+# Public bytes only. Inspect and verify this exact script before sudo execution.
+set +x
+set -euo pipefail
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+export LC_ALL=C
+umask 077
+refuse() { printf '%s\n' "CONNECTED_BOOTSTRAP_REFUSED: $1" >&2; exit 22; }
+[[ $# -eq 1 && "$1" =~ ^srv_[a-f0-9]{32}$ && $EUID -eq 0 && -t 0 ]] || refuse 'root, terminal and one server reference required'
+[[ -x /usr/bin/python3 ]] || refuse 'Python 3.12 required'
+# Keep the original terminal while Python consumes its fixed source on stdin.
+# exec preserves the wrapper PID: there is only one lifecycle/cleanup owner.
+exec /usr/bin/python3 -I - "$1" 3<&0 <<'HLO_FIXED_COORDINATOR'
+{{.Extraction}}
+{{.Coordinator}}
+HLO_FIXED_COORDINATOR
