@@ -128,8 +128,10 @@ def denies_all_ip(value: str) -> bool:
 
 def payload_assert() -> None:
     identity = json.loads((PAYLOAD / "reviewed-identity.json").read_text())
-    need(set(identity) == {"commit", "manifest_sha256", "archive_sha256", "receiver_sha256",
-                           "probe_sha256", "harness_sha256"}, "REVIEWED_IDENTITY_FIELDS")
+    fields = {"commit", "manifest_sha256", "archive_sha256", "receiver_sha256", "probe_sha256", "harness_sha256"}
+    need(set(identity) in (fields, fields | {"helper_sha256"}), "REVIEWED_IDENTITY_FIELDS")
+    if "helper_sha256" in identity:
+        need(re.fullmatch(r"[a-f0-9]{64}", identity["helper_sha256"]) is not None and digest(PAYLOAD / "install-connected-linux.sh") == identity["helper_sha256"], "REVIEWED_HELPER_PIN")
     expected = identity["manifest_sha256"]
     archive_files = list(PAYLOAD.glob("*.tar.gz"))
     need(len(archive_files) == 1, "ARCHIVE_COUNT")
