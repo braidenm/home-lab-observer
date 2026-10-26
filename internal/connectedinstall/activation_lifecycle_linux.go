@@ -17,6 +17,7 @@ import (
 	"github.com/braidenm/home-lab-observer/internal/connectedbundle"
 	"github.com/braidenm/home-lab-observer/internal/connectedinstalllease"
 	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
+	"github.com/braidenm/home-lab-observer/internal/connectedruntime"
 	"github.com/braidenm/home-lab-observer/internal/connectedstatus"
 	"github.com/braidenm/home-lab-observer/internal/connectedunits"
 	"github.com/braidenm/home-lab-observer/internal/uploadstate"
@@ -30,25 +31,40 @@ type Status struct {
 
 // Start never enrolls, resets delivery state or enables boot activation. The
 // installed binary and both fixed services must match the exact released bundle.
-func Start(ctx context.Context) error {
+func Start(ctx context.Context) (result error) {
+	phase := "REQUEST"
+	defer func() {
+		if result != nil {
+			result = &lifecycleError{phase, result}
+		}
+	}()
 	if ctx == nil || ctx.Err() != nil {
 		return ErrUnsafe
 	}
+	phase = "LEASE"
 	lease, err := connectedinstalllease.Acquire()
 	if err != nil {
 		return ErrUnsafe
 	}
 	defer lease.Close()
+	phase = "INSTALLED_STATE"
 	c, err := inspectInstalled()
 	if err != nil {
 		return err
 	}
-	if preflight(ctx) != nil || auditPrincipals(ctx, c) != nil {
+	phase = "HOST_PROFILE"
+	if preflight(ctx) != nil {
 		return ErrUnsafe
 	}
+	phase = "PRINCIPALS"
+	if auditPrincipals(ctx, c) != nil {
+		return ErrUnsafe
+	}
+	phase = "SERVICE_STATE"
 	if err := stoppedOwnedWorkers(ctx); err != nil {
 		return err
 	}
+	phase = "RUNTIME_GATE"
 	return activateStopped(ctx, c)
 }
 
@@ -217,6 +233,9 @@ func inspectInstalled() (connectedprofile.Config, error) {
 		}
 	}
 	if _, err := connectedprofile.ReadRootFileMode(connectedprofile.StateDirectory+"/uploader-root/etc/ssl/certs/ca-certificates.crt", 1<<20, 0644); err != nil {
+		return c, ErrUnsafe
+	}
+	if connectedruntime.CheckInstalledUploaderScaffold() != nil {
 		return c, ErrUnsafe
 	}
 	return c, nil

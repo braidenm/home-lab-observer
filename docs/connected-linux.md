@@ -20,6 +20,14 @@ normally needs at least one minute plus collection and network time. Status
 distinguishes starting, stopped, partial/failed workers, and fresh/stale receiver
 acknowledgement. The uploaded profile is numeric host monitoring only.
 
+A refused start includes a fixed phase: `LEASE` means another installer operation
+owns the lock, `INSTALLED_STATE` means files or ownership differ, `HOST_PROFILE`
+means the supported OS/manager prerequisites differ, `PRINCIPALS` means dedicated
+service accounts differ, `SERVICE_STATE` means the pair is not safely stopped,
+and `RUNTIME_GATE` means the fresh sandbox/identity/handshake checks failed.
+Preserve state for investigation; do not broaden permissions or reset the ledger.
+Unknown failures retain the generic refusal and never include raw OS errors.
+
 Stop joins both workers and retains credentials and delivery history. A recovery
 diagnostic means preserve the installation for inspection; reinstalling or copying
 back an older ledger is not recovery. Revocation belongs to the owner server page.

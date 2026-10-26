@@ -11,6 +11,7 @@ import (
 	"github.com/braidenm/home-lab-observer/internal/connectedpolicy"
 	"github.com/braidenm/home-lab-observer/internal/connectedprocess"
 	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
+	"github.com/braidenm/home-lab-observer/internal/connectedruntime"
 	"github.com/braidenm/home-lab-observer/internal/connectedstatus"
 )
 
@@ -57,7 +58,7 @@ func (p *probePair) ports() (uint16, uint16) { return p.v4.port(), p.v6.port() }
 
 func systemActivationOperations() activationOperations {
 	return activationOperations{
-		inspect: inspectWorker, service: workerService, audit: connectedprocess.Audit,
+		inspect: inspectWorker, service: workerService, audit: auditActivationProcess,
 		pin: func(gid uint32) (activationRecords, error) {
 			d, err := pinActivation(gid)
 			if err != nil {
@@ -71,4 +72,31 @@ func systemActivationOperations() activationOperations {
 		policy: connectedpolicy.ValidateEffective, installed: inspectInstalled,
 		random: rand.Read, wait: activationWait,
 	}
+}
+
+func auditActivationProcess(ctx context.Context, pid int, executable string) (connectedprocess.Identity, error) {
+	before, err := connectedprocess.Audit(ctx, pid, executable)
+	if err != nil {
+		return before, ErrUnsafe
+	}
+	c, err := connectedprofile.Load()
+	if err != nil {
+		return before, ErrUnsafe
+	}
+	sources := map[string]string{
+		"/bin/observer-connected-uploader":                connectedprofile.ReleaseDirectory + "/" + c.ArtifactSHA256 + "/observer-connected-uploader",
+		"/etc/home-lab-observer-connected/installed.json": connectedprofile.ConfigPath,
+		"/handoff":      connectedprofile.StateDirectory + "/handoff",
+		"/activation":   "/run/home-lab-observer-connected/activation",
+		"/state/ledger": connectedprofile.StateDirectory + "/ledger",
+		"/state/status": connectedprofile.StateDirectory + "/uploader-status",
+	}
+	if connectedruntime.CheckUploaderNamespace(pid, connectedprofile.StateDirectory+"/uploader-root", sources) != nil {
+		return before, ErrUnsafe
+	}
+	after, err := connectedprocess.Audit(ctx, pid, executable)
+	if err != nil || before != after {
+		return before, ErrUnsafe
+	}
+	return after, nil
 }

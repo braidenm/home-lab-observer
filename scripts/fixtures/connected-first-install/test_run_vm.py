@@ -17,6 +17,13 @@ import activation_guest
 
 
 class HarnessAdmissionTest(unittest.TestCase):
+    def test_activation_failure_phase_is_allowlisted_not_raw_output(self):
+        for phase in activation_guest.PHASES:
+            data = f"OPERATION_REFUSED: {phase}. Verify the installed bundle, service state and policy.\n".encode("ascii")
+            self.assertEqual(activation_guest.command_failure(data), "COMMAND_" + phase)
+        for private in (b"hlc_private", b"OPERATION_REFUSED: SECRET. Verify the installed bundle, service state and policy.\n", b"OPERATION_REFUSED: LEASE. Verify the installed bundle, service state and policy.\nhlc_private"):
+            self.assertEqual(activation_guest.command_failure(private), "COMMAND")
+
     def test_activation_driver_refuses_unknown_operations_without_execution(self):
         with mock.patch.object(activation_guest.subprocess, "Popen") as launch:
             with self.assertRaisesRegex(activation_guest.Refused, "^OPERATION$"):

@@ -61,6 +61,9 @@
   - [ ] Run the separate packaged activation journey: scoped synthetic native receiver, useful host metrics,
     stop/start with strictly increasing sequences, retained credential/ledger identity, and explicit start after reboot.
     Keep the stopped-install harness default and publish only bounded assertions; automatic boot is a later gate.
+  - [ ] Align same-process empty-scaffold checks with the accepted systemd 255
+    namespace, prove closed physical-tree/metadata/content negatives, and rerun
+    packaged activation before any owner-host installation.
   - [x] Add independent anchored ext4 stage inspection and exclusive publication primitives with root synthetic interruption tests; not wired to installer commands.
   - [x] Read the fixed authoritative transition journal/receipt names under the anchored ext4 config directory; classification and writes remain separate.
   - [x] Read both fixed legacy refresh names as separate anchored ext4 evidence with a privileged refusal fixture; stage comparison is a separate check.
