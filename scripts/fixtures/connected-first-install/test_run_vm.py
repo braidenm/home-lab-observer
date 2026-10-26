@@ -43,9 +43,25 @@ class HarnessAdmissionTest(unittest.TestCase):
         output = io.StringIO()
         with mock.patch.object(activation_guest.sys, "argv", ["activation_guest.py", "first"]), \
              mock.patch.object(activation_guest, "exercise", side_effect=OSError("hlc_private")), \
+             mock.patch.object(activation_guest, "diagnose_workers"), \
              contextlib.redirect_stderr(output):
             self.assertEqual(activation_guest.main(), 1)
         self.assertEqual(output.getvalue(), "HLO_VM_FAIL_ACTIVATION_UNKNOWN\n")
+
+    def test_worker_diagnostics_reject_unknown_fields_and_values_without_echo(self):
+        values = {"ActiveState": "failed", "Result": "exit-code", "ExecMainCode": "1", "ExecMainStatus": "226"}
+        self.assertEqual(activation_guest.worker_diagnostic(values), "FAILED_EXIT_CODE_CODE_1_STATUS_226")
+        for field in values:
+            for invalid in ("hlc_private", "-1", "256", "00", "", "1\nhlc_private"):
+                with self.subTest(field=field, invalid=invalid):
+                    self.assertEqual(activation_guest.worker_diagnostic({**values, field: invalid}), "UNKNOWN")
+        self.assertEqual(activation_guest.worker_diagnostic({**values, "secret": "hlc_private"}), "UNKNOWN")
+
+    def test_worker_diagnostic_failures_never_echo_exception_or_manager_output(self):
+        output = io.StringIO()
+        with mock.patch.object(assert_guest, "unit_properties", side_effect=OSError("hlc_private")), contextlib.redirect_stderr(output):
+            activation_guest.diagnose_workers()
+        self.assertEqual(output.getvalue(), "HLO_VM_DIAG_COLLECTOR_UNKNOWN\nHLO_VM_DIAG_UPLOADER_UNKNOWN\n")
 
     def test_enrollment_records_are_closed_private_and_bound_without_secret_output(self):
         if not hasattr(os, "getxattr"):

@@ -46,6 +46,30 @@ def command_failure(data: bytes) -> str:
     return "COMMAND"
 
 
+def worker_diagnostic(values: dict) -> str:
+    """Only closed manager states and bounded numeric exit status reach serial."""
+    if set(values) != {"ActiveState", "Result", "ExecMainCode", "ExecMainStatus"}:
+        return "UNKNOWN"
+    active = values["ActiveState"]
+    result = values["Result"]
+    if active not in ("inactive", "activating", "active", "deactivating", "failed") or result not in ("success", "exit-code", "signal", "core-dump", "timeout", "resources", "start-limit-hit", "protocol", "oom-kill"):
+        return "UNKNOWN"
+    code, status = values["ExecMainCode"], values["ExecMainStatus"]
+    if re.fullmatch(r"[0-3]", code) is None or re.fullmatch(r"0|[1-9][0-9]{0,2}", status) is None or int(status) > 255:
+        return "UNKNOWN"
+    return f"{active}_{result}_CODE_{code}_STATUS_{status}".upper().replace("-", "_")
+
+
+def diagnose_workers() -> None:
+    fields = ("ActiveState", "Result", "ExecMainCode", "ExecMainStatus")
+    for role, unit in zip(("COLLECTOR", "UPLOADER"), UNITS):
+        try:
+            code = worker_diagnostic(assert_guest.unit_properties(unit, fields))
+        except (OSError, ValueError, subprocess.SubprocessError, AssertionError):
+            code = "UNKNOWN"
+        print("HLO_VM_DIAG_" + role + "_" + code, file=sys.stderr)
+
+
 def command(binary: Path, operation: str) -> bytes:
     if operation not in ("start", "stop", "status"):
         raise Refused("OPERATION")
@@ -150,6 +174,7 @@ def main() -> int:
         return 0
     except (OSError, ValueError, KeyError, TypeError, AttributeError, subprocess.SubprocessError, AssertionError, Refused) as error:
         # Never propagate raw command output, credential bytes or host records.
+        diagnose_workers()
         code = str(error) if isinstance(error, Refused) and str(error) in FAILURES else "UNKNOWN"
         print("HLO_VM_FAIL_ACTIVATION_" + code, file=sys.stderr)
         return 1

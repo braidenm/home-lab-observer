@@ -61,6 +61,8 @@
   - [ ] Run the separate packaged activation journey: scoped synthetic native receiver, useful host metrics,
     stop/start with strictly increasing sequences, retained credential/ledger identity, and explicit start after reboot.
     Keep the stopped-install harness default and publish only bounded assertions; automatic boot is a later gate.
+    Current packaged refusal is `START_RECOVERY`; the optional manual guest emits only closed
+    manager state/result and numeric exit codes to distinguish worker launch from runtime refusal.
   - [ ] Align same-process empty-scaffold checks with the accepted systemd 255
     namespace, prove closed physical-tree/metadata/content negatives, and rerun
     packaged activation before any owner-host installation.
