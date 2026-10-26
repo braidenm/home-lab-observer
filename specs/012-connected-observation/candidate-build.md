@@ -121,3 +121,20 @@ No candidate, VM acceptance or publication is claimed for the failed dispatch.
 [Python 3.12 command-line guidance](https://docs.python.org/3.12/using/cmdline.html)
 documents both isolated mode's ignored environment and explicit `-B` behavior
 (checked 2026-10-26). A new dispatch uses the reviewed merged correction source.
+
+## Archive scanner action-input correction
+
+[Run 40397611018](https://github.com/braidenm/home-lab-observer/actions/runs/40397611018)
+passed authorization, focused tests, reproducible packaging and reachable-code
+vulnerability scanning. Its attestation job refused at the scanner: the action's
+`path` input produces `syft scan dir:...`, which cannot admit an archive file.
+The action now uses its documented `file` input, producing `syft scan file:...`.
+That exact pinned Syft 1.55.0 command was run against the packaged fixture and
+passed the existing three-role/archive-hash/core-dependency SBOM guard. Workflow
+regression requires the file input and refuses the erroneous directory input.
+Do not accept an empty/outer-only inventory or waive attestation after this failure.
+The uploaded but unattested artifact is not an eligible accepted candidate.
+
+Primary evidence (checked 2026-10-26): the pinned
+[action input contract](https://github.com/anchore/sbom-action/blob/66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c/action.yml)
+and [actual command mapping](https://github.com/anchore/sbom-action/blob/66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c/src/github/SyftGithubAction.ts).

@@ -132,7 +132,7 @@ jobs:
         env:
           SYFT_CHECK_FOR_APP_UPDATE: 'false'
         with:
-          path: dist/payload/home-lab-observer-connected_${{ needs.authorize.outputs.version }}_linux_amd64.tar.gz
+          file: dist/payload/home-lab-observer-connected_${{ needs.authorize.outputs.version }}_linux_amd64.tar.gz
           syft-version: v1.55.0
           format: spdx-json
           output-file: dist/connected.spdx.json
