@@ -54,6 +54,35 @@ artifact identity, for constructing the later acceptance record. Never treat a
 directory left by a failed command as verified; use a new directory after fixing
 the failure. Preparation is not installed acceptance or publication permission.
 
+On 2026-10-26, a live preparation attempt was correctly refused when the Actions
+artifact download endpoint returned HTTP 415 for an octet-stream request. The
+adapter now uses the documented JSON media type for that endpoint's redirect to
+ZIP bytes; release-asset downloads retain their separate octet-stream media type.
+There is no fallback that admits an HTTP error body. This finding and its
+synthetic regression tests are not evidence of successful preparation, VM
+acceptance or publication. See [GitHub's artifact-download contract](https://docs.github.com/en/rest/actions/artifacts?apiVersion=2026-03-10#download-an-artifact).
+
+The same live preflight then found that GitHub CLI 2.93 rejects combining
+`--cert-identity` with `--signer-workflow` before cryptographic verification.
+The adapter now selects only the exact certificate URI, retaining repository,
+source/signer digests, main ref and hosted-runner restrictions. The independent
+certificate policy still checks all signer/source fields and numeric identities
+for both provenance and SPDX; no attestation requirement is relaxed. See the
+[GitHub CLI verification manual](https://cli.github.com/manual/gh_attestation_verify).
+
+That preflight also established that the generated SPDX attestation uses the
+exact predicate `https://spdx.dev/Document/v2.3`. An unversioned prefix accepted
+by the CLI was correctly rejected by the independent exact-match policy. The
+code-owned vocabulary now contains only that SPDX 2.3 URI and SLSA provenance v1;
+unversioned, different-version and prefix matches remain refused. See [GitHub's
+SPDX verification instructions](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations#verifying-an-attestation-for-sboms).
+
+A subsequent read-only diagnostic verified all five files from successful run
+`40399849708`, artifact `12688271733`, against both exact predicates and the
+unchanged certificate/subject policy. No downloaded command was executed and no
+release was written. The corrected verifier still needs review/merge and a new
+candidate before normal preparation, exact-byte VM acceptance and publication.
+
 Run the separate reviewed bootstrap **and** activation VM scopes against those
 exact bytes and independently pinned fixture inputs. Commit the completed
 code-owned `docs/acceptance/connected-linux/<version>.json` record through an

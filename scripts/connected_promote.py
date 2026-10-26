@@ -158,16 +158,22 @@ class Provider:
 
     def binary(self, endpoint, limit):
         require(re.fullmatch(re.escape(PREFIX) + r"/(?:actions/artifacts/[1-9][0-9]*/zip|releases/assets/[1-9][0-9]*)", endpoint))
+        # The Actions API negotiates a JSON redirect to ZIP bytes; release
+        # assets negotiate binary content directly. These are fixed endpoints,
+        # not a caller-controlled media type or a retry on an HTTP failure.
+        media_type = ("application/vnd.github+json" if endpoint.startswith(PREFIX + "/actions/artifacts/")
+                      else "application/octet-stream")
         code, value = self.run([self.gh, "api", "--hostname", "github.com", "--method", "GET",
-                               "-H", "Accept: application/octet-stream", endpoint],
+                               "-H", "Accept: " + media_type,
+                               "-H", "X-GitHub-Api-Version: 2026-03-10", endpoint],
                               self.root, self.env, limit=limit, timeout=120)
         require(code == 0 and 0 < len(value) <= limit)
         return value
 
     def attest(self, path, source, predicate_type):
+        require(predicate_type in policy.PREDICATE_TYPES)
         code, value = self.run([self.gh, "attestation", "verify", str(path), "--repo", REPO,
-                               "--hostname", "github.com", "--signer-workflow",
-                               "github.com/" + REPO + "/" + candidate.WORKFLOW_PATH,
+                               "--hostname", "github.com",
                                "--cert-identity", policy.WORKFLOW_URI,
                                "--source-digest", source, "--signer-digest", source,
                                "--source-ref", "refs/heads/main",
@@ -283,7 +289,7 @@ def verify_candidate(provider, record, packed, workflow_id, directory, now):
         with path.open("xb") as stream:
             stream.write(content)
         path.chmod(0o600)
-        for predicate_type in ("https://slsa.dev/provenance/v1", "https://spdx.dev/Document"):
+        for predicate_type in policy.PREDICATE_TYPES:
             policy.validate_provenance(provider.attest(path, metadata["source"], predicate_type),
                                        metadata, name, policy.digest(content), predicate_type)
     return payload
