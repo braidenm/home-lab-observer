@@ -58,12 +58,12 @@
   - [x] Add and run the manually invoked, network-isolated disposable Ubuntu VM harness for packaged
     stopped-install/reboot/power-cut evidence; no owner-host install or PR-CI claim. All three exact-head cases passed;
     see [the acceptance record](first-install-acceptance.md).
-  - [ ] Run the separate packaged activation journey: scoped synthetic native receiver, useful host metrics,
+  - [x] Run the separate packaged activation journey: scoped synthetic native receiver, useful host metrics,
     stop/start with strictly increasing sequences, retained credential/ledger identity, and explicit start after reboot.
     Keep the stopped-install harness default and publish only bounded assertions; automatic boot is a later gate.
-    Current packaged refusal is `START_RECOVERY`; the optional manual guest emits only closed
-    manager state/result and numeric exit codes to distinguish worker launch from runtime refusal.
-  - [ ] Align same-process empty-scaffold checks with the accepted systemd 255
+    Exact merged-source run passed on 2026-10-26; see [bounded acceptance](activation-acceptance.md).
+    The optional manual guest emits only closed manager state/result and numeric exit codes on failure.
+  - [x] Align same-process empty-scaffold checks with the accepted systemd 255
     namespace, prove closed physical-tree/metadata/content negatives, and rerun
     packaged activation before any owner-host installation.
   - [x] Add independent anchored ext4 stage inspection and exclusive publication primitives with root synthetic interruption tests; not wired to installer commands.
