@@ -58,6 +58,9 @@
   - [x] Add and run the manually invoked, network-isolated disposable Ubuntu VM harness for packaged
     stopped-install/reboot/power-cut evidence; no owner-host install or PR-CI claim. All three exact-head cases passed;
     see [the acceptance record](first-install-acceptance.md).
+  - [ ] Run the separate packaged activation journey: scoped synthetic native receiver, useful host metrics,
+    stop/start with strictly increasing sequences, retained credential/ledger identity, and explicit start after reboot.
+    Keep the stopped-install harness default and publish only bounded assertions; automatic boot is a later gate.
   - [x] Add independent anchored ext4 stage inspection and exclusive publication primitives with root synthetic interruption tests; not wired to installer commands.
   - [x] Read the fixed authoritative transition journal/receipt names under the anchored ext4 config directory; classification and writes remain separate.
   - [x] Read both fixed legacy refresh names as separate anchored ext4 evidence with a privileged refusal fixture; stage comparison is a separate check.

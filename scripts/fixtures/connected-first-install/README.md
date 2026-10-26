@@ -1,4 +1,4 @@
-# Disposable first-install acceptance (stopped install accepted)
+# Disposable first-install and activation acceptance
 
 This fixture is the accepted gate for the stopped Linux connected installer, not an
 owner-host installation recipe. The accepted package and bounded result are recorded in
@@ -78,8 +78,9 @@ timeouts. Confirm that the guest has no external NIC or default route. Generate 
 certificate with DNS SAN `app.braidenmiller.com`, trust that CA only in the
 guest's `/etc/ssl/certs/ca-certificates.crt`, and start the checked-in
 `receiver.go` compiled for Linux/amd64 on `93.184.216.34:443`. The receiver
-accepts one synthetic enrollment POST and returns a synthetic connector secret;
-it does not implement snapshot ingestion or make outbound requests. The fixed
+accepts one synthetic enrollment POST and returns a synthetic connector secret.
+Stopped mode has no snapshot ingestion; optional activation mode admits only
+synthetic numeric-host snapshots. Neither mode makes outbound requests. The fixed
 public address is local to the VM and must never be routed from the host.
 
 The synthetic IDs and terminal grant are intentionally fixed:
@@ -128,8 +129,17 @@ bounded claims are recorded in
 
 ## Bounded manual harness
 
-`run_vm.py` is the reproducible host runner for the three packaged power/reboot
-cases, not every item in the larger acceptance inventory above. Run it only
+For the separate activation journey use `--scope activation`; the default remains
+`--scope stopped`, and `--scope all` combines them. Pin the current six-file harness
+manifest in this exact order: `run_vm.py guest.sh drive_pty.py assert_guest.py
+preflight_probe.py activation_guest.py`. The activation receiver accepts only
+synthetic numeric-host uploads and records bounded counters. Its successful
+stop/start/reboot evidence is separate from the historical stopped-install record;
+reboot still requires an explicit start and does not prove automatic boot support.
+
+`run_vm.py` is the reproducible host runner for the three default stopped-install
+power/reboot cases and the optional activation case, not every item in the larger
+acceptance inventory above. Run it only
 on a dedicated KVM test host while all other QEMU guests (including Platform CI)
 are stopped. It refuses non-root execution, an unverified/non-qcow2 Ubuntu base,
 unsafe path ownership, low capacity and any active QEMU process. Inputs must be
@@ -138,7 +148,7 @@ checked-out harness files and every input/work-root ancestor must also be
 root-owned and not group/other writable; stage the reviewed PR head in such a
 directory before running it with `sudo`. Supply
 the published Canonical image SHA-256 independently, plus the reviewed source
-commit, bundle-manifest SHA-256, archive SHA-256, synthetic-receiver SHA-256, and the canonical five-file harness
+commit, bundle-manifest SHA-256, archive SHA-256, synthetic-receiver SHA-256, and the canonical six-file harness
 manifest SHA-256 from the approved build record; never accept
 digests derived only from the payload sidecars. The work root must already exist and be root-owned
 mode 0700. The script never fetches an image or opens a network connection.
@@ -148,7 +158,7 @@ acceptance contract:
 
 ```sh
 (cd scripts/fixtures/connected-first-install && \
-  sha256sum run_vm.py guest.sh drive_pty.py assert_guest.py preflight_probe.py | sha256sum)
+  sha256sum run_vm.py guest.sh drive_pty.py assert_guest.py preflight_probe.py activation_guest.py | sha256sum)
 ```
 
 ```sh
@@ -172,8 +182,9 @@ sudo python3 scripts/fixtures/connected-first-install/run_vm.py \
 The host launcher makes one fresh 12 GiB copy-on-write overlay per case, a
 read-only ext4 payload image and separate cloud-init seed. It starts 2-vCPU,
 3-GiB QEMU guests with `-nic none`, no host share, bounded serial evidence and
-per-boot deadlines. The three cases are success/reboot, a power cut after the
-durable PREPARING marker, and a power cut after a successful stopped install.
+per-boot deadlines. The three default cases are success/reboot, a power cut after
+the durable PREPARING marker, and a power cut after a successful stopped install.
+Add `--scope activation` for just the activation journey or `--scope all` for all four.
 Guest startup includes a wrong-digest preflight refusal. The launcher removes
 temporary payload source copies after creating the read-only image. On each
 passing case it removes only that case's validated overlay file; after all
@@ -192,8 +203,8 @@ same-package bundle, host, target, endpoint and parent checks used by
 public-address validation, Go TLS and final production `Resolve` parity into
 fixed labels. It emits no raw Go error or certificate data. Neither diagnostic
 receives a grant or changes the installed preflight policy.
-Stage and independently hash `preflight_probe.py` with the four existing
-harness scripts when using a manually transferred checkout.
+Stage and independently hash all six named harness scripts when using a manually
+transferred checkout.
 
 If the installer fails, the PTY driver emits only an allowlisted phase name,
 normalized exit number and prompt-seen bit. Its raw output remains a bounded
@@ -209,5 +220,8 @@ The guest compares exact manifest/config/release identity, selected closed-role
 ownership and ACLs, exact unit fragments and effective isolation properties,
 and ledger/credential/config inode plus byte hashes across reboot and retry.
 The existing synthetic-root tests cover injected file/parent sync failures
-separately. Record the distinction in the PR review and keep activation
-blocked until its own installed-runtime acceptance.
+separately. Record the distinction in the PR review and keep owner activation
+blocked until its own installed-runtime acceptance. Activation mode persists a
+small root-private synthetic admission binding before exchange succeeds; after
+reboot it must match the installed connector and synthetic credential before
+upload is admitted. It never reopens the one-use grant or records a snapshot body.

@@ -114,6 +114,7 @@ prepare_guest() {
   update-ca-certificates >/dev/null 2>&1 || fail TRUST
   local receiver_mode=normal
   [ "$1" != interrupt ] || receiver_mode=interrupt
+  [ "$1" != activation ] || receiver_mode=activation
   "$payload/connected-first-install-receiver" "$alias_ip:443" "$fixture_root/cert.pem" "$fixture_root/key.pem" "$receiver_mode" >/dev/null 2>&1 &
   receiver_pid=$!
   for _ in $(seq 1 50); do
@@ -148,7 +149,7 @@ EOF
 }
 
 case "${1:-}" in
-  success|success-cut|interrupt)
+  success|success-cut|interrupt|activation)
     baseline
     prepare_guest "$1"
     bundle="$(cat "$fixture_root/bundle-path")"
@@ -189,6 +190,12 @@ case "${1:-}" in
       python3 "$payload/assert_guest.py" capture || fail DEEP_ASSERT
       retry_refuses_without_mutation
       python3 "$payload/assert_guest.py" verify || fail RETRY_MUTATED
+      if [ "$1" = activation ]; then
+        python3 "$payload/activation_guest.py" first || fail ACTIVATION
+        emit ACTIVATION_FIRST_BOOT
+        systemctl reboot
+        exit 0
+      fi
       sync
       if [ "$1" = success-cut ]; then
         emit SUCCESS_READY_FOR_CUT
@@ -204,7 +211,19 @@ case "${1:-}" in
   postboot)
     baseline
     mode="$(cat "$fixture_root/postboot-mode")"
-    if [ "$mode" = success ] || [ "$mode" = success-cut ]; then
+    if [ "$mode" = activation ]; then
+      installed_assertions
+      ip addr add "$alias_ip/32" dev lo || fail LOOPBACK_ALIAS
+      "$payload/connected-first-install-receiver" "$alias_ip:443" "$fixture_root/cert.pem" "$fixture_root/key.pem" activation >/dev/null 2>&1 &
+      receiver_pid=$!
+      for _ in $(seq 1 50); do
+        if (echo >/dev/tcp/$alias_ip/443) 2>/dev/null; then break; fi
+        sleep 0.1
+      done
+      kill -0 "$receiver_pid" 2>/dev/null || fail RECEIVER
+      python3 "$payload/activation_guest.py" reboot || fail ACTIVATION_REBOOT
+      emit ACTIVATION_REBOOT_PASS
+    elif [ "$mode" = success ] || [ "$mode" = success-cut ]; then
       installed_assertions
       python3 "$payload/assert_guest.py" verify || fail REBOOT_STATE
       retry_refuses_without_mutation

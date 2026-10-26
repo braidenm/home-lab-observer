@@ -27,12 +27,33 @@ type request struct {
 }
 
 func main() {
-	if len(os.Args) != 5 || os.Args[1] != "93.184.216.34:443" || (os.Args[4] != "normal" && os.Args[4] != "interrupt") {
+	if len(os.Args) != 5 || os.Args[1] != "93.184.216.34:443" || (os.Args[4] != "normal" && os.Args[4] != "interrupt" && os.Args[4] != "activation") {
 		fmt.Fprintln(os.Stderr, "FIXTURE_ARGS_REFUSED")
 		os.Exit(22)
 	}
 	var consumed atomic.Bool
 	interrupt := os.Args[4] == "interrupt"
+	handler := fixtureHandler(&consumed, interrupt)
+	if os.Args[4] == "activation" {
+		admitted, err := restoreFixtureAdmission()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "FIXTURE_ADMISSION_REFUSED")
+			os.Exit(1)
+		}
+		consumed.Store(admitted)
+		handler = fixtureHandlerWithAdmission(&consumed, false, persistFixtureAdmission)
+		observed := &activationReceiver{enrolled: &consumed, write: func(counts activationCounts) error {
+			data, err := json.Marshal(counts)
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile("/var/lib/hlo-first-install-fixture/receiver-counts.next", data, 0600); err != nil {
+				return err
+			}
+			return os.Rename("/var/lib/hlo-first-install-fixture/receiver-counts.next", "/var/lib/hlo-first-install-fixture/receiver-counts.json")
+		}}
+		handler = observed.handler(handler)
+	}
 	dns, err := net.ListenPacket("udp4", "127.0.0.1:53")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "FIXTURE_DNS_LISTEN_FAILED")
@@ -52,7 +73,7 @@ func main() {
 		WriteTimeout:      5 * time.Second,
 		MaxHeaderBytes:    4096,
 		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12},
-		Handler:           fixtureHandler(&consumed, interrupt),
+		Handler:           handler,
 	}
 	if err := server.ListenAndServeTLS(os.Args[2], os.Args[3]); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		fmt.Fprintln(os.Stderr, "FIXTURE_LISTEN_FAILED")
@@ -61,6 +82,10 @@ func main() {
 }
 
 func fixtureHandler(consumed *atomic.Bool, interrupt bool) http.Handler {
+	return fixtureHandlerWithAdmission(consumed, interrupt, nil)
+}
+
+func fixtureHandlerWithAdmission(consumed *atomic.Bool, interrupt bool, persist func(string) error) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != path || r.Method != http.MethodPost || r.URL.RawQuery != "" {
 			http.Error(w, "fixture refusal", http.StatusNotFound)
@@ -83,6 +108,10 @@ func fixtureHandler(consumed *atomic.Bool, interrupt bool) http.Handler {
 			!bytes.HasPrefix([]byte(input.ConnectorID), []byte("agent_")) ||
 			consumed.Swap(true) {
 			http.Error(w, "fixture refusal", http.StatusBadRequest)
+			return
+		}
+		if persist != nil && persist(input.ConnectorID) != nil {
+			http.Error(w, "fixture refusal", http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

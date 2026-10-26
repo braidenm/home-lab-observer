@@ -25,7 +25,8 @@ AAAA returns NODATA, and all other names/types are refused. The guest's regular
 `/etc/resolv.conf` names only `127.0.0.1` with fixed timeouts and attempts. Any malformed or
 oversized DNS packet is dropped, and the responder never forwards or logs a query. No other
 network interface or default route is added. A fixed synthetic one-use grant is entered through a pseudo-terminal after the installer's
-no-echo prompt. The receiver accepts one exact enrollment exchange and no upload. No grant, credential,
+no-echo prompt. The default stopped receiver accepts one exact enrollment exchange and no upload;
+optional activation mode additionally admits the fixed synthetic numeric-host upload. No grant, credential,
 HTTP request body or raw environment is printed to the serial evidence channel.
 On an install failure, the PTY driver retains at most 8 KiB of output in memory
 and emits only an allowlisted phase enum, normalized numeric exit status and
@@ -88,7 +89,8 @@ Synthetic root sync-failure tests remain supplementary; the VM harness must not 
 real hardware cache loss. Isolation assertions for mounts, sockets, credentials and systemd policy
 remain explicit evidence items, with failures a hard no-go.
 
-The executable three-case harness is a prerequisite but not a claim of full acceptance. Its five fixed host/guest
+The executable harness defaults to three stopped cases, with a separate optional activation case;
+it is a prerequisite but not a claim of full acceptance. Its six fixed host/guest
 source files must be bound by an independently reviewed canonical-manifest SHA-256 before payload creation. The larger
 manual inventory additionally calls for hostile pre-publish targets, fault injection and runtime
 worker isolation. Exact guest unit fragments, effective systemd properties, no-ACL ownership and
@@ -102,9 +104,37 @@ therefore proves credential policy from exact unit bytes, the effective
 printable effective network and namespace properties separately. It must not treat `[unprintable]`
 as evidence that a credential is absent.
 
+## Optional activation journey
+
+The default `--scope stopped` keeps the original three cases. `--scope activation`
+selects a separate first-install/start/upload/stop/start/reboot case, and `--scope all`
+combines both. The harness digest now includes a sixth fixed source,
+`activation_guest.py`, after the existing five names. Historical five-file
+acceptance records describe their original source revision only.
+
+In activation mode the guest-only TLS receiver admits only the exact synthetic
+server/credential and canonical quality-aware numeric host documents. Its private
+atomic record contains sequence/counts and a useful-host boolean, never a body.
+The synthetic enrollment admission is persisted before returning a credential.
+On receiver restart, its canonical, bounded root-private binding must match the
+installed server, connector and synthetic credential digest; the one-use exchange
+remains consumed. This fixture state never changes product authorization.
+The guest requires receiver-acknowledged fresh CPU/RAM/uptime, disabled and stopped
+services after explicit stop, increasing upload sequence across explicit restart,
+stable config/credential bytes and ledger directory identity, and bounded ledger
+size. Reboot retains those identities and requires a new explicit start with a
+fresh invocation gate before another acknowledgement. This does not claim automatic
+boot, unattended endpoint refresh, revocation, crash ambiguity or general profile
+acceptance; those remain separately measured gates before the owner canary.
+
+The sixth driver accepts only fixed `first`/`reboot` modes and installed lifecycle
+operations. It bounds subprocess output/runtime and emits only closed failure
+markers. PR CI executes receiver/unit/admission/syntax checks, never the VM itself.
+
 The host bounds every QEMU process by timeout and PID, holds an exclusive fixture lease, and prints
 fixed redacted PASS/FAIL case identifiers. It preserves evidence on failure. On success, an explicit
 cleanup operation may remove only the uniquely named, resolved fixture directory it created, after
 QEMU exits and the path is verified under the admitted work root. Never recursively delete the image
-root or CI directories. The harness does not activate observer services, install on the owner host,
-or merge its parent PR. Independent review and operator sign-off remain mandatory.
+root or CI directories. Only the optional activation case starts observer services,
+inside its isolated guest. The harness never installs on the owner host or merges
+its parent PR. Independent review and operator sign-off remain mandatory.

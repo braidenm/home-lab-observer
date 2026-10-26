@@ -13,9 +13,32 @@ import run_vm
 import assert_guest
 import drive_pty
 import preflight_probe
+import activation_guest
 
 
 class HarnessAdmissionTest(unittest.TestCase):
+    def test_activation_driver_refuses_unknown_operations_without_execution(self):
+        with mock.patch.object(activation_guest.subprocess, "Popen") as launch:
+            with self.assertRaisesRegex(activation_guest.Refused, "^OPERATION$"):
+                activation_guest.command(Path("/untrusted"), "enable")
+            launch.assert_not_called()
+
+    def test_activation_driver_rejects_oversized_records_without_echo(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "record.json"
+            path.write_bytes(b"hlc_" + b"A" * 5000)
+            with self.assertRaisesRegex(activation_guest.Refused, "^RECORD$") as error:
+                activation_guest.read_json(path)
+            self.assertNotIn("hlc_", str(error.exception))
+
+    def test_activation_driver_failure_output_is_closed(self):
+        output = io.StringIO()
+        with mock.patch.object(activation_guest.sys, "argv", ["activation_guest.py", "first"]), \
+             mock.patch.object(activation_guest, "exercise", side_effect=OSError("hlc_private")), \
+             contextlib.redirect_stderr(output):
+            self.assertEqual(activation_guest.main(), 1)
+        self.assertEqual(output.getvalue(), "HLO_VM_FAIL_ACTIVATION_UNKNOWN\n")
+
     def test_enrollment_records_are_closed_private_and_bound_without_secret_output(self):
         if not hasattr(os, "getxattr"):
             self.skipTest("Linux ACL fixture only")
