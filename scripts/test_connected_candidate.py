@@ -311,6 +311,15 @@ class SBOMTests(unittest.TestCase):
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_isolated_workflow_python_explicitly_disables_bytecode(self):
+        root = Path(policy.__file__).parent.parent
+        for path in (policy.WORKFLOW_PATH, ".github/workflows/contracts.yml"):
+            commands = [line.strip() for line in (root / path).read_text().splitlines()
+                        if "python3 -I" in line]
+            self.assertTrue(commands)
+            for command in commands:
+                self.assertIn("python3 -I -B ", command)
+
     def test_workflow_is_manual_hosted_read_only_and_attests_exact_final_subjects(self):
         root = Path(policy.__file__).parent.parent
         workflow = (root / policy.WORKFLOW_PATH).read_text()
