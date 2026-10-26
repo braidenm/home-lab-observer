@@ -1,0 +1,63 @@
+{
+  "schema_version": "observer-connected-acceptance/v1",
+  "candidate": {
+    "schema_version": "observer-connected-candidate/v1",
+    "repository_id": 1362278980,
+    "owner_id": 44215293,
+    "workflow_path": ".github/workflows/connected-linux-candidate.yml",
+    "workflow_id": 397507617,
+    "ref": "refs/heads/main",
+    "run_id": 40402397517,
+    "run_attempt": 1,
+    "source": "5dc7bfa3280287431878c778eb9faf9f86cd9152",
+    "version": "0.1.0-canary.1",
+    "contract_sha256": "149388842ed010284b6b0c023c477be7c597ac78d4d5d79a4192a9389697de7f",
+    "assets": [
+      {
+        "name": "home-lab-observer-connected_0.1.0-canary.1_linux_amd64.tar.gz",
+        "size": 12224597,
+        "sha256": "87e22343de0b145d3f5abdf5ca88aed950434f6d49ae7d4cfe46817fcc802160"
+      },
+      {
+        "name": "connected-manifest.json",
+        "size": 1313,
+        "sha256": "7ed37964165a38c9bc04d770d03e1604ceebf632f8b1240e1ea0b4815ef3c0f2"
+      },
+      {
+        "name": "install-connected-linux.sh",
+        "size": 20752,
+        "sha256": "1a13867bfc10e5607fabfca17af048c6572ef3e03ac38878dd9a0065c30c28a6"
+      },
+      {
+        "name": "SHA256SUMS",
+        "size": 311,
+        "sha256": "105d578f7ae1634123de861705b1658317784ec46f3f080734fc0146d942903f"
+      }
+    ]
+  },
+  "candidate_sha256": "ebfbab1c980fa8c43e11edc91d47d1f582e16060fc09a1e2307409278d0f1921",
+  "artifact": {
+    "id": 12689263049,
+    "name": "connected-linux-0.1.0-canary.1-40402397517-1",
+    "sha256": "84b13225ee60314060394d0f39a0a2cc868018ac0d36f734e345202650ae4dd3",
+    "size": 12248673,
+    "expires_at": "2026-11-02T21:13:31Z"
+  },
+  "vm": {
+    "image_sha256": "04e8f2461a16a44e78a370284471f29616cdd9baf1893df25807b71f985b6c94",
+    "receiver_sha256": "312f5097ce91ea2cbfd3211981aac57d12b3d76d42ddc73cdcb5d9bdae06e173",
+    "probe_sha256": "75b749f22cc33f3c65e13dc663113256a5c3e8daec3b4b999c5ebf74501f13dc",
+    "harness_sha256": "adc82119e0c7b4ab76f1865d0d16ca7df81c32587f0a271e418e1b3a0d93ecfe",
+    "results": {
+      "helper_corrupt": "PASS",
+      "archive_corrupt": "PASS",
+      "http_downgrade": "PASS",
+      "redirect_loop": "PASS",
+      "valid_stopped_reboot": "PASS",
+      "useful_upload": "PASS",
+      "stop_start_sequence": "PASS",
+      "explicit_reboot_start": "PASS",
+      "retained_identity": "PASS"
+    }
+  }
+}
