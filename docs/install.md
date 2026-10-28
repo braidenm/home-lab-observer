@@ -1,8 +1,17 @@
 # Install and run the native preview
 
-Home Lab Observer runs on your machine. It collects host/process readings and serves a private local dashboard; Docker
+This guide covers the rich **local preview** on Windows, macOS and Linux. It collects host/process readings and serves a private local dashboard; Docker
 and Windows/Linux native log metadata are separate, explicit options. You do **not** need Docker, Go, Node, a GitHub
 account, or a GitHub token to run the native package. Nothing is sent to Platform Demo by this preview.
+
+For hosted numeric monitoring on Ubuntu 24.04/systemd 255/amd64, use the separate
+[connected beta guide](connected-linux.md) and
+[0.1.0-canary.1 release](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-canary.1).
+That root-installed, explicitly enrolled package has different workers, credentials
+and Start/Status/Stop commands. Its installation stays stopped; unattended startup,
+automated upgrade/removal and real owner/share rollout acceptance are not complete.
+The local preview helpers and rollback/uninstall options below do **not** manage
+that connected installation or Platform Demo's legacy Compose connector.
 
 ## Choose your download
 

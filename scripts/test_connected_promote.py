@@ -332,14 +332,56 @@ class ProviderTests(unittest.TestCase):
             calls.append(argv)
             return 0, b"[]"
         provider = self.provider(run)
-        provider.attest(Path(tempfile.gettempdir()) / "candidate.json", "a" * 40,
-                        "https://slsa.dev/provenance/v1")
-        argv = calls[0]
-        for flag, expected in (("--hostname", "github.com"), ("--cert-identity", policy.WORKFLOW_URI),
-                               ("--source-ref", "refs/heads/main"), ("--source-digest", "a" * 40)):
-            self.assertEqual(expected, argv[argv.index(flag) + 1])
-        self.assertIn("--deny-self-hosted-runners", argv)
-        self.assertFalse(any("auth" == item for item in argv))
+        for predicate in ("https://slsa.dev/provenance/v1", "https://spdx.dev/Document/v2.3"):
+            provider.attest(Path(tempfile.gettempdir()) / "candidate.json", "a" * 40, predicate)
+            argv = calls[-1]
+            for flag, expected in (("--hostname", "github.com"), ("--repo", cli.REPO),
+                                   ("--cert-identity", policy.WORKFLOW_URI),
+                                   ("--source-ref", "refs/heads/main"), ("--source-digest", "a" * 40),
+                                   ("--signer-digest", "a" * 40), ("--predicate-type", predicate)):
+                self.assertEqual(expected, argv[argv.index(flag) + 1])
+            # gh treats these signer selectors as mutually exclusive. The exact
+            # certificate URI is sufficient; pure policy still checks every
+            # signer/source certificate field and numeric repository identity.
+            selectors = ("--cert-identity", "--cert-identity-regex", "--signer-workflow", "--signer-repo")
+            self.assertEqual(["--cert-identity"], [flag for flag in selectors if flag in argv])
+            self.assertIn("--deny-self-hosted-runners", argv)
+            self.assertFalse(any("auth" == item for item in argv))
+        for predicate in ("https://spdx.dev/Document", "https://spdx.dev/Document/v2.2",
+                          "https://spdx.dev/Document/v2.3/extra", "https://spdx.dev", "arbitrary"):
+            with self.assertRaises(ValueError):
+                provider.attest(Path(tempfile.gettempdir()) / "candidate.json", "a" * 40, predicate)
+        self.assertEqual(2, len(calls))  # Invalid vocabulary is refused before gh.
+
+    def test_binary_media_is_endpoint_specific_and_unsupported_responses_refuse(self):
+        calls = []
+        def run(argv, cwd, env, **bounds):
+            calls.append((argv, bounds))
+            return 0, b"synthetic-download-never-executed"
+        provider = self.provider(run)
+        for path, media in (("/actions/artifacts/123/zip", "application/vnd.github+json"),
+                            ("/releases/assets/456", "application/octet-stream")):
+            endpoint = cli.PREFIX + path
+            self.assertEqual(b"synthetic-download-never-executed", provider.binary(endpoint, 4096))
+            argv, bounds = calls[-1]
+            self.assertEqual(["api", "--hostname", "github.com", "--method", "GET"], argv[1:6])
+            self.assertEqual(["-H", "Accept: " + media,
+                              "-H", "X-GitHub-Api-Version: 2026-03-10", endpoint], argv[-5:])
+            self.assertEqual({"limit": 4096, "timeout": 120}, bounds)
+        for endpoint in (cli.PREFIX + "/actions/artifacts/123/zip?redirect=other",
+                         cli.PREFIX + "/releases/assets/0", "https://evil.example/archive.zip"):
+            with self.assertRaises(ValueError):
+                provider.binary(endpoint, 4096)
+        self.assertEqual(2, len(calls))
+        def unsupported(argv, *_args, **_kwargs):
+            calls.append(argv)
+            return 1, b'{"status":"415","message":"synthetic unsupported media"}'
+        provider = self.provider(unsupported)
+        for endpoint in (cli.PREFIX + "/actions/artifacts/123/zip", cli.PREFIX + "/releases/assets/456"):
+            before = len(calls)
+            with self.assertRaises(ValueError):
+                provider.binary(endpoint, 4096)
+            self.assertEqual(before + 1, len(calls))  # No fallback or error-body admission.
 
     def test_response_parsing_only_closed_missing_and_conflict_states(self):
         self.assertIsNone(cli.decode_response(b"HTTP/2.0 404 Not Found\n\n{}", missing=True))

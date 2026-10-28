@@ -1,6 +1,6 @@
 # Full-system dashboard delivery plan
 
-Updated 2026-09-10 from the owner's expanded request. This is the sequence, not a completed-feature claim. Each phase
+Updated 2026-10-26 after connected-beta publication. This is the sequence, not a completed-feature claim. Each phase
 requires its own accepted specification, executable contracts, independent review and verified release evidence.
 
 ## 1. Native observation: released
@@ -23,19 +23,26 @@ pod specification fields; the owner must accept a bounded ingress-and-discard po
 the API, credential and data policy in an ADR/specification. Initial native versus in-cluster deployment is also an
 open owner preference. Metrics, Events, Jobs and node-management extensions remain separately specified.
 
-## 2. Connect installed observers to the hosted home-lab dashboard: next
+## 2. Connected Linux beta: published; real owner/share rollout next
 
-[Spec 012](../specs/012-connected-observation/spec.md) starts with the explicit numeric-host projection and receiver
-compatibility proof. Subsequent isolation, transport, catalog and installation gates remain visible in its task list.
+[Spec 012](../specs/012-connected-observation/spec.md) now has a published
+[Ubuntu 24.04/systemd 255/amd64 beta](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-canary.1).
+Source `5dc7bfa3280287431878c778eb9faf9f86cd9152`, hosted candidate run `40402397517` attempt `1` and artifact
+`12689263049` are bound by the [canonical acceptance record](acceptance/connected-linux/0.1.0-canary.1.json).
+Both exact-artifact bootstrap and activation VM scopes passed; immutable publication and anonymous verification
+of all four download assets completed. These are release proofs, not a real owner-host or sharing acceptance claim.
 
-Audit Platform Demo enrollment, owner/delegation permissions, installer catalog and legacy upload compatibility.
-Deliver OS-aware downloads, one-use enrollment, scoped renewable credentials, bounded authenticated outbound delivery,
-revocation and visible connection health. Preserve existing agents during migration. Reuse the observer's
-transport-neutral UI through an authorized hosted data source, not a browser iframe to another machine's localhost.
+Next: enable the deployment-owned catalog through reviewed infrastructure and the normal root reconciler,
+install a separate owner-bound native canary, prove useful fresh acknowledged readings, then verify ordinary-user
+grant/view/revoke and direct API/URL denial. Preserve legacy Compose connectors, identities and snapshots.
+The [operator guide](connected-linux.md) documents the supported My servers flow and manual lifecycle.
+The rich local Windows/macOS/Linux preview remains independent; connected Windows/macOS are not delivered yet.
 
 Remote fields require explicit approved data policy: enrollment alone does not make local-only Docker, process or log
-metadata upload-eligible. Verify owner/delegate authorization on every backend view. Test installation, connection,
-dashboard, retries and revocation with synthetic resources before an explicitly authorized owner-server canary.
+metadata upload-eligible. Verify owner/delegate authorization on every backend view. The numeric beta uses
+separate restricted collector/uploader workers and hidden one-use enrollment, but leaves services disabled/stopped
+after install and reboot. Automatic boot/crash recovery, upgrades/removal and broader remote profiles remain open;
+do not present the beta as unattended or production-certified.
 
 ## 3. Separately permissioned container control: after connectivity
 
