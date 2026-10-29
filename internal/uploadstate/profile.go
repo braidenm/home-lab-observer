@@ -17,6 +17,8 @@ const (
 	// RichProcessesProfile corresponds to server approval RICH_PROCESSES_V1.
 	// It never allows container-enabled inventory, even if that document is valid.
 	RichProcessesProfile
+	// RichProcessesDockerProfile is separately approved for both workload groups.
+	RichProcessesDockerProfile
 )
 
 // ProfileBinding is immutable for an installation's upload identity. The caller
@@ -30,7 +32,7 @@ func validProfile(p ProfileBinding) bool {
 	switch p.Kind {
 	case NumericProfile:
 		return p.PolicyDigest == [32]byte{}
-	case RichProcessesProfile:
+	case RichProcessesProfile, RichProcessesDockerProfile:
 		return p.PolicyDigest != [32]byte{}
 	default:
 		return false
@@ -38,7 +40,7 @@ func validProfile(p ProfileBinding) bool {
 }
 
 func maxBodyBytes(p ProfileBinding) int {
-	if p.Kind == RichProcessesProfile {
+	if p.Kind == RichProcessesProfile || p.Kind == RichProcessesDockerProfile {
 		return combinedprojection.MaxBytes
 	}
 	return remoteprojection.MaxBytes
@@ -67,7 +69,7 @@ func collectionTime(body []byte, server string, p ProfileBinding) (time.Time, bo
 			} `json:"policy"`
 		} `json:"workload_inventory"`
 	}
-	if json.Unmarshal(body, &groups) != nil || !groups.Workloads.Policy.Processes || groups.Workloads.Policy.Containers {
+	if json.Unmarshal(body, &groups) != nil || !groups.Workloads.Policy.Processes || groups.Workloads.Policy.Containers != (p.Kind == RichProcessesDockerProfile) {
 		return time.Time{}, false
 	}
 	return at, true

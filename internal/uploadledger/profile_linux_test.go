@@ -210,10 +210,22 @@ func TestRichStoredPolicyAndLogicalFailuresAreNotAdopted(t *testing.T) {
 }
 
 func TestRichSQLCapacityIsNotWireAcceptanceAndPeakIsBounded(t *testing.T) {
-	l, _ := provisionRich(t)
+	testRichCapacityAndPeak(t, rich, richPending)
+}
+
+func TestDockerSQLCapacityIsNotWireAcceptanceAndPeakIsBounded(t *testing.T) {
+	testRichCapacityAndPeak(t, dockerRich, dockerPending)
+}
+
+func testRichCapacityAndPeak(t *testing.T, profile uploadstate.ProfileBinding, makePending func(*testing.T, int64, time.Duration) uploadstate.Record) {
+	l, err := ProvisionForProfile(context.Background(), directory(t), binding, profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
 	var peak, largestDB, largestJournal int64
 	sample := func() error {
-		if err := checkFilesForProfile(l.dir, true, rich); err != nil {
+		if err := checkFilesForProfile(l.dir, true, profile); err != nil {
 			return err
 		}
 		entries, err := os.ReadDir(l.dir)
@@ -243,11 +255,11 @@ func TestRichSQLCapacityIsNotWireAcceptanceAndPeakIsBounded(t *testing.T) {
 	l.afterCommit = sample
 	previous := load(t, l)
 	for i := int64(1); i <= 25; i++ {
-		next := richPending(t, i, time.Duration(i)*time.Nanosecond)
+		next := makePending(t, i, time.Duration(i)*time.Nanosecond)
 		if l.Commit(context.Background(), previous, next) != nil {
 			t.Fatal("bounded maximal eligible admission failed")
 		}
-		retired := uploadstate.Record{Binding: binding, Profile: rich, Watermark: i}
+		retired := uploadstate.Record{Binding: binding, Profile: profile, Watermark: i}
 		if i%2 == 0 {
 			retired.HasAck, retired.LastAck = true, next.Pending.Digest
 		}
@@ -259,7 +271,7 @@ func TestRichSQLCapacityIsNotWireAcceptanceAndPeakIsBounded(t *testing.T) {
 	// A schema-valid opaque BLOB at the defensive ceiling is not a valid wire
 	// document. Exercise SQL capacity separately, and require Load to refuse it.
 	for iteration, size := range []int{294912, 294912, 294913} {
-		next := richPending(t, 26, 0)
+		next := makePending(t, 26, 0)
 		next.Pending.Body = bytes.Repeat([]byte{byte('x' + iteration)}, size)
 		err := l.transaction(context.Background(), func() error {
 			_, err := l.conn.ExecContext(context.Background(), richUpdateRecord, argsFor(next)...)
@@ -275,7 +287,7 @@ func TestRichSQLCapacityIsNotWireAcceptanceAndPeakIsBounded(t *testing.T) {
 	if peak <= 0 || largestJournal == 0 || largestDB+largestJournal >= 2*1024*1024 {
 		t.Fatal("rich transactional peak proof absent")
 	}
-	t.Logf("maximal canonical body=%d, before/after-commit sampled peak=%d, conservative file maxima sum=%d (includes SQL ceiling fixture)", len(richPending(t, 1, 0).Pending.Body), peak, largestDB+largestJournal)
+	t.Logf("maximal canonical body=%d, before/after-commit sampled peak=%d, conservative file maxima sum=%d (includes SQL ceiling fixture)", len(makePending(t, 1, 0).Pending.Body), peak, largestDB+largestJournal)
 }
 
 type richSource struct {
@@ -303,11 +315,23 @@ func (tr *richTransport) Send(_ context.Context, r uploadstate.Request) (uploads
 }
 
 func TestRichRealLedgerMachineRetryRestartAckAndExpiry(t *testing.T) {
-	l, dir := provisionRich(t)
-	source := &richSource{body: richPending(t, 1, 0).Pending.Body}
+	testProfileMachine(t, rich, richPending)
+}
+
+func TestDockerRealLedgerMachineRetryRestartAckAndExpiry(t *testing.T) {
+	testProfileMachine(t, dockerRich, dockerPending)
+}
+
+func testProfileMachine(t *testing.T, profile uploadstate.ProfileBinding, makePending func(*testing.T, int64, time.Duration) uploadstate.Record) {
+	l, err := ProvisionForProfile(context.Background(), directory(t), binding, profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := l.dir
+	source := &richSource{body: makePending(t, 1, 0).Pending.Body}
 	clock := &richClock{at: at}
 	transport := &richTransport{}
-	m, err := uploadstate.NewForProfile(binding, rich, source, clock, transport, l)
+	m, err := uploadstate.NewForProfile(binding, profile, source, clock, transport, l)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -316,14 +340,14 @@ func TestRichRealLedgerMachineRetryRestartAckAndExpiry(t *testing.T) {
 	}
 	first := load(t, l)
 	l.Close()
-	l, err = OpenExistingForProfile(context.Background(), dir, binding, rich)
+	l, err = OpenExistingForProfile(context.Background(), dir, binding, profile)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer l.Close()
-	source.body = richPending(t, 2, time.Second).Pending.Body
+	source.body = makePending(t, 2, time.Second).Pending.Body
 	transport.ack = true
-	m, err = uploadstate.NewForProfile(binding, rich, source, clock, transport, l)
+	m, err = uploadstate.NewForProfile(binding, profile, source, clock, transport, l)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,13 +363,13 @@ func TestRichRealLedgerMachineRetryRestartAckAndExpiry(t *testing.T) {
 		t.Fatal("second admission failed")
 	}
 	clock.at = at.Add(uploadstate.MaxAge + 2*time.Second)
-	source.body = richPending(t, 3, uploadstate.MaxAge+2*time.Second).Pending.Body
+	source.body = makePending(t, 3, uploadstate.MaxAge+2*time.Second).Pending.Body
 	transport.ack = true
 	if outcome, err := m.Step(context.Background()); outcome != uploadstate.Acknowledged || err != nil {
 		t.Fatal("expiry replacement failed")
 	}
 	final := load(t, l)
-	if final.Watermark != 3 || final.Profile != rich || final.Pending != nil || transport.requests[3].Sequence != 3 {
+	if final.Watermark != 3 || final.Profile != profile || final.Pending != nil || transport.requests[3].Sequence != 3 {
 		t.Fatal("expiry reused retired sequence/profile")
 	}
 }
@@ -356,6 +380,8 @@ func TestRichCrashRecoveryAndCrossKindHotJournalRefusal(t *testing.T) {
 		profile := rich
 		if os.Getenv("HLO_RICH_LEDGER_KIND") == "numeric" {
 			profile = uploadstate.ProfileBinding{}
+		} else if os.Getenv("HLO_RICH_LEDGER_KIND") == "docker" {
+			profile = dockerRich
 		}
 		l, err := OpenExistingForProfile(context.Background(), dir, binding, profile)
 		if err != nil {
@@ -365,6 +391,8 @@ func TestRichCrashRecoveryAndCrossKindHotJournalRefusal(t *testing.T) {
 		next := richPending(t, 1, 0)
 		if profile.Kind == uploadstate.NumericProfile {
 			next = pending(t, 1, 0)
+		} else if profile.Kind == uploadstate.RichProcessesDockerProfile {
+			next = dockerPending(t, 1, 0)
 		}
 		if phase == "hot" {
 			l.Close()
@@ -396,7 +424,7 @@ func TestRichCrashRecoveryAndCrossKindHotJournalRefusal(t *testing.T) {
 		l.Commit(context.Background(), initial, next)
 		os.Exit(4)
 	}
-	for _, kind := range []string{"rich", "numeric"} {
+	for _, kind := range []string{"rich", "numeric", "docker"} {
 		for _, phase := range []string{"before", "after", "hot"} {
 			// Existing numeric crash tests retain their before/after proof. Only
 			// add its hot case here for the new cross-kind non-mutation boundary.
@@ -407,6 +435,8 @@ func TestRichCrashRecoveryAndCrossKindHotJournalRefusal(t *testing.T) {
 				profile := rich
 				if kind == "numeric" {
 					profile = uploadstate.ProfileBinding{}
+				} else if kind == "docker" {
+					profile = dockerRich
 				}
 				dir := directory(t)
 				l, err := ProvisionForProfile(context.Background(), dir, binding, profile)
@@ -431,21 +461,22 @@ func TestRichCrashRecoveryAndCrossKindHotJournalRefusal(t *testing.T) {
 				if phase == "hot" && journalErr != nil {
 					t.Fatal("hot journal missing")
 				}
-				other := rich
-				if kind == "rich" {
-					other = uploadstate.ProfileBinding{}
-				}
-				if got, err := OpenExistingForProfile(context.Background(), dir, binding, other); err == nil {
-					got.Close()
-					t.Fatal("cross-kind state opened")
-				}
-				afterDB, err := os.ReadFile(filepath.Join(dir, databaseName))
-				if err != nil || !bytes.Equal(beforeDB, afterDB) {
-					t.Fatal("cross-kind admission changed DB")
-				}
-				afterJournal, afterErr := os.ReadFile(filepath.Join(dir, journalName))
-				if (journalErr == nil) != (afterErr == nil) || !bytes.Equal(beforeJournal, afterJournal) {
-					t.Fatal("cross-kind admission changed journal")
+				for _, other := range []uploadstate.ProfileBinding{{}, rich, dockerRich} {
+					if other.Kind == profile.Kind {
+						continue
+					}
+					if got, err := OpenExistingForProfile(context.Background(), dir, binding, other); err == nil {
+						got.Close()
+						t.Fatal("cross-kind state opened")
+					}
+					afterDB, err := os.ReadFile(filepath.Join(dir, databaseName))
+					if err != nil || !bytes.Equal(beforeDB, afterDB) {
+						t.Fatal("cross-kind admission changed DB")
+					}
+					afterJournal, afterErr := os.ReadFile(filepath.Join(dir, journalName))
+					if (journalErr == nil) != (afterErr == nil) || !bytes.Equal(beforeJournal, afterJournal) {
+						t.Fatal("cross-kind admission changed journal")
+					}
 				}
 				reopened, err := OpenExistingForProfile(context.Background(), dir, binding, profile)
 				if err != nil {
@@ -457,6 +488,8 @@ func TestRichCrashRecoveryAndCrossKindHotJournalRefusal(t *testing.T) {
 					want = richPending(t, 1, 0)
 					if kind == "numeric" {
 						want = pending(t, 1, 0)
+					} else if kind == "docker" {
+						want = dockerPending(t, 1, 0)
 					}
 				}
 				if !sameRecord(load(t, reopened), want) {
@@ -468,9 +501,21 @@ func TestRichCrashRecoveryAndCrossKindHotJournalRefusal(t *testing.T) {
 }
 
 func TestRichUncertainCommitReopensAuthoritativeState(t *testing.T) {
+	testProfileUncertainCommit(t, rich, richPending)
+}
+
+func TestDockerUncertainCommitReopensAuthoritativeState(t *testing.T) {
+	testProfileUncertainCommit(t, dockerRich, dockerPending)
+}
+
+func testProfileUncertainCommit(t *testing.T, profile uploadstate.ProfileBinding, makePending func(*testing.T, int64, time.Duration) uploadstate.Record) {
 	for _, after := range []bool{false, true} {
-		l, dir := provisionRich(t)
-		initial, next := load(t, l), richPending(t, 1, 0)
+		l, err := ProvisionForProfile(context.Background(), directory(t), binding, profile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		dir := l.dir
+		initial, next := load(t, l), makePending(t, 1, 0)
 		if after {
 			l.afterCommit = func() error { return syntheticError }
 		} else {
@@ -483,7 +528,7 @@ func TestRichUncertainCommitReopensAuthoritativeState(t *testing.T) {
 			t.Fatal("uncertainty did not latch")
 		}
 		l.Close()
-		reopened, err := OpenExistingForProfile(context.Background(), dir, binding, rich)
+		reopened, err := OpenExistingForProfile(context.Background(), dir, binding, profile)
 		if err != nil {
 			t.Fatal(err)
 		}

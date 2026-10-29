@@ -11,6 +11,12 @@ type RichProcessesWriter struct{ s *slot }
 type RichProcessesReader struct{ s *slot }
 
 func (s *slot) maxBytes() int64 {
+	if s.frame != nil {
+		return DockerFrameMaxBytes
+	}
+	if s.richDocker != nil {
+		return RichProcessesDockerMaxBytes
+	}
 	if s.rich != nil {
 		return RichProcessesMaxBytes
 	}

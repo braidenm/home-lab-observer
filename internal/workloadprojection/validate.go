@@ -89,7 +89,7 @@ func validSection[T any](s section[T], enabled bool, rows int) bool {
 	return err == nil && len(b) <= MaxSectionBytes
 }
 func validDocument(d document, source string) bool {
-	if d.Schema != SchemaVersion || d.Profile != Profile || !sourcePattern.MatchString(source) || d.Source != source || len(d.Version) > 40 || !versionPattern.MatchString(d.Version) || !validTime(d.At) || d.Policy.Classification != "SENSITIVE" || !d.Policy.ReadOnly || d.Processes.CPUBasis != "LIFETIME_SINGLE_CORE" || d.Containers.CPUBasis != "ENGINE_HOST_CAPACITY" || !validSection(d.Processes, d.Policy.Processes, MaxProcesses) || !validSection(d.Containers, d.Policy.Containers, MaxContainers) {
+	if d.Schema != SchemaVersion || d.Profile != Profile || !sourcePattern.MatchString(source) || d.Source != source || len(d.Version) > 40 || !versionPattern.MatchString(d.Version) || !validTime(d.At) || d.Policy.Classification != "SENSITIVE" || !d.Policy.ReadOnly || d.Processes.CPUBasis != "LIFETIME_SINGLE_CORE" || !validSection(d.Processes, d.Policy.Processes, MaxProcesses) || !validContainersSection(d.Containers, d.Policy.Containers) {
 		return false
 	}
 	seenPID := make(map[int32]bool, len(d.Processes.Items))
@@ -105,12 +105,19 @@ func validDocument(d document, source string) bool {
 		}
 		seenPID[v.PID] = true
 	}
-	seenAlias := make(map[string]bool, len(d.Containers.Items))
-	for i, v := range d.Containers.Items {
-		if seenAlias[v.Alias] || !validContainer(v) || (i > 0 && d.Containers.Items[i-1].Alias > v.Alias) {
+	return true
+}
+
+func validContainersSection(s section[containerRow], enabled bool) bool {
+	if s.CPUBasis != "ENGINE_HOST_CAPACITY" || !validSection(s, enabled, MaxContainers) {
+		return false
+	}
+	seenAlias := make(map[string]bool, len(s.Items))
+	for i, v := range s.Items {
+		if seenAlias[v.Alias] || !validContainer(v) || (i > 0 && s.Items[i-1].Alias > v.Alias) {
 			return false
 		}
-		if (v.MetricsState == containerobs.MetricsPartial || v.MetricsState == containerobs.MetricsUnavailable) && d.Containers.Quality.State != observation.Degraded {
+		if (v.MetricsState == containerobs.MetricsPartial || v.MetricsState == containerobs.MetricsUnavailable) && s.Quality.State != observation.Degraded {
 			return false
 		}
 		seenAlias[v.Alias] = true

@@ -45,6 +45,14 @@ field cannot establish that host data is visible or that the richer runtime is i
    Docker fixtures, then owner-host opt-in. Verify actual owner/delegated reads and revocation, resource budgets and
    legacy coexistence. Only after read-only usability proceed to Spec 011 broker/execution/grants/UI slices.
 
+### Review-size adjustment — 2026-10-30
+
+Keep the single installed process-and-Docker acceptance target, but review its implemented source in three coherent
+layers: [bounded data plane and storage](docker-data-plane.md), then three dormant fixed workers, then privileged
+installation and complete four-executable packaging. Each layer must compile and test independently; later layer
+references must not appear before their implementation. No layer alone approves a release or exposes owner enrollment.
+Preserve the process-only VM evidence and all remaining Docker/hosted/owner gates; do not call this an activated profile.
+
 ## API, state and observability
 
 Observation uploads remain replaceable latest telemetry, not invented Axon domain events. Local opt-in and future

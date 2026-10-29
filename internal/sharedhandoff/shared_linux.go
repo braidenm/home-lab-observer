@@ -17,16 +17,18 @@ import (
 )
 
 type slot struct {
-	mu        sync.Mutex
-	policy    Policy
-	rich      *RichProcessesPolicy
-	root      *os.Root
-	directory *os.File
-	lock      *os.File
-	syncFile  func(*os.File) error
-	syncDir   func(*os.File) error
-	writeFile func(*os.File, []byte) (int, error)
-	replace   func(string, string) error
+	mu         sync.Mutex
+	policy     Policy
+	rich       *RichProcessesPolicy
+	richDocker *RichProcessesDockerPolicy
+	frame      *DockerFramePolicy
+	root       *os.Root
+	directory  *os.File
+	lock       *os.File
+	syncFile   func(*os.File) error
+	syncDir    func(*os.File) error
+	writeFile  func(*os.File, []byte) (int, error)
+	replace    func(string, string) error
 }
 type Writer struct{ s *slot }
 type Reader struct{ s *slot }
@@ -36,6 +38,13 @@ func open(path string, p Policy, writer bool) (*slot, error) {
 }
 
 func openWithRich(path string, p Policy, writer bool, rich *RichProcessesPolicy) (*slot, error) {
+	return openWithPolicies(path, p, writer, rich, nil, nil)
+}
+
+func openWithPolicies(path string, p Policy, writer bool, rich *RichProcessesPolicy, docker *RichProcessesDockerPolicy, frame *DockerFramePolicy) (*slot, error) {
+	if (rich != nil && (docker != nil || frame != nil)) || (docker != nil && frame != nil) {
+		return nil, ErrUnsafe
+	}
 	if identity(p, writer) != nil || safePath(path, p) != nil {
 		return nil, ErrUnsafe
 	}
@@ -48,7 +57,7 @@ func openWithRich(path string, p Policy, writer bool, rich *RichProcessesPolicy)
 		root.Close()
 		return nil, ErrUnsafe
 	}
-	s := &slot{policy: p, rich: rich, root: root, directory: directory, syncFile: (*os.File).Sync, syncDir: (*os.File).Sync, writeFile: (*os.File).Write, replace: root.Rename}
+	s := &slot{policy: p, rich: rich, richDocker: docker, frame: frame, root: root, directory: directory, syncFile: (*os.File).Sync, syncDir: (*os.File).Sync, writeFile: (*os.File).Write, replace: root.Rename}
 	if err := s.checkDirectory(); err != nil {
 		s.close()
 		return nil, err
@@ -302,7 +311,16 @@ func (r *Reader) Read(ctx context.Context, expected string) ([]byte, error) {
 	if int64(len(data)) > s.maxBytes() {
 		return nil, ErrInvalid
 	}
-	if s.rich != nil {
+	if s.frame != nil {
+		if _, _, err := decodeDockerFrame(data, *s.frame); err != nil {
+			return nil, ErrInvalid
+		}
+	} else if s.richDocker != nil {
+		data, err = decodeRichProcessesDocker(data, *s.richDocker)
+		if err != nil {
+			return nil, ErrInvalid
+		}
+	} else if s.rich != nil {
 		data, err = decodeRichProcesses(data, *s.rich)
 		if err != nil {
 			return nil, ErrInvalid

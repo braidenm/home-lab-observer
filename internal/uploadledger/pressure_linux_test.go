@@ -37,7 +37,7 @@ func TestStoragePressureFixture(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	for _, profile := range []string{"numeric", "rich"} {
+	for _, profile := range []string{"numeric", "rich", "docker"} {
 		t.Run(profile, func(t *testing.T) {
 			cmd := exec.CommandContext(ctx, executable, "-test.run=^TestStoragePressureFixture$", "-test.count=1")
 			cmd.Env = []string{"HLO_LEDGER_PRESSURE=1", "HLO_LEDGER_PRESSURE_CHILD=1", "HLO_LEDGER_PRESSURE_PROFILE=" + profile, "TMPDIR=/tmp"}
@@ -80,6 +80,9 @@ func runStoragePressure(t *testing.T) {
 	case "rich":
 		profile = rich
 		first, next = richPending(t, 1, 0), richPending(t, 2, time.Second)
+	case "docker":
+		profile = dockerRich
+		first, next = dockerPending(t, 1, 0), dockerPending(t, 2, time.Second)
 	default:
 		t.Fatal("unknown pressure fixture profile")
 	}

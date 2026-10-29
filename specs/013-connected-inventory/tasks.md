@@ -39,6 +39,10 @@
 
 ## Coherent installed process-and-Docker delivery (ADR 025)
 
+- [ ] Independently review [source layer 1: implemented bounded data plane/storage](docker-data-plane.md), independently
+  of later worker and installer source. Follow with dormant three-worker composition, then complete privileged package;
+  retain one packaged acceptance target and keep activation off throughout these review-size splits.
+
 - [x] Record delegated engineering decision and [concrete installation plan](installable-docker-observation.md);
   independently reviewed and merged in PR 138; Docker implementation/activation retain their remaining gates.
 - [x] Pass exact packaged process-only VM proof before Docker runtime implementation (exact source and evidence above).
@@ -54,7 +58,9 @@
 - [ ] Publish exact immutable artifacts with provenance/SBOM and honest install/manage/partial-state instructions.
 - [ ] Verify actual owner/delegate/outsider/revoke and responsive hosted dashboard; separately authorize owner-host install.
 
-No helper, profile-kind support, schema-v3 ledger, enrollment writer or Docker release is implemented by this checklist.
+The checklist does not itself implement those delivery gates. The dated [source-layer record](docker-data-plane.md)
+now covers unused kind2/schema-v3 operations and typed frames; no installed helper, enrollment writer, public Docker
+release or owner activation is provided by that layer.
 
 ## Local contract evidence (2026-10-29)
 
