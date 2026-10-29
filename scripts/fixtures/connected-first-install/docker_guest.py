@@ -8,6 +8,7 @@ from pathlib import Path
 import pwd
 import re
 import sqlite3
+import stat
 import subprocess
 import sys
 import tarfile
@@ -82,7 +83,7 @@ def stopped(binary):
 def principals(c):
     collector, reader, uploader = ("hlo-rich-docker-" + role for role in ("collector", "reader", "uploader"))
     shared, frame = "hlo-rich-docker-read", "hlo-rich-docker-frame"
-    users = ((collector, c["collector_uid"], c["shared_gid"], {c["shared_gid"], c["frame_gid"]}),
+    users = ((collector, c["collector_uid"], c["shared_gid"], {c["shared_gid"]}),
              (reader, c["reader_uid"], c["frame_gid"], {c["frame_gid"]}),
              (uploader, c["uploader_uid"], c["uploader_gid"], {c["shared_gid"], c["uploader_gid"]}))
     for name, uid, gid, groups in users:
@@ -92,7 +93,7 @@ def principals(c):
         fields = preflight_probe.command("/usr/bin/passwd", "--status", "--", name, limit=1024).decode("ascii").split()
         need(len(fields) == 7 and fields[:2] == [name, "L"], "IDENTITY")
     need(preflight_probe.supported_nss(preflight_probe.fixed_file("/etc/nsswitch.conf", 65536)), "IDENTITY")
-    groups = ((shared, c["shared_gid"], [uploader]), (frame, c["frame_gid"], [collector]), (uploader, c["uploader_gid"], []))
+    groups = ((shared, c["shared_gid"], [uploader]), (frame, c["frame_gid"], []), (uploader, c["uploader_gid"], []))
     for name, gid, members in groups:
         group = grp.getgrnam(name)
         need(group.gr_gid == gid and group.gr_passwd == "x" and group.gr_mem == members and grp.getgrgid(gid) == group, "IDENTITY")
@@ -108,10 +109,12 @@ def principals(c):
 
 
 def pending():
+    policy = record(CONFIG / "installed.json").get("collection_policy_sha256")
+    need(isinstance(policy, str) and re.fullmatch(r"[a-f0-9]{64}", policy) is not None, "PENDING")
     with sqlite3.connect("file:" + str(STATE / "ledger/upload.sqlite") + "?mode=ro", uri=True) as connection:
         schema = connection.execute("PRAGMA user_version").fetchone()[0]
         row = connection.execute("SELECT pending_sequence,pending_body,pending_digest,watermark,profile_kind,policy_digest,pending_at FROM upload_record WHERE singleton=1").fetchone()
-    need(schema == 3 and row is not None and row[0] is not None and 16384 < len(row[1]) <= 294912 and hashlib.sha256(row[1]).digest() == row[2] and row[4] == 2, "PENDING")
+    need(schema == 3 and row is not None and row[0] is not None and isinstance(row[1], bytes) and 16384 < len(row[1]) <= 294912 and isinstance(row[2], bytes) and len(row[2]) == 32 and hashlib.sha256(row[1]).digest() == row[2] and row[4] == 2 and isinstance(row[5], bytes) and len(row[5]) == 32 and row[5].hex() == policy, "PENDING")
     return {"sequence": row[0], "digest": row[2].hex(), "size": len(row[1]), "watermark": row[3], "policy": row[5].hex(), "collected_at": row[6]}
 
 
@@ -158,10 +161,13 @@ groups, denied, empty_proc = json.loads(sys.argv[4])
 if pid < 2 or not 0 < uid < 4294967295 or not 0 < gid < 4294967295: raise SystemExit(1)
 libc = ctypes.CDLL(None, use_errno=True)
 if libc.prctl(38, 1, 0, 0, 0) != 0: raise SystemExit(1)
+expected_root = os.stat('/proc/%d/root' % pid)
 fd = os.open('/proc/%d/ns/mnt' % pid, os.O_RDONLY | os.O_CLOEXEC)
 try:
  if libc.setns(fd, 0x20000) != 0: raise SystemExit(1)
 finally: os.close(fd)
+entered_root = os.stat('/')
+if (entered_root.st_dev, entered_root.st_ino) != (expected_root.st_dev, expected_root.st_ino): raise SystemExit(1)
 os.setgroups(groups)
 os.setresgid(gid, gid, gid)
 os.setresuid(uid, uid, uid)
@@ -179,8 +185,24 @@ def probe_role(unit, uid, gid, groups, denied, empty_proc):
     fields = ("ActiveState", "MainPID", "InvocationID")
     before = assert_guest.unit_properties(unit, fields)
     need(before["ActiveState"] == "active" and re.fullmatch(r"[1-9][0-9]{0,9}", before["MainPID"]) is not None and int(before["MainPID"]) > 1 and re.fullmatch(r"[a-f0-9]{32}", before["InvocationID"]) is not None, "ISOLATION")
+    need(len(groups) == 1, "ISOLATION")
+    live_identity(int(before["MainPID"]), uid, gid, groups[0])
     run("/usr/bin/python3", "-I", "-c", NAMESPACE_PROBE, before["MainPID"], str(uid), str(gid), json.dumps([groups, denied, empty_proc], separators=(",", ":")))
     need(assert_guest.unit_properties(unit, fields) == before, "ISOLATION")
+
+
+def live_identity(pid, uid, gid, supplementary):
+    # Check the actual worker, not merely the identity we give the probe. Match
+    # production's exact supplementary grant; Linux may also list primary GID.
+    raw = preflight_probe.fixed_file(f"/proc/{pid}/status", 16384).decode("ascii")
+    fields = {}
+    for line in raw.splitlines():
+        name, separator, value = line.partition(":")
+        if name in ("Uid", "Gid", "Groups"):
+            need(separator == ":" and name not in fields and re.fullmatch(r"\s*[0-9]+(?:\s+[0-9]+)*\s*", value) is not None, "ISOLATION")
+            fields[name] = [int(v) for v in value.split()]
+    need(set(fields) == {"Uid", "Gid", "Groups"} and fields["Uid"] == [uid] * 4 and fields["Gid"] == [gid] * 4, "ISOLATION")
+    need(len(fields["Groups"]) == len(set(fields["Groups"])) and set(fields["Groups"]) | {gid} == {gid, supplementary} and supplementary in fields["Groups"], "ISOLATION")
 
 
 def isolation(c):
@@ -207,9 +229,27 @@ def fault_journey(binary):
     activation_guest.command(binary, "stop"); stopped(binary)
     activation_guest.command(binary, "start")
     wait_counts(lambda v: healthy(v) and v["sequence"] > fault["sequence"])
+    socket_replacement(binary)
+
+
+def reader_binding():
+    fields = ("ActiveState", "MainPID", "InvocationID")
+    manager = assert_guest.unit_properties(UNITS[1], fields)
+    need(manager["ActiveState"] == "active" and re.fullmatch(r"[1-9][0-9]{0,9}", manager["MainPID"]) is not None and int(manager["MainPID"]) > 1 and re.fullmatch(r"[a-f0-9]{32}", manager["InvocationID"]) is not None, "FAULT")
+    node = Path(f"/proc/{manager['MainPID']}/root/engine/docker.sock").stat()
+    need(stat.S_ISSOCK(node.st_mode), "FAULT")
+    # /proc/PID/root deliberately follows the kernel task's root view, not a
+    # user-controlled path. Recheck manager identity after this fixed metadata.
+    need(assert_guest.unit_properties(UNITS[1], fields) == manager, "FAULT")
+    return {"manager": manager, "socket": [node.st_dev, node.st_ino]}
+
+
+def socket_replacement(binary):
     # A real daemon restart replaces the root socket while the reader retains
     # its audited old bind. Only explicit Observer Stop/Start may adopt it.
     old = Path("/run/docker.sock").stat()
+    reader = reader_binding()
+    need(reader["socket"] == [old.st_dev, old.st_ino], "FAULT")
     before = counts()
     docker_engine.stop()
     docker_engine.start()
@@ -217,6 +257,7 @@ def fault_journey(binary):
     current = Path("/run/docker.sock").stat()
     need((current.st_dev, current.st_ino) != (old.st_dev, old.st_ino), "FAULT")
     fault = wait_counts(lambda v: v["unavailable_count"] > before["unavailable_count"] and v["healthy_sequence"] == 0)
+    need(reader_binding() == reader, "FAULT")
     activation_guest.command(binary, "stop"); stopped(binary)
     activation_guest.command(binary, "start")
     wait_counts(lambda v: healthy(v) and v["sequence"] > fault["sequence"])

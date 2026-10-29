@@ -79,3 +79,11 @@ The receiver validates raw bodies only in memory and persists closed hashes/sequ
 
 Cheap fixture tests are not VM acceptance. A real Docker VM pass does not authorize owner installation, publishing,
 remote actions or Kubernetes, and is not a substitute for hosted owner/delegate authorization and responsive UI proof.
+
+Pre-launch independent review found five fixture correctness gaps, corrected before execution: the frame grant is
+service-only (collector NSS remains SharedGID-only and the persistent frame group is empty), actual live worker
+UID/GID/groups are checked separately, the fixture daemon is exactly static rather than disabled, pending policy
+bytes must match the installed policy digest, and socket replacement must leave the same active reader invocation
+bound to the old inode until explicit Stop/Start. Every fixed engine target is checked with lstat before the first
+write, including dangling entries. The namespace probe also checks the target root device/inode immediately after
+setns and before dropping identity. Focused positive/negative tests cover these gates; real VM acceptance remains pending.

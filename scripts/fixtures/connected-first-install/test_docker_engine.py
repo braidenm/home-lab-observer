@@ -1,11 +1,52 @@
 from pathlib import Path
 import unittest
 from unittest import mock
+import tempfile
 
 import docker_engine
 
 
 class DockerEngineTest(unittest.TestCase):
+    def test_first_prepare_checks_all_absent_targets_before_first_write(self):
+        with mock.patch.object(docker_engine.os, "geteuid", return_value=0), mock.patch.object(docker_engine, "no_network"), mock.patch.object(docker_engine, "prerequisites"), mock.patch.object(Path, "lstat", side_effect=FileNotFoundError()) as lstat, mock.patch.object(Path, "mkdir", side_effect=RuntimeError("FIRST_WRITE")) as mkdir, mock.patch.object(Path, "write_text") as write, mock.patch.object(docker_engine, "run") as run:
+            with self.assertRaisesRegex(RuntimeError, "^FIRST_WRITE$"):
+                docker_engine.prepare(True)
+        self.assertEqual(lstat.call_count, 3)
+        mkdir.assert_called_once_with(mode=0o755)
+        write.assert_not_called()
+        run.assert_not_called()
+
+    def test_fixture_daemon_stop_requires_static_not_disabled_or_active(self):
+        good = {"ActiveState": "inactive", "MainPID": "0", "UnitFileState": "static"}
+        for change in ({}, {"UnitFileState": "disabled"}, {"MainPID": "77"}, {"ActiveState": "active"}):
+            with mock.patch.object(docker_engine, "run") as run, mock.patch.object(docker_engine.assert_guest, "unit_properties", return_value={**good, **change}), mock.patch.object(docker_engine, "no_network"):
+                if change:
+                    with self.assertRaisesRegex(AssertionError, "^ENGINE$"):
+                        docker_engine.stop()
+                else:
+                    docker_engine.stop()
+                    run.assert_called_once_with("/usr/bin/systemctl", "stop", "--", docker_engine.UNIT)
+
+    def test_first_prepare_rejects_each_dangling_target_before_any_write(self):
+        targets = (docker_engine.PREFIX, Path("/run/docker.sock"), Path("/etc/systemd/system", docker_engine.UNIT))
+        for target in targets:
+            with tempfile.TemporaryDirectory() as temporary:
+                dangling = Path(temporary) / "target"
+                dangling.symlink_to("missing")
+                # Actual dangling-symlink metadata semantics, mapped only to the
+                # fixed guest target; no real system path is touched by this test.
+                def lstat(path, *args, **kwargs):
+                    if path == target:
+                        return original_lstat(dangling)
+                    raise FileNotFoundError()
+                original_lstat = Path.lstat
+                with mock.patch.object(docker_engine.os, "geteuid", return_value=0), mock.patch.object(Path, "lstat", lstat), mock.patch.object(Path, "exists", return_value=False), mock.patch.object(docker_engine, "no_network"), mock.patch.object(docker_engine, "prerequisites"), mock.patch.object(Path, "mkdir") as mkdir, mock.patch.object(Path, "write_text") as write, mock.patch.object(docker_engine, "run") as run:
+                    with self.assertRaisesRegex(AssertionError, "^ENGINE$"):
+                        docker_engine.prepare(True)
+                mkdir.assert_not_called()
+                write.assert_not_called()
+                run.assert_not_called()
+
     def test_daemon_has_only_fixed_unix_socket_and_no_network_side_effects(self):
         command = docker_engine.daemon_command()
         for flag in ("--bridge=none", "--iptables=false", "--ip6tables=false", "--ip-forward=false", "--ip-masq=false", "--userland-proxy=false", "--storage-driver=vfs", "--host=unix:///run/docker.sock"):

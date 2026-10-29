@@ -80,7 +80,14 @@ def prepare(first):
     no_network()
     prerequisites()
     if first:
-        need(not PREFIX.exists() and not Path("/run/docker.sock").exists() and not Path("/etc/systemd/system", UNIT).exists(), "ENGINE")
+        # lstat observes dangling entries too. Refuse every fixed collision
+        # before the first mkdir/extraction/group/unit/configuration write.
+        for target in (PREFIX, Path("/run/docker.sock"), Path("/etc/systemd/system", UNIT)):
+            try:
+                target.lstat()
+            except FileNotFoundError:
+                continue
+            raise AssertionError("ENGINE")
         PREFIX.mkdir(mode=0o755)
         for name, (size, pin) in docker_scope.PACKAGES.items():
             source = PAYLOAD / name
@@ -130,7 +137,7 @@ def start():
 def stop():
     run("/usr/bin/systemctl", "stop", "--", UNIT)
     fields = assert_guest.unit_properties(UNIT, ("ActiveState", "MainPID", "UnitFileState"))
-    need(fields == {"ActiveState": "inactive", "MainPID": "0", "UnitFileState": "disabled"}, "ENGINE")
+    need(fields == {"ActiveState": "inactive", "MainPID": "0", "UnitFileState": "static"}, "ENGINE")
     no_network()
 
 
