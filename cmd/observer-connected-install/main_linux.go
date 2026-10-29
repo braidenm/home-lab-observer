@@ -12,8 +12,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/braidenm/home-lab-observer/internal/connectedidentity"
 	"github.com/braidenm/home-lab-observer/internal/connectedinstall"
 	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
@@ -108,61 +106,5 @@ func lifecycleFailure(err error, diagnostic io.Writer) int {
 func readGrant(ctx context.Context) ([]byte, error) { return readGrantFrom(ctx, os.Stdin, os.Stderr) }
 
 func readGrantFrom(ctx context.Context, terminal *os.File, prompt io.Writer) (result []byte, resultErr error) {
-	if ctx == nil || terminal == nil || prompt == nil {
-		return nil, connectedinstall.ErrUnsafe
-	}
-	// A controlling-terminal prompt avoids argv/environment/history and refuses
-	// redirected streams that might accidentally echo or persist a grant.
-	fd := int(terminal.Fd())
-	original, err := unix.IoctlGetTermios(fd, unix.TCGETS)
-	if err != nil {
-		return nil, connectedinstall.ErrUnsafe
-	}
-	quiet := *original
-	quiet.Lflag &^= unix.ECHO | unix.ECHONL
-	if unix.IoctlSetTermios(fd, unix.TCSETS, &quiet) != nil {
-		return nil, connectedinstall.ErrUnsafe
-	}
-	defer func() {
-		// TCSAFLUSH restores settings while discarding unread pasted suffixes,
-		// including commands/newlines after an overlong or canceled grant.
-		if unix.IoctlSetTermios(fd, unix.TCSETSF, original) != nil {
-			clear(result)
-			result = nil
-			resultErr = connectedinstall.ErrUnsafe
-		}
-	}()
-	fmt.Fprint(prompt, "One-use enrollment grant (paste only hle_ value): ")
-	buf := make([]byte, 0, 48)
-	one := make([]byte, 1)
-	for len(buf) <= 47 {
-		if ctx.Err() != nil {
-			clear(buf)
-			return nil, connectedinstall.ErrUnsafe
-		}
-		poll := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}
-		n, err := unix.Poll(poll, 100)
-		if err == unix.EINTR || n == 0 {
-			continue
-		}
-		if err != nil || poll[0].Revents&unix.POLLIN == 0 {
-			clear(buf)
-			return nil, connectedinstall.ErrUnsafe
-		}
-		n, err = terminal.Read(one)
-		if err != nil || n != 1 {
-			clear(buf)
-			return nil, connectedinstall.ErrUnsafe
-		}
-		if one[0] == '\n' {
-			break
-		}
-		buf = append(buf, one[0])
-	}
-	fmt.Fprintln(prompt)
-	if len(buf) != 47 {
-		clear(buf)
-		return nil, connectedinstall.ErrUnsafe
-	}
-	return buf, nil
+	return connectedinstall.ReadEnrollmentGrantFrom(ctx, terminal, prompt)
 }

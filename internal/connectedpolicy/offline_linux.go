@@ -45,7 +45,12 @@ func inspectTransient(ctx context.Context, unit string, fields []string, validat
 	if cmd.Run() != nil || ctx.Err() != nil || validate(output.buffer.Bytes()) != nil {
 		return ErrUnsafe
 	}
-	const object = "/org/freedesktop/systemd1/unit/home_2dlab_2dobserver_2dconnected_2denrollment_2eservice"
+	object := "/org/freedesktop/systemd1/unit/home_2dlab_2dobserver_2dconnected_2denrollment_2eservice"
+	if unit == richEnrollmentUnit {
+		object = "/org/freedesktop/systemd1/unit/home_2dlab_2dobserver_2dconnected_2drich_2denrollment_2eservice"
+	} else if unit != enrollmentUnit {
+		return ErrUnsafe
+	}
 	credentials := exec.CommandContext(ctx, "/usr/bin/busctl", "--system", "--no-pager", "get-property", "org.freedesktop.systemd1", object, "org.freedesktop.systemd1.Service", "LoadCredential", "LoadCredentialEncrypted", "SetCredential", "SetCredentialEncrypted", "ImportCredential")
 	credentials.Env = cmd.Env
 	var empty emptyCredentialsOutput

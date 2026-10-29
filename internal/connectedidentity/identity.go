@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/braidenm/home-lab-observer/internal/connectedcompat"
+	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
 )
 
 const MaxRecordBytes = 256
@@ -29,10 +30,7 @@ func scanPrefix() string { return strings.ReplaceAll("HLO-CONNECTED-!IDENTITY-V"
 func suffix() string     { return strings.ReplaceAll("END-HLO-CONNECTED-!IDENTITY", "!", "") }
 
 func (i Identity) Validate() error {
-	if i.ContractSHA256 != "" && !connectedcompat.Known(i.ContractSHA256) {
-		return ErrInvalid
-	}
-	if (i.Role != "collector" && i.Role != "uploader" && i.Role != "install") || i.OS != "linux" || i.Arch != "amd64" || len(i.Version) > 40 || !versionPattern.MatchString(i.Version) || !commitPattern.MatchString(i.Commit) {
+	if !validRoleContract(i.Role, i.ContractSHA256) || i.OS != "linux" || i.Arch != "amd64" || len(i.Version) > 40 || !versionPattern.MatchString(i.Version) || !commitPattern.MatchString(i.Commit) {
 		return ErrInvalid
 	}
 	for _, part := range strings.Split(strings.SplitN(i.Version, "-", 2)[1], ".") {
@@ -43,10 +41,21 @@ func (i Identity) Validate() error {
 	return nil
 }
 
+func validRoleContract(role, contract string) bool {
+	switch role {
+	case "collector", "uploader", "install":
+		return contract == "" || connectedcompat.Known(contract)
+	case "rich-collector", "rich-uploader", "rich-install":
+		return contract == connectedprofile.RichProcessesDefinitionSHA256
+	default:
+		return false
+	}
+}
+
 // HasKnownContract recognizes a declaration, not package authenticity or
 // permission to select code, recover storage or activate a worker.
 func (i Identity) HasKnownContract() bool {
-	return i.Validate() == nil && connectedcompat.Known(i.ContractSHA256)
+	return i.Validate() == nil && i.ContractSHA256 != "" && validRoleContract(i.Role, i.ContractSHA256)
 }
 
 func Encode(i Identity) (string, error) {
@@ -81,9 +90,6 @@ func Parse(record string) (Identity, error) {
 	i := Identity{Role: f[0], Version: f[1], Commit: f[2], OS: f[3], Arch: f[4]}
 	if count == 6 {
 		i.ContractSHA256 = f[5]
-		if !connectedcompat.Known(i.ContractSHA256) {
-			return Identity{}, ErrInvalid
-		}
 	}
 	canonical, err := Encode(i)
 	if err != nil || canonical != record {

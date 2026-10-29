@@ -16,6 +16,7 @@ import (
 	"github.com/braidenm/home-lab-observer/internal/connectedbundle"
 	"github.com/braidenm/home-lab-observer/internal/connectedcompat"
 	"github.com/braidenm/home-lab-observer/internal/connectedidentity"
+	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
 )
 
 func TestClosedBuildToolOptions(t *testing.T) {
@@ -31,6 +32,86 @@ func TestClosedBuildToolOptions(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(output, "SHA256SUMS")); !os.IsNotExist(err) {
 		t.Fatal("published incomplete checksums")
+	}
+}
+
+func TestRichProcessesPackModeIsSeparateAndExact(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("connected packer requires POSIX filesystem admission")
+	}
+	input, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := t.TempDir()
+	if err := os.WriteFile(filepath.Join(source, "go.mod"), []byte("module github.com/braidenm/home-lab-observer\n\ngo 1.27.1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	const version = "0.1.0-canary.1"
+	commit := strings.Repeat("b", 40)
+	for _, role := range []string{"rich-collector", "rich-uploader", "rich-install"} {
+		name := "observer-connected-" + role
+		directory := filepath.Join(source, "cmd", name)
+		if err := os.MkdirAll(directory, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(directory, "main.go"), []byte("package main\nimport \"fmt\"\nvar releaseIdentity string\nfunc main(){fmt.Print(releaseIdentity)}\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		record, err := connectedidentity.Encode(connectedidentity.Identity{Role: role, Version: version, Commit: commit, OS: "linux", Arch: "amd64", ContractSHA256: connectedprofile.RichProcessesDefinitionSHA256})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		command := exec.CommandContext(ctx, "go", "build", "-trimpath", "-ldflags=-s -w -X main.releaseIdentity="+record, "-o", filepath.Join(input, name), "./cmd/"+name)
+		command.Dir = source
+		for _, entry := range os.Environ() {
+			if !strings.HasPrefix(entry, "GOOS=") && !strings.HasPrefix(entry, "GOARCH=") && !strings.HasPrefix(entry, "CGO_ENABLED=") && !strings.HasPrefix(entry, "GOTOOLCHAIN=") {
+				command.Env = append(command.Env, entry)
+			}
+		}
+		command.Env = append(command.Env, "GOOS=linux", "GOARCH=amd64", "CGO_ENABLED=0", "GOTOOLCHAIN=local")
+		output, err := command.CombinedOutput()
+		cancel()
+		if err != nil {
+			t.Fatalf("fixture build: %v %s", err, output)
+		}
+	}
+	outputParent, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(outputParent, "release")
+	args := []string{"--mode", "pack", "--profile", "rich-processes", "--version", version, "--commit", commit, "--binaries", input, "--output", output}
+	if err := run(args); err != nil {
+		t.Fatal(err)
+	}
+	read := func(name string) []byte {
+		data, err := os.ReadFile(filepath.Join(output, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+	archiveName := "home-lab-observer-connected-rich-processes_" + version + "_linux_amd64.tar.gz"
+	installerName := "install-connected-rich-processes-linux.sh"
+	archive := read(archiveName)
+	manifest := read(connectedbundle.ManifestName)
+	helper := read(installerName)
+	archiveSum := sha256.Sum256(archive)
+	expected, err := connectedbootstrap.RenderRichProcesses(manifest, hex.EncodeToString(archiveSum[:]), int64(len(archive)))
+	if err != nil || string(helper) != string(expected) {
+		t.Fatal("rich helper not pinned to emitted package")
+	}
+	if _, err := connectedbundle.Decode(manifest); err != connectedbundle.ErrInvalid {
+		t.Fatal("rich manifest accepted as numeric")
+	}
+	if _, err := os.Stat(filepath.Join(output, "install-connected-linux.sh")); !os.IsNotExist(err) {
+		t.Fatal("numeric installer emitted in rich package")
+	}
+	lines := strings.Split(strings.TrimSuffix(string(read("SHA256SUMS")), "\n"), "\n")
+	if len(lines) != 3 || !strings.HasSuffix(lines[0], "  "+archiveName) || !strings.HasSuffix(lines[2], "  "+installerName) {
+		t.Fatalf("rich checksum membership = %q", lines)
 	}
 }
 

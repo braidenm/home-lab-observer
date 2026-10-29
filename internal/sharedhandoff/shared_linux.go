@@ -19,6 +19,7 @@ import (
 type slot struct {
 	mu        sync.Mutex
 	policy    Policy
+	rich      *RichProcessesPolicy
 	root      *os.Root
 	directory *os.File
 	lock      *os.File
@@ -31,6 +32,10 @@ type Writer struct{ s *slot }
 type Reader struct{ s *slot }
 
 func open(path string, p Policy, writer bool) (*slot, error) {
+	return openWithRich(path, p, writer, nil)
+}
+
+func openWithRich(path string, p Policy, writer bool, rich *RichProcessesPolicy) (*slot, error) {
 	if identity(p, writer) != nil || safePath(path, p) != nil {
 		return nil, ErrUnsafe
 	}
@@ -43,7 +48,7 @@ func open(path string, p Policy, writer bool) (*slot, error) {
 		root.Close()
 		return nil, ErrUnsafe
 	}
-	s := &slot{policy: p, root: root, directory: directory, syncFile: (*os.File).Sync, syncDir: (*os.File).Sync, writeFile: (*os.File).Write, replace: root.Rename}
+	s := &slot{policy: p, rich: rich, root: root, directory: directory, syncFile: (*os.File).Sync, syncDir: (*os.File).Sync, writeFile: (*os.File).Write, replace: root.Rename}
 	if err := s.checkDirectory(); err != nil {
 		s.close()
 		return nil, err
@@ -134,12 +139,12 @@ func (s *slot) checkDirectory() error {
 		default:
 			return ErrUnsafe
 		}
-		if info.Size() < 0 || info.Size() > remoteprojection.MaxBytes {
+		if info.Size() < 0 || info.Size() > s.maxBytes() {
 			return ErrUnsafe
 		}
 		total += info.Size()
 	}
-	if total > 2*remoteprojection.MaxBytes {
+	if total > 2*s.maxBytes() {
 		return ErrUnsafe
 	}
 	return nil
@@ -211,13 +216,21 @@ func (w *Writer) publish(raw observation.Snapshot, id remoteprojection.Identity,
 	if err != nil {
 		return ErrInvalid
 	}
+	return s.publishData(data)
+}
+
+// publishData runs under the writer slot mutex after identity and wire checks.
+func (s *slot) publishData(data []byte) error {
+	if len(data) == 0 || int64(len(data)) > s.maxBytes() {
+		return ErrInvalid
+	}
 	if err := s.checkDirectory(); err != nil {
 		return err
 	}
 	if err := checkHandle(s.lock, s.policy, false, 0o600); err != nil {
 		return err
 	}
-	if staged, err := s.openFile(stageName, os.O_RDONLY, remoteprojection.MaxBytes, 0o600, 0o640); err == nil {
+	if staged, err := s.openFile(stageName, os.O_RDONLY, s.maxBytes(), 0o600, 0o640); err == nil {
 		staged.Close()
 		if s.root.Remove(stageName) != nil {
 			return ErrUnavailable
@@ -225,7 +238,7 @@ func (w *Writer) publish(raw observation.Snapshot, id remoteprojection.Identity,
 	} else if !errors.Is(err, ErrMissing) {
 		return err
 	}
-	f, err := s.openFile(stageName, os.O_WRONLY|os.O_CREATE|os.O_EXCL, remoteprojection.MaxBytes, 0o600)
+	f, err := s.openFile(stageName, os.O_WRONLY|os.O_CREATE|os.O_EXCL, s.maxBytes(), 0o600)
 	if err != nil {
 		return err
 	}
@@ -240,7 +253,7 @@ func (w *Writer) publish(raw observation.Snapshot, id remoteprojection.Identity,
 	if f.Close() != nil {
 		return ErrUnavailable
 	}
-	if old, err := s.openFile(latestName, os.O_RDONLY, remoteprojection.MaxBytes, 0o640); err == nil {
+	if old, err := s.openFile(latestName, os.O_RDONLY, s.maxBytes(), 0o640); err == nil {
 		old.Close()
 	} else if !errors.Is(err, ErrMissing) {
 		return err
@@ -270,16 +283,24 @@ func (r *Reader) Read(ctx context.Context, expected string) ([]byte, error) {
 	if err := s.checkDirectory(); err != nil {
 		return nil, err
 	}
-	f, err := s.openFile(latestName, os.O_RDONLY, remoteprojection.MaxBytes, 0o640)
+	f, err := s.openFile(latestName, os.O_RDONLY, s.maxBytes(), 0o640)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	data, err := io.ReadAll(io.LimitReader(f, remoteprojection.MaxBytes+1))
+	data, err := io.ReadAll(io.LimitReader(f, s.maxBytes()+1))
 	if err != nil || ctx.Err() != nil {
 		return nil, ErrUnavailable
 	}
-	if len(data) > remoteprojection.MaxBytes || remoteprojection.ValidateUpload(data, expected) != nil {
+	if int64(len(data)) > s.maxBytes() {
+		return nil, ErrInvalid
+	}
+	if s.rich != nil {
+		data, err = decodeRichProcesses(data, *s.rich)
+		if err != nil {
+			return nil, ErrInvalid
+		}
+	} else if remoteprojection.ValidateUpload(data, expected) != nil {
 		return nil, ErrInvalid
 	}
 	if err := checkHandle(f, s.policy, false, 0o640); err != nil {

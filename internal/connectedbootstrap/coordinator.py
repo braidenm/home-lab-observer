@@ -153,7 +153,7 @@ def install(lifecycle, members, server_id):
                        "--proxy", "", "--location", "--proto", "=https", "--proto-redir", "=https",
                        "--max-redirs", "5", "--connect-timeout", "10", "--max-time", "180",
                        "--max-filesize", "@ARCHIVE_SIZE@",
-                       "https://github.com/braidenm/home-lab-observer/releases/download/v@VERSION@/home-lab-observer-connected_@VERSION@_linux_amd64.tar.gz",
+                       "https://github.com/braidenm/home-lab-observer/releases/download/v@VERSION@/@ARCHIVE_BASENAME@",
                        "--output", archive])
         lifecycle.check()
         if os.stat(archive).st_size != int("@ARCHIVE_SIZE@"):
@@ -166,7 +166,7 @@ def install(lifecycle, members, server_id):
         if digest.hexdigest() != "@ARCHIVE_SHA256@":
             raise ValueError("archive digest")
         extract(archive, bundle, members, lifecycle.check)
-        lifecycle.run([bundle + "/observer-connected-install", "install", bundle,
+        lifecycle.run([bundle + "/@INSTALL_BINARY@", "install", bundle,
                        "@MANIFEST_SHA256@", server_id], stdin=3, interactive=True)
     finally:
         try:
@@ -189,7 +189,7 @@ def main():
         return 22
     print("Installed and stopped. Start explicitly, then check for a received snapshot in the app. Startup after reboot is manual.")
     for action in ("start", "status", "stop"):
-        print("sudo -- /opt/home-lab-observer-connected/releases/@MANIFEST_SHA256@/observer-connected-install " + action)
+        print("sudo -- @RELEASE_ROOT@/@MANIFEST_SHA256@/@INSTALL_BINARY@ " + action)
     return 0
 
 

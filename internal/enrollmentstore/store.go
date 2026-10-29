@@ -7,6 +7,7 @@ import (
 	"errors"
 	"regexp"
 
+	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
 	"github.com/braidenm/home-lab-observer/internal/uploadstate"
 )
 
@@ -35,6 +36,30 @@ type record struct {
 	ServerID    string `json:"server_id"`
 	ConnectorID string `json:"connector_id"`
 	Secret      string `json:"secret,omitempty"`
+}
+
+// RichProcessesPrincipals is the fixed installed principal binding. It is not
+// a caller-selected profile registry; the only rich profile and definition are
+// code owned, and the connector identity is added only after Begin receives it.
+type RichProcessesPrincipals struct {
+	CollectorUID uint32
+	UploaderUID  uint32
+	UploaderGID  uint32
+	SharedGID    uint32
+}
+
+func (p RichProcessesPrincipals) zero() bool { return p == (RichProcessesPrincipals{}) }
+
+func (p RichProcessesPrincipals) profile(binding uploadstate.Binding) (uploadstate.ProfileBinding, error) {
+	policy, err := connectedprofile.NewRichProcessesPolicy(binding.ServerID, binding.ConnectorID, p.CollectorUID, p.UploaderUID, p.UploaderGID, p.SharedGID)
+	if err != nil {
+		return uploadstate.ProfileBinding{}, ErrRecovery
+	}
+	digest, err := connectedprofile.DigestRichProcessesPolicy(policy)
+	if err != nil {
+		return uploadstate.ProfileBinding{}, ErrRecovery
+	}
+	return uploadstate.ProfileBinding{Kind: uploadstate.RichProcessesProfile, PolicyDigest: digest}, nil
 }
 
 func validBinding(binding uploadstate.Binding) bool {

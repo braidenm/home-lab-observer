@@ -17,6 +17,7 @@ var ErrUnsafe = errors.New("connected_endpoint_policy_unsafe")
 
 const maxOutput = 16 * 1024
 const enrollmentUnit = "home-lab-observer-connected-enrollment.service"
+const richEnrollmentUnit = "home-lab-observer-connected-rich-enrollment.service"
 
 var sliceName = regexp.MustCompile(`^(?:-|[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})\.slice$`)
 
@@ -99,7 +100,7 @@ func expectedPrefixes(addresses []string) (map[netip.Prefix]bool, error) {
 
 func ownedUnit(name string) bool {
 	switch name {
-	case "home-lab-observer-connected-uploader.service", "home-lab-observer-connected-enrollment.service":
+	case "home-lab-observer-connected-uploader.service", enrollmentUnit, "home-lab-observer-connected-rich-uploader.service", richEnrollmentUnit:
 		return true
 	}
 	return false

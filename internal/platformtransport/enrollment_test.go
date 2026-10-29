@@ -28,7 +28,7 @@ func validEnrollmentRequestFixture() enrollmentcoord.ExchangeRequest {
 
 func newOwnedEnrollment(t *testing.T, server *httptest.Server) *EnrollmentTransport {
 	t.Helper()
-	transport, err := newEnrollmentTransport(server.URL, ownedRoots(server))
+	transport, err := newEnrollmentTransport(server.URL, ownedRoots(server), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestEnrollmentExchangeUsesExactOneShotWireAndCorrelatesServer(t *testing.T)
 			t.Errorf("request body or length changed")
 		}
 		response.Header().Set("Content-Type", "application/json; charset=UTF-8")
-		fmt.Fprintf(response, `{"server_id":%q,"connector_secret":%q,"future":{"secret-canary":"discard"}}`,
+		fmt.Fprintf(response, `{"server_id":%q,"connector_secret":%q,"future":{"secret-canary":"discard"},"collection_profile":7,"collection_definition_sha256":false}`,
 			transportBinding.ServerID, transportCredential)
 	}))
 	defer server.Close()

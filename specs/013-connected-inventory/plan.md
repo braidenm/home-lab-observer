@@ -32,6 +32,8 @@ field cannot establish that host data is visible or that the richer runtime is i
    Implement the [profile-bound state and storage contract](upload-profiles.md) in separate coherent slices: adapter-free
    model prerequisite, unused pure state machine, then exact-profile durable ledger. Only afterward wire approved
    enrollment/policy, bounded handoff/transport and receiver; no current worker silently selects the rich profile.
+   The next coherent runtime slice is the [VM-installable fixed process package](installable-process-proof.md), not another
+   standalone contract. Its process-only profile is staging evidence, not an intermediate owner-host installation.
 5. **Useful dashboard:** host overview plus searchable/bounded Containers, Processes and Storage views. Keep empty,
    disabled, failed, truncated and stale explicit. Add Services and aggregate trends as separately coherent changes;
    don't make container visibility wait for an entire log/history implementation.

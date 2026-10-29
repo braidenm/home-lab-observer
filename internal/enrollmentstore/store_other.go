@@ -14,7 +14,13 @@ type Setup struct{}
 type Ready struct{}
 
 func OpenNew(context.Context, string) (*Setup, error) { return nil, ErrUnsupported }
+func OpenNewRichProcesses(context.Context, string, RichProcessesPrincipals) (*Setup, error) {
+	return nil, ErrUnsupported
+}
 func OpenReady(context.Context, string, uploadstate.Binding) (*Ready, error) {
+	return nil, ErrUnsupported
+}
+func OpenReadyRichProcesses(context.Context, string, uploadstate.Binding, RichProcessesPrincipals) (*Ready, error) {
 	return nil, ErrUnsupported
 }
 func (*Setup) Begin(context.Context, uploadstate.Binding) error         { return ErrUnsupported }

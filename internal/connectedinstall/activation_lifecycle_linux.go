@@ -9,10 +9,7 @@ import (
 	"io"
 	"os"
 	"slices"
-	"strings"
 	"time"
-
-	"golang.org/x/sys/unix"
 
 	"github.com/braidenm/home-lab-observer/internal/connectedbundle"
 	"github.com/braidenm/home-lab-observer/internal/connectedinstalllease"
@@ -129,7 +126,7 @@ func stoppedOwnedWorkers(ctx context.Context) error {
 }
 
 func workerService(ctx context.Context, verb, unit string) error {
-	if (unit != collectorUnit && unit != uploaderUnit) || (verb != "start" && verb != "stop") {
+	if !knownInstalledUnit(unit, false) || (verb != "start" && verb != "stop") {
 		return ErrUnsafe
 	}
 	_, err := runTool(ctx, toolSystemctl, []string{verb, "--", unit}, nil, 1024)
@@ -170,69 +167,14 @@ func inspectInstalled() (connectedprofile.Config, error) {
 		return c, ErrUnsafe
 	}
 	layout := installLayout{digest: c.ArtifactSHA256, collectorUID: c.CollectorUID, uploaderUID: c.UploaderUID, uploaderGID: c.UploaderGID, sharedGID: c.SharedGID}
-	for _, role := range []directoryRole{dirRelease, dirHandoff, dirCollectorStatus, dirUploaderStatus, dirUploaderRoot, dirCredentials} {
-		spec, err := layout.directory(role)
-		if err != nil {
-			return c, ErrUnsafe
-		}
-		var d *os.File
-		if spec.uid == 0 {
-			d, err = rootDirectory(spec.parent + "/" + spec.name)
-		} else {
-			parent, parentErr := rootDirectory(spec.parent)
-			if parentErr != nil {
-				return c, ErrUnsafe
-			}
-			fd, openErr := unix.Openat(int(parent.Fd()), spec.name, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
-			parent.Close()
-			err = openErr
-			if err == nil {
-				d = os.NewFile(uintptr(fd), "installed-directory")
-			}
-		}
-		if err != nil {
-			return c, ErrUnsafe
-		}
-		valid := exactDirectory(d, spec)
-		d.Close()
-		if !valid {
-			return c, ErrUnsafe
-		}
-	}
-	parent, err := rootDirectory(connectedprofile.StateDirectory)
-	if err != nil {
+	if auditInstalledDirectories(layout, connectedprofile.StateDirectory, c.UploaderUID, c.UploaderGID) != nil {
 		return c, ErrUnsafe
 	}
-	ledger, err := privateDirectoryAt(parent, "ledger", c.UploaderUID, c.UploaderGID)
-	parent.Close()
-	if err != nil {
-		return c, ErrUnsafe
-	}
-	ledger.Close()
 	units, err := connectedunits.RenderUnits(c)
 	if err != nil {
 		return c, ErrUnsafe
 	}
-	var hosts strings.Builder
-	for _, address := range c.Addresses {
-		hosts.WriteString(address + " " + connectedprofile.Hostname + "\n")
-	}
-	for _, item := range []struct {
-		path string
-		want []byte
-	}{
-		{"/etc/systemd/system/" + collectorUnit, units.Collector},
-		{"/etc/systemd/system/" + uploaderUnit, units.Uploader},
-		{connectedprofile.StateDirectory + "/uploader-root/etc/hosts", []byte(hosts.String())},
-		{connectedprofile.StateDirectory + "/uploader-root/etc/resolv.conf", []byte("# No runtime DNS resolver\n")},
-		{connectedprofile.StateDirectory + "/uploader-root/etc/nsswitch.conf", []byte("hosts: files\n")},
-	} {
-		actual, err := connectedprofile.ReadRootFileMode(item.path, connectedunits.MaxRenderedBytes, 0644)
-		if err != nil || !bytes.Equal(actual, item.want) {
-			return c, ErrUnsafe
-		}
-	}
-	if _, err := connectedprofile.ReadRootFileMode(connectedprofile.StateDirectory+"/uploader-root/etc/ssl/certs/ca-certificates.crt", 1<<20, 0644); err != nil {
+	if auditInstalledRenderedFiles(connectedprofile.StateDirectory, collectorUnit, uploaderUnit, units, c.Addresses) != nil {
 		return c, ErrUnsafe
 	}
 	if connectedruntime.CheckInstalledUploaderScaffold() != nil {

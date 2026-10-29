@@ -24,6 +24,14 @@ type principalSnapshot struct {
 // Root-managed systemd providers and existing process identity admission remain
 // trusted host responsibilities; this function never edits NSS or accounts.
 func auditPrincipals(parent context.Context, c connectedprofile.Config) error {
+	return auditPrincipalsForPair(parent, c, numericPair)
+}
+
+func auditPrincipalsForPair(parent context.Context, c connectedprofile.Config, pair workerPair) error {
+	collectorName, uploaderName, sharedName, ok := pair.principalNames()
+	if !ok {
+		return ErrUnsafe
+	}
 	if parent == nil || os.Getuid() != 0 || os.Geteuid() != 0 || c.Validate() != nil {
 		return ErrUnsafe
 	}
@@ -41,7 +49,7 @@ func auditPrincipals(parent context.Context, c connectedprofile.Config) error {
 	if err != nil {
 		return ErrUnsafe
 	}
-	snapshot, err := parsePrincipals(nss, passwd, groups, c)
+	snapshot, err := parsePrincipalsForPair(nss, passwd, groups, c, pair)
 	if err != nil {
 		return ErrUnsafe
 	}
@@ -149,7 +157,15 @@ func supportedNSS(data []byte) bool {
 }
 
 func parsePrincipals(nss, passwd, groups []byte, c connectedprofile.Config) (principalSnapshot, error) {
+	return parsePrincipalsForPair(nss, passwd, groups, c, numericPair)
+}
+
+func parsePrincipalsForPair(nss, passwd, groups []byte, c connectedprofile.Config, pair workerPair) (principalSnapshot, error) {
 	result := principalSnapshot{users: map[string]string{}, groups: map[string]string{}, members: map[string]string{}}
+	collectorName, uploaderName, sharedName, ok := pair.principalNames()
+	if !ok {
+		return result, ErrUnsafe
+	}
 	if c.Validate() != nil || !supportedNSS(nss) || len(passwd) > 1<<20 || len(groups) > 1<<20 || bytes.ContainsAny(passwd, "\r\x00") || bytes.ContainsAny(groups, "\r\x00") {
 		return result, ErrUnsafe
 	}

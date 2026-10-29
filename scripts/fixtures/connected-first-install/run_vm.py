@@ -15,11 +15,13 @@ import sys
 import tempfile
 import time
 
+
 MIB = 1024 * 1024
 GIB = 1024 * MIB
 CASE_TIMEOUT = 9 * 60
 CASES = ("success", "interrupt", "success-cut")
 HARNESS_FILES = ("run_vm.py", "guest.sh", "drive_pty.py", "assert_guest.py", "preflight_probe.py", "activation_guest.py", "bootstrap_guest.py")
+RICH_HARNESS_FILES = ("rich_scope.py", "rich_guest.py")
 SAFE_PATH = "/usr/sbin:/usr/bin:/sbin:/bin"
 TOOLS: dict[str, str] = {}
 
@@ -59,14 +61,18 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def harness_sha256(directory: Path) -> str:
+def harness_files(scope: str = "stopped") -> tuple[str, ...]:
+    return HARNESS_FILES + RICH_HARNESS_FILES if scope == "rich-processes" else HARNESS_FILES
+
+
+def harness_sha256(directory: Path, scope: str = "stopped") -> str:
     """Digest a canonical manifest of every reviewed host/guest harness source."""
-    manifest = "".join(f"{sha256(directory / name)}  {name}\n" for name in HARNESS_FILES)
+    manifest = "".join(f"{sha256(directory / name)}  {name}\n" for name in harness_files(scope))
     return hashlib.sha256(manifest.encode("ascii")).hexdigest()
 
 
-def check_harness(directory: Path, expected_digest: str) -> None:
-    if harness_sha256(directory) != expected_digest:
+def check_harness(directory: Path, expected_digest: str, scope: str = "stopped") -> None:
+    if harness_sha256(directory, scope) != expected_digest:
         refuse("REVIEWED_HARNESS_REFUSED")
 
 
@@ -157,7 +163,7 @@ def check_helper_pin(scope: str, helper: Path | None, expected: str | None) -> N
         refuse("HELPER_SCOPE_REFUSED")
 
 
-def payload_image(instance: Path, archive: Path, manifest: Path, checksums: Path, receiver: Path, probe: Path, expected_commit: str, expected_manifest_sha256: str, expected_archive_sha256: str, expected_receiver_sha256: str, expected_probe_sha256: str, expected_harness_sha256: str, helper: Path | None = None, expected_helper: str | None = None) -> Path:
+def payload_image(instance: Path, archive: Path, manifest: Path, checksums: Path, receiver: Path, probe: Path, expected_commit: str, expected_manifest_sha256: str, expected_archive_sha256: str, expected_receiver_sha256: str, expected_probe_sha256: str, expected_harness_sha256: str, helper: Path | None = None, expected_helper: str | None = None, rich=None) -> Path:
     directory = instance / "payload"
     directory.mkdir(mode=0o700)
     for source in (archive, manifest, checksums, receiver, probe):
@@ -169,6 +175,13 @@ def payload_image(instance: Path, archive: Path, manifest: Path, checksums: Path
     scripts = Path(__file__).resolve().parent
     for name in HARNESS_FILES[1:]:
         shutil.copyfile(scripts / name, directory / name)
+    if rich is not None:
+        sources, reviewed = rich
+        for name, source in sources.items():
+            shutil.copyfile(source, directory / name)
+        for name in RICH_HARNESS_FILES:
+            shutil.copyfile(scripts / name, directory / name)
+        (directory / "reviewed-rich-identity.json").write_text(json.dumps(reviewed, sort_keys=True) + "\n", encoding="ascii")
     identity = {"commit": expected_commit, "manifest_sha256": expected_manifest_sha256, "archive_sha256": expected_archive_sha256, "receiver_sha256": expected_receiver_sha256, "probe_sha256": expected_probe_sha256, "harness_sha256": expected_harness_sha256}
     if expected_helper is not None:
         identity["helper_sha256"] = expected_helper
@@ -280,9 +293,10 @@ def case(instance: Path, name: str, base: Path, payload: Path, keep_disks: bool)
             "success-cut": "HLO_VM_SUCCESS_READY_FOR_CUT",
             "activation": "HLO_VM_ACTIVATION_FIRST_BOOT",
             "bootstrap": "HLO_VM_BOOTSTRAP_FIRST_BOOT",
+            "rich-processes": "HLO_VM_RICH_FIRST_BOOT",
         }[name]
         wait_marker(first, console, first_marker)
-        abrupt = name not in ("success", "activation", "bootstrap")
+        abrupt = name not in ("success", "activation", "bootstrap", "rich-processes")
         if abrupt:
             stop_exact(first, True)
         else:
@@ -291,7 +305,7 @@ def case(instance: Path, name: str, base: Path, payload: Path, keep_disks: bool)
                 refuse("FIRST_BOOT_EXIT_FAILED")
         second, second_console = boot(case_dir, overlay, payload, seed, 2)
         try:
-            wanted = "HLO_VM_ACTIVATION_REBOOT_PASS" if name == "activation" else ("HLO_VM_INTERRUPT_REBOOT_PASS" if name == "interrupt" else "HLO_VM_SUCCESS_REBOOT_PASS")
+            wanted = "HLO_VM_RICH_REBOOT_PASS" if name == "rich-processes" else ("HLO_VM_ACTIVATION_REBOOT_PASS" if name == "activation" else ("HLO_VM_INTERRUPT_REBOOT_PASS" if name == "interrupt" else "HLO_VM_SUCCESS_REBOOT_PASS"))
             wait_marker(second, second_console, wanted)
             second.wait(timeout=90)
             if second.returncode != 0:
@@ -325,7 +339,10 @@ def main() -> int:
     parser.add_argument("--expected-helper-sha256")
     parser.add_argument("--work-root", required=True)
     parser.add_argument("--keep-disks", action="store_true")
-    parser.add_argument("--scope", choices=("stopped", "activation", "all", "bootstrap"), default="stopped")
+    parser.add_argument("--scope", choices=("stopped", "activation", "all", "bootstrap", "rich-processes"), default="stopped")
+    parser.add_argument("--rich-archive")
+    parser.add_argument("--expected-rich-archive-sha256")
+    parser.add_argument("--expected-rich-manifest-sha256")
     args = parser.parse_args()
     try:
         if os.geteuid() != 0 or not re.fullmatch(r"[a-f0-9]{64}", args.image_sha256) or not re.fullmatch(r"[a-f0-9]{40}", args.expected_commit) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_manifest_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_archive_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_receiver_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_probe_sha256) or not re.fullmatch(r"[a-f0-9]{64}", args.expected_harness_sha256):
@@ -344,9 +361,15 @@ def main() -> int:
         if not root.is_dir() or not trusted_ancestors(root) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o700:
             refuse("WORK_ROOT_OWNERSHIP_REFUSED")
         scripts = Path(__file__).resolve().parent
-        for name in HARNESS_FILES:
+        for name in harness_files(args.scope):
             owned_file(str(Path(__file__).resolve().parent / name), 512 * 1024)
-        check_harness(scripts, args.expected_harness_sha256)
+        check_harness(scripts, args.expected_harness_sha256, args.scope)
+        rich = None
+        if args.scope == "rich-processes":
+            import rich_scope  # Only after its independently pinned source check.
+            rich = rich_scope.inputs(args.scope, args.rich_archive, args.expected_rich_archive_sha256, args.expected_rich_manifest_sha256, args.expected_commit, owned_file, sha256)
+        elif any(value is not None for value in (args.rich_archive, args.expected_rich_archive_sha256, args.expected_rich_manifest_sha256)):
+            refuse("RICH_SCOPE_REFUSED")
         image = owned_file(args.image, 12 * GIB)
         archive = owned_file(args.archive, 600 * MIB)
         manifest = owned_file(args.manifest, 16 * 1024)
@@ -370,8 +393,8 @@ def main() -> int:
             instance = Path(tempfile.mkdtemp(prefix="hlo-first-install-", dir=root))
             instance.chmod(0o700)
             (instance / ".hlo-owned-instance").write_text("first-install-vm/v1\n")
-            payload = payload_image(instance, archive, manifest, checksums, receiver, probe, args.expected_commit, args.expected_manifest_sha256, args.expected_archive_sha256, args.expected_receiver_sha256, args.expected_probe_sha256, args.expected_harness_sha256, helper, args.expected_helper_sha256)
-            cases = CASES if args.scope == "stopped" else ((args.scope,) if args.scope in ("activation", "bootstrap") else (*CASES, "activation"))
+            payload = payload_image(instance, archive, manifest, checksums, receiver, probe, args.expected_commit, args.expected_manifest_sha256, args.expected_archive_sha256, args.expected_receiver_sha256, args.expected_probe_sha256, args.expected_harness_sha256, helper, args.expected_helper_sha256, rich)
+            cases = ("rich-processes",) if rich is not None else (CASES if args.scope == "stopped" else ((args.scope,) if args.scope in ("activation", "bootstrap") else (*CASES, "activation")))
             for name in cases:
                 case(instance, name, image, payload, args.keep_disks)
             if not args.keep_disks:

@@ -19,6 +19,8 @@ import (
 // Production always constructs these fixed adapters; no caller, config file or
 // command argument can replace policy or select different paths/commands.
 type activationOperations struct {
+	pair          workerPair
+	configBytes   func(connectedprofile.Config) ([]byte, error)
 	inspect       func(context.Context, string) (workerInstance, error)
 	service       func(context.Context, string, string) error
 	audit         func(context.Context, int, string) (connectedprocess.Identity, error)
@@ -48,10 +50,11 @@ type activationProbes interface {
 type pinnedActivationRecords struct {
 	directory *os.File
 	gid       uint32
+	pair      workerPair
 }
 
 func (p pinnedActivationRecords) publish(name string, data []byte) error {
-	return publishActivation(p.directory, name, data, p.gid)
+	return publishActivationForPair(p.directory, name, data, p.gid, p.pair)
 }
 func (p pinnedActivationRecords) close()     { p.directory.Close() }
 func (p *probePair) ports() (uint16, uint16) { return p.v4.port(), p.v6.port() }
@@ -64,7 +67,7 @@ func systemActivationOperations() activationOperations {
 			if err != nil {
 				return nil, err
 			}
-			return pinnedActivationRecords{d, gid}, nil
+			return pinnedActivationRecords{directory: d, gid: gid}, nil
 		},
 		clearResponse: clearActivationResponse, response: readActivationResponse,
 		status: readStatusRecord,

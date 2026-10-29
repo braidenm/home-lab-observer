@@ -21,6 +21,7 @@ import (
 
 	"github.com/braidenm/home-lab-observer/internal/observation"
 	"github.com/braidenm/home-lab-observer/internal/remoteprojection"
+	"github.com/braidenm/home-lab-observer/internal/workloadprojection"
 )
 
 var fixturePolicy = Policy{CollectorUID: 61001, SharedGID: 61011, UploaderUID: 61002, ServerID: "srv_0123456789abcdef0123456789abcdef"}
@@ -102,6 +103,13 @@ func TestOwnedCrossPrincipalFixture(t *testing.T) {
 		runOwned(t, root, role)
 	}
 	runConcurrent(t, root)
+	richState := filepath.Join(root, "rich-handoff")
+	if os.Mkdir(richState, 0o750) != nil || os.Chown(richState, int(fixturePolicy.CollectorUID), int(fixturePolicy.SharedGID)) != nil {
+		t.Fatal("rich fixture directory setup failed")
+	}
+	for _, role := range []string{"rich-publish", "rich-read"} {
+		runOwned(t, root, role)
+	}
 	// All mutations below affect only synthetic files in this owned chroot.
 	for _, kind := range []string{"access", "default"} {
 		name := "system.posix_acl_" + kind
@@ -173,7 +181,7 @@ func runOwned(t *testing.T, root, role string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	uid, gid, groups := fixturePolicy.CollectorUID, fixturePolicy.SharedGID, []uint32{}
-	if role == "read-denials" || role == "read-native" || role == "reject-directory" || role == "reject-file" || role == "read-loop" || role == "reader-missing" || role == "read-invalid" {
+	if role == "read-denials" || role == "read-native" || role == "reject-directory" || role == "reject-file" || role == "read-loop" || role == "reader-missing" || role == "read-invalid" || role == "rich-read" {
 		uid, gid, groups = fixturePolicy.UploaderUID, 61012, []uint32{fixturePolicy.SharedGID}
 	}
 	if role == "third" || role == "wrong-reader" {
@@ -218,6 +226,45 @@ func runChild(t *testing.T, role string) {
 	}
 	p := fixturePolicy
 	switch role {
+	case "rich-publish":
+		w, err := OpenRichProcessesWriter("/rich-handoff", richTestPolicy)
+		if err != nil {
+			t.Fatal("rich writer refused")
+		}
+		defer w.Close()
+		if w.Publish(richTestBody(t, workloadprojection.Consent{Processes: true})) != nil {
+			t.Fatal("rich publication refused")
+		}
+	case "rich-read":
+		r, err := OpenRichProcessesReader("/rich-handoff", richTestPolicy)
+		if err != nil {
+			t.Fatal("rich reader refused")
+		}
+		defer r.Close()
+		data, err := r.Read(context.Background(), p.ServerID)
+		if err != nil || !bytes.Equal(data, richTestBody(t, workloadprojection.Consent{Processes: true})) {
+			t.Fatal("rich body changed")
+		}
+		if _, err := OpenReader("/rich-handoff", p); err != ErrUnsafe {
+			t.Fatal("numeric cap widened")
+		}
+		wrong := richTestPolicy
+		wrong.PolicyDigest[0]++
+		other, err := OpenRichProcessesReader("/rich-handoff", wrong)
+		if err != nil {
+			t.Fatal("wrong-policy fixture open refused prematurely")
+		}
+		if data, err := other.Read(context.Background(), p.ServerID); data != nil || err != ErrInvalid {
+			t.Fatal("wrong consent read accepted")
+		}
+		other.Close()
+		if f, err := os.OpenFile("/rich-handoff/snapshot.json", os.O_WRONLY, 0); err == nil {
+			f.Close()
+			t.Fatal("rich reader gained write")
+		}
+		if _, err := OpenRichProcessesWriter("/rich-handoff", richTestPolicy); err != ErrUnsafe {
+			t.Fatal("rich reader gained writer role")
+		}
 	case "publish-native":
 		w, err := OpenWriter("/handoff", p)
 		if err != nil {

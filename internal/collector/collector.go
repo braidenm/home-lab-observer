@@ -33,13 +33,24 @@ type Config struct {
 func DefaultConfig() Config { return Config{"dev", 200 * time.Millisecond, 25, 16, true} }
 
 type Collector struct {
-	clock    Clock
-	provider SystemProvider
-	config   Config
-	numeric  *numerichost.Collector
+	clock          Clock
+	provider       SystemProvider
+	config         Config
+	numeric        *numerichost.Collector
+	networkEnabled bool
 }
 
 func New(clock Clock, provider SystemProvider, cfg Config) *Collector {
+	return newCollector(clock, provider, cfg, true)
+}
+
+// NewInstalled preserves partial filesystem coverage in an isolated worker.
+// Visibility of some mounts is not proof of visibility of all host filesystems.
+func NewInstalled(clock Clock, provider SystemProvider, cfg Config) *Collector {
+	return newCollector(clock, provider, cfg, false)
+}
+
+func newCollector(clock Clock, provider SystemProvider, cfg Config, localView bool) *Collector {
 	if clock == nil {
 		clock = RealClock{}
 	}
@@ -66,7 +77,7 @@ func New(clock Clock, provider SystemProvider, cfg Config) *Collector {
 	}
 	// Preserve the rich observer's existing local-view semantics. This does not
 	// establish namespace evidence for an installed isolated numeric worker.
-	return &Collector{clock: clock, provider: provider, config: cfg, numeric: numerichost.New(clock, provider, numerichost.Config{CollectorVersion: cfg.CollectorVersion, CPUSampleDuration: cfg.CPUSampleDuration, MaxFilesystems: cfg.MaxFilesystems, FilesystemCoverageVerified: true})}
+	return &Collector{clock: clock, provider: provider, config: cfg, networkEnabled: localView, numeric: numerichost.New(clock, provider, numerichost.Config{CollectorVersion: cfg.CollectorVersion, CPUSampleDuration: cfg.CPUSampleDuration, MaxFilesystems: cfg.MaxFilesystems, FilesystemCoverageVerified: localView})}
 }
 
 func (c *Collector) Collect(ctx context.Context) observation.Snapshot {
@@ -109,6 +120,11 @@ func (c *Collector) Collect(ctx context.Context) observation.Snapshot {
 }
 
 func (c *Collector) network(ctx context.Context) observation.Section[observation.Network] {
+	// Installed workers have a private network namespace. Its loopback counters
+	// are not host traffic; do not acquire or label them as host observations.
+	if !c.networkEnabled {
+		return observation.Section[observation.Network]{State: observation.Disabled, ReasonCode: observation.ReasonDisabled}
+	}
 	start := c.clock.Now()
 	n, e := c.provider.Network(ctx)
 	if e != nil {

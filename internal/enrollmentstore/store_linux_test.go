@@ -16,6 +16,7 @@ import (
 
 	"github.com/braidenm/home-lab-observer/internal/enrollmentcoord"
 	"github.com/braidenm/home-lab-observer/internal/uploadledger"
+	"github.com/braidenm/home-lab-observer/internal/uploadstate"
 )
 
 func directory(t *testing.T) string {
@@ -25,6 +26,67 @@ func directory(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+func richPrincipals() RichProcessesPrincipals {
+	return RichProcessesPrincipals{CollectorUID: 60101, UploaderUID: 60102, UploaderGID: 60102, SharedGID: 60103}
+}
+
+func TestRichProcessesLifecycleDerivesBindingAfterBegin(t *testing.T) {
+	ctx := context.Background()
+	path := directory(t)
+	principals := richPrincipals()
+	s, err := OpenNewRichProcesses(ctx, path, principals)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := testBinding()
+	if s.profile != (uploadstate.ProfileBinding{}) {
+		t.Fatal("rich policy was derived before connector identity")
+	}
+	through(t, s, 4)
+	want, err := principals.profile(binding)
+	if err != nil || s.profile != want || s.profile.Kind != uploadstate.RichProcessesProfile {
+		t.Fatal("rich policy binding was not derived from connector identity")
+	}
+	if s.Close() != nil {
+		t.Fatal("close failed")
+	}
+	if ready, err := OpenReady(ctx, path, binding); err == nil {
+		ready.Close()
+		t.Fatal("rich ledger opened through numeric API")
+	}
+	wrong := principals
+	wrong.CollectorUID++
+	if ready, err := OpenReadyRichProcesses(ctx, path, binding, wrong); err == nil {
+		ready.Close()
+		t.Fatal("different rich policy adopted ledger")
+	}
+	ready, err := OpenReadyRichProcesses(ctx, path, binding, principals)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ready.Close()
+	record, err := ready.Ledger().Load(ctx)
+	if err != nil || record.Profile != want || record.Binding != binding {
+		t.Fatal("rich ledger binding changed")
+	}
+}
+
+func TestInvalidRichPrincipalsRefuseBeforeFilesystemMutation(t *testing.T) {
+	for _, principals := range []RichProcessesPrincipals{{}, {CollectorUID: 1, UploaderUID: 1, UploaderGID: 2, SharedGID: 3}, {CollectorUID: 1, UploaderUID: 2, UploaderGID: 3, SharedGID: 3}} {
+		path := directory(t)
+		if s, err := OpenNewRichProcesses(context.Background(), path, principals); err != ErrRecovery {
+			if s != nil {
+				s.Close()
+			}
+			t.Fatal("invalid rich principals admitted")
+		}
+		entries, err := os.ReadDir(path)
+		if err != nil || len(entries) != 0 {
+			t.Fatal("invalid rich principals touched storage")
+		}
+	}
 }
 func setup(t *testing.T, path string) *Setup {
 	t.Helper()

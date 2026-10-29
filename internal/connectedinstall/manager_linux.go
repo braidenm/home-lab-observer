@@ -96,7 +96,7 @@ func service(ctx context.Context, verb, unit string) error {
 // unitRuntimeState is read-only. The installer never invokes a service start,
 // enable or stop for an installed worker.
 func unitRuntimeState(ctx context.Context, unit string) (map[string]string, error) {
-	if unit != collectorUnit && unit != uploaderUnit && unit != enrollmentUnit {
+	if !knownInstalledUnit(unit, true) {
 		return nil, ErrUnsafe
 	}
 	out, err := runTool(ctx, toolSystemctl, []string{"show", "--no-pager", "--property=Id", "--property=LoadState", "--property=ActiveState", "--property=UnitFileState", "--property=FragmentPath", "--property=DropInPaths", "--property=NeedDaemonReload", "--", unit}, nil, 1024)
@@ -146,7 +146,16 @@ func runEnrollment(ctx context.Context, properties []string, executable, mode st
 // The private reader seam proves invalid requests are rejected before querying
 // the manager. Production always supplies the fixed enrollmentState reader.
 func runEnrollmentWithPreflight(ctx context.Context, properties []string, executable, mode string, input []byte, policy connectedunits.EnrollmentInput, beforeState func(context.Context) (map[string]string, error)) ([]byte, error) {
-	if executable != "/bin/observer-connected-uploader" || (mode != "enroll" && mode != "validate-enrollment" && mode != "validate-ledger") || len(properties) > 64 || len(input) > 512 {
+	return runEnrollmentForPair(ctx, properties, executable, mode, input, policy, beforeState, numericPair)
+}
+
+func runEnrollmentForPair(ctx context.Context, properties []string, executable, mode string, input []byte, policy connectedunits.EnrollmentInput, beforeState func(context.Context) (map[string]string, error), pair workerPair) ([]byte, error) {
+	_, _, enrollmentUnit, validPair := pair.units()
+	wantExecutable := "/bin/observer-connected-uploader"
+	if pair == richProcessesPair {
+		wantExecutable = "/bin/observer-connected-rich-uploader"
+	}
+	if !validPair || executable != wantExecutable || (mode != "enroll" && mode != "validate-enrollment" && mode != "validate-ledger") || len(properties) > 64 || len(input) > 512 {
 		return nil, ErrUnsafe
 	}
 	before, err := beforeState(ctx)
@@ -184,20 +193,31 @@ func runEnrollmentWithPreflight(ctx context.Context, properties []string, execut
 	}
 	done := make(chan error, 1)
 	go func() { done <- c.Wait() }()
-	invocation, err := awaitEnrollment(child, marker)
+	readState := func(ctx context.Context) (map[string]string, error) { return enrollmentStateForPair(ctx, pair) }
+	invocation, err := awaitEnrollmentForPair(child, marker, readState, pair)
 	if err == nil {
 		if mode == "validate-ledger" || mode == "validate-enrollment" {
-			err = connectedpolicy.ValidateOffline(child, enrollmentUnit, connectedpolicy.OfflineExpectation{UploaderUID: policy.UploaderUID, UploaderGID: policy.UploaderGID, SharedGID: policy.SharedGID, ArtifactSHA256: policy.ArtifactSHA256, Mode: mode})
+			expected := connectedpolicy.OfflineExpectation{UploaderUID: policy.UploaderUID, UploaderGID: policy.UploaderGID, SharedGID: policy.SharedGID, ArtifactSHA256: policy.ArtifactSHA256, Mode: mode}
+			if pair == richProcessesPair {
+				err = connectedpolicy.ValidateRichProcessesOffline(child, enrollmentUnit, expected)
+			} else {
+				err = connectedpolicy.ValidateOffline(child, enrollmentUnit, expected)
+			}
 		} else {
-			err = connectedpolicy.ValidateOnline(child, enrollmentUnit, connectedpolicy.OnlineExpectation{UploaderUID: policy.UploaderUID, UploaderGID: policy.UploaderGID, SharedGID: policy.SharedGID, ArtifactSHA256: policy.ArtifactSHA256})
+			expected := connectedpolicy.OnlineExpectation{UploaderUID: policy.UploaderUID, UploaderGID: policy.UploaderGID, SharedGID: policy.SharedGID, ArtifactSHA256: policy.ArtifactSHA256}
+			if pair == richProcessesPair {
+				err = connectedpolicy.ValidateRichProcessesOnline(child, enrollmentUnit, expected)
+			} else {
+				err = connectedpolicy.ValidateOnline(child, enrollmentUnit, expected)
+			}
 			if err == nil {
 				err = connectedpolicy.ValidateEffective(child, enrollmentUnit, policy.Addresses)
 			}
 		}
 	}
 	if err == nil {
-		state, e := enrollmentState(child)
-		if e != nil || !ownedEnrollment(state, marker) || state["InvocationID"] != invocation {
+		state, e := readState(child)
+		if e != nil || !ownedEnrollmentForPair(state, marker, pair) || state["InvocationID"] != invocation {
 			err = ErrUnsafe
 		}
 	}
@@ -206,7 +226,7 @@ func runEnrollmentWithPreflight(ctx context.Context, properties []string, execut
 		cancel()
 		<-done
 		clear(output.data)
-		if stopEnrollment(marker, invocation) != nil {
+		if stopEnrollmentForPair(marker, invocation, pair) != nil {
 			return nil, ErrRecovery
 		}
 		return nil, ErrUnsafe // The grant was never written.
@@ -219,7 +239,7 @@ func runEnrollmentWithPreflight(ctx context.Context, properties []string, execut
 	waitErr := <-done
 	if writeErr != nil || n != len(input) || closeErr != nil || waitErr != nil {
 		clear(output.data)
-		if stopEnrollment(marker, invocation) != nil {
+		if stopEnrollmentForPair(marker, invocation, pair) != nil {
 			return nil, ErrRecovery
 		}
 		return nil, ErrRecovery
@@ -232,6 +252,14 @@ func awaitEnrollment(ctx context.Context, marker string) (string, error) {
 }
 
 func awaitEnrollmentWith(ctx context.Context, marker string, read func(context.Context) (map[string]string, error)) (string, error) {
+	return awaitEnrollmentForPair(ctx, marker, read, numericPair)
+}
+
+func awaitEnrollmentForPair(ctx context.Context, marker string, read func(context.Context) (map[string]string, error), pair workerPair) (string, error) {
+	_, _, enrollmentUnit, validPair := pair.units()
+	if !validPair {
+		return "", ErrUnsafe
+	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	observedInvocation := ""
@@ -273,13 +301,31 @@ func awaitEnrollmentWith(ctx context.Context, marker string, read func(context.C
 }
 
 func stopEnrollment(marker, invocation string) error {
+	return stopEnrollmentForPair(marker, invocation, numericPair)
+}
+
+func stopEnrollmentForPair(marker, invocation string, pair workerPair) error {
+	_, _, unit, validPair := pair.units()
+	if !validPair {
+		return ErrUnsafe
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	return stopEnrollmentWith(ctx, marker, invocation, enrollmentState, func(ctx context.Context) error { return service(ctx, "stop", enrollmentUnit) })
+	return stopEnrollmentWithForPair(ctx, marker, invocation, func(ctx context.Context) (map[string]string, error) { return enrollmentStateForPair(ctx, pair) }, func(ctx context.Context) error {
+		_, err := runTool(ctx, toolSystemctl, []string{"stop", unit}, nil, 1024)
+		return err
+	}, pair)
 }
 
 // The private seam exercises manager collection races without native services.
 func stopEnrollmentWith(ctx context.Context, marker, invocation string, read func(context.Context) (map[string]string, error), stop func(context.Context) error) error {
+	return stopEnrollmentWithForPair(ctx, marker, invocation, read, stop, numericPair)
+}
+
+func stopEnrollmentWithForPair(ctx context.Context, marker, invocation string, read func(context.Context) (map[string]string, error), stop func(context.Context) error, pair workerPair) error {
+	if _, _, _, ok := pair.units(); !ok {
+		return ErrUnsafe
+	}
 	state, err := read(ctx)
 	if err != nil {
 		return ErrRecovery
@@ -287,7 +333,7 @@ func stopEnrollmentWith(ctx context.Context, marker, invocation string, read fun
 	if state["LoadState"] == "not-found" {
 		return nil
 	}
-	if !ownedEnrollment(state, marker) || (invocation != "" && state["InvocationID"] != invocation) {
+	if !ownedEnrollmentForPair(state, marker, pair) || (invocation != "" && state["InvocationID"] != invocation) {
 		return ErrRecovery
 	}
 	invocation = state["InvocationID"]
@@ -300,14 +346,14 @@ func stopEnrollmentWith(ctx context.Context, marker, invocation string, read fun
 	if check["LoadState"] == "not-found" {
 		return nil
 	}
-	if !ownedEnrollment(check, marker) || check["InvocationID"] != invocation {
+	if !ownedEnrollmentForPair(check, marker, pair) || check["InvocationID"] != invocation {
 		return ErrRecovery
 	}
 	if stop(ctx) != nil {
 		return ErrRecovery
 	}
 	final, err := read(ctx)
-	if err != nil || (final["LoadState"] != "not-found" && (!ownedEnrollment(final, marker) || final["InvocationID"] != invocation || (final["ActiveState"] != "inactive" && final["ActiveState"] != "failed"))) {
+	if err != nil || (final["LoadState"] != "not-found" && (!ownedEnrollmentForPair(final, marker, pair) || final["InvocationID"] != invocation || (final["ActiveState"] != "inactive" && final["ActiveState"] != "failed"))) {
 		return ErrRecovery
 	}
 	return nil
@@ -316,16 +362,34 @@ func stopEnrollmentWith(ctx context.Context, marker, invocation string, read fun
 var invocationPattern = regexp.MustCompile(`^[a-f0-9]{32}$`)
 
 func ownedEnrollment(state map[string]string, marker string) bool {
-	return state["Id"] == enrollmentUnit && state["Description"] == marker && state["Transient"] == "yes" && invocationPattern.MatchString(state["InvocationID"])
+	return ownedEnrollmentForPair(state, marker, numericPair)
+}
+func ownedEnrollmentForPair(state map[string]string, marker string, pair workerPair) bool {
+	_, _, unit, ok := pair.units()
+	return ok && state["Id"] == unit && state["Description"] == marker && state["Transient"] == "yes" && invocationPattern.MatchString(state["InvocationID"])
 }
 func enrollmentState(ctx context.Context) (map[string]string, error) {
-	b, err := runTool(ctx, toolSystemctl, []string{"show", "--property=Id", "--property=LoadState", "--property=Description", "--property=InvocationID", "--property=Transient", "--property=ActiveState", "--", enrollmentUnit}, nil, 2048)
+	return enrollmentStateForPair(ctx, numericPair)
+}
+func enrollmentStateForPair(ctx context.Context, pair workerPair) (map[string]string, error) {
+	_, _, unit, ok := pair.units()
+	if !ok {
+		return nil, ErrUnsafe
+	}
+	b, err := runTool(ctx, toolSystemctl, []string{"show", "--property=Id", "--property=LoadState", "--property=Description", "--property=InvocationID", "--property=Transient", "--property=ActiveState", "--", unit}, nil, 2048)
 	if err != nil {
 		return nil, ErrUnsafe
 	}
-	return parseEnrollmentState(b)
+	return parseEnrollmentStateForPair(b, pair)
 }
 func parseEnrollmentState(b []byte) (map[string]string, error) {
+	return parseEnrollmentStateForPair(b, numericPair)
+}
+func parseEnrollmentStateForPair(b []byte, pair workerPair) (map[string]string, error) {
+	_, _, unit, ok := pair.units()
+	if !ok {
+		return nil, ErrUnsafe
+	}
 	if len(b) > 2048 || strings.ContainsAny(string(b), "\r\x00") {
 		return nil, ErrUnsafe
 	}
@@ -345,7 +409,7 @@ func parseEnrollmentState(b []byte) (map[string]string, error) {
 		}
 		m[key] = value
 	}
-	if len(m) != 6 || m["Id"] != enrollmentUnit {
+	if len(m) != 6 || m["Id"] != unit {
 		return nil, ErrUnsafe
 	}
 	return m, nil
