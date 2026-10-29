@@ -24,6 +24,11 @@ conforms exactly to `observer-current-snapshot/v1` without starting a listener o
   Bound result allocation to that limit and preserve discovered/scanned/error counts. A scan-budget cutoff is partial
   coverage, not a complete machine-wide top-N list or a collection error. OS ID enumeration itself is not claimed
   constant-memory; the cap applies before process construction and metadata reads.
+- **R9 Process CPU basis:** The pinned process adapter reports lifetime CPU time / process age relative to one core,
+  not current whole-host utilization. Preserve finite 0..409600 values internally (up to 4096 logical cores) instead
+  of dropping valid multi-core processes above 100. Keep aggregate host CPU at 0..100. The existing public current-v1
+  projection retains its 0..100 saturating display contract; it is not a raw full-range or recent-sample measure.
+  Rich workload contracts must declare the measurement basis and expose full-range data separately.
 
 ## Boundaries
 

@@ -48,6 +48,10 @@ is explicitly `unknown` where the OS adapter cannot provide it; other available 
 Process metadata acquisition attempts at most 4096 discovered IDs per collection, including denied/failed reads,
 before selecting the bounded displayed rows. A cutoff is partial coverage with explicit counts/truncation, not proof
 that the listed processes are the largest on the whole machine. OS process-ID enumeration itself remains platform-owned.
+
+Process CPU is a lifetime average relative to one core, not a recent host-capacity sample. Multi-core processes are
+retained internally even above 100%; the existing current-v1 display saturates at 100 to preserve its contract. Do not
+interpret that displayed value as a precise full-range measurement or compare it directly with host CPU trends.
 The legacy host snapshot still reports services, containers, hardware sensors and native log sources as unsupported;
 that contract is not expanded by the dedicated views. Docker containers have a separate opt-in Workloads view; see
 [container observations](container-observations.md). Preview 3 also has a separate, opt-in

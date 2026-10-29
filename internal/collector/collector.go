@@ -19,6 +19,10 @@ const hardMaxProcesses = 200
 const hardMaxFilesystems = 64
 const hardMaxProcessScan = 4096
 
+// Process CPU is a lifetime average relative to one core, not host capacity.
+// Bound the supported 4096-core range without discarding valid multicore work.
+const maxProcessCPUPercent = 4096 * 100
+
 type Config struct {
 	CollectorVersion             string
 	CPUSampleDuration            time.Duration
@@ -153,7 +157,7 @@ func (c *Collector) processes(ctx context.Context) observation.Section[[]observa
 			errs++
 			break
 		}
-		if p.PID <= 0 || !percent(p.CPUPercent) {
+		if p.PID <= 0 || !processPercent(p.CPUPercent) {
 			errs++
 			continue
 		}
@@ -207,6 +211,9 @@ func sq(d time.Duration, samples, errs int) observation.SectionQuality {
 	return observation.SectionQuality{DurationMS: max(0, d.Milliseconds()), Samples: samples, Errors: errs}
 }
 func percent(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0 && v <= 100 }
+func processPercent(v float64) bool {
+	return !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0 && v <= maxProcessCPUPercent
+}
 func safeName(v string) string {
 	v = strings.ReplaceAll(v, "\\", "/")
 	if i := strings.LastIndexByte(v, '/'); i >= 0 {

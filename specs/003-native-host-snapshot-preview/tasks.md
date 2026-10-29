@@ -15,4 +15,9 @@
 - [ ] Add OS services and opt-in logs only in later accepted specifications.
 - [x] Cap native provider detail acquisition before process construction, and verify cancellation/failure accounting.
 - [x] Independently review cutoff/cancellation behavior; local Go 1.27.3 Windows full suite and focused vet pass.
-- [ ] Prove scan-budget truncation stays partial through the existing snapshot projection; run native CI before merge.
+- [x] Prove scan-budget truncation stays partial through the existing snapshot projection; PR 128 native CI passed before merge.
+- [ ] Preserve legitimate multicore process CPU values internally, declare lifetime/single-core basis and retain v1 projection compatibility.
+
+CPU-range correction evidence (2026-10-29): regressions failed before implementation; local Windows Go 1.27.3 full
+suite and focused vet pass. Independent review found no P0-P2 issues. Exact-head native/race CI remains required;
+this source correction has not been packaged or installed on a connected host.
