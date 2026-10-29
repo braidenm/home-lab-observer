@@ -8,6 +8,8 @@
 - [x] Implement pure process/container egress DTOs, strict schemas and synthetic compatibility/privacy fixtures
   ([first profile](workload-profile.md)); locally tested, not upload-admitted or released.
 - [ ] Implement actual receiver/parser contracts and nullable authorized read models; retain legacy fixtures.
+- [x] Define and independently review the pure combined host/workload envelope without extending upload admission;
+  local Windows full Go tests/vet pass, focused coverage 92.3%. Exact-head native/race CI is still required.
 - [ ] Approve and implement host-local opt-in policy plus rich acquisition/isolation profile.
 - [ ] Implement/rehearse supported profile-changing migration or separately enrolled coexistence; preserve old connector.
 - [ ] Wire profile-aware bounded handoff/ledger/transport and receiver; no broad cap-only activation.
@@ -16,8 +18,8 @@
 - [ ] Publish immutable reviewed artifacts and release instructions; verify clean install/rollback.
 - [ ] Opt in owner canary and prove actual hosted fresh process/container rows plus delegated viewing/revocation.
 - [ ] Add host namespace-aware network/disk-I/O and bounded gap-aware numeric trends.
-- [ ] Correct process CPU acquisition/normalization with explicit sampling basis; the current lifetime-single-core
-  adapter can exceed 100 and the local normalizer omits those busy rows. Do not imply full busy-process visibility.
+- [x] Correct process CPU acquisition/normalization with explicit lifetime-single-core sampling basis
+  (PR 129 merged after native CI). This source correction is not yet packaged on the connected owner host.
 - [ ] Add read-only systemd adapter; separately specify opt-in remote safe-log metadata.
 - [ ] Continue separately permissioned Spec 011 start/stop/restart; never infer control from observation.
 
