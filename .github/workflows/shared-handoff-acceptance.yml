@@ -3,28 +3,11 @@ name: Shared handoff acceptance
 on:
   workflow_dispatch:
   pull_request:
-    paths:
-      - '.github/workflows/shared-handoff-acceptance.yml'
-      - 'internal/sharedhandoff/**'
-      - 'internal/ownerfs/**'
-      - 'internal/observation/**'
-      - 'internal/remoteprojection/**'
-      - 'go.mod'
-      - 'go.sum'
-      - 'docs/adr/018-shared-read-handoff.md'
-      - 'specs/012-connected-observation/shared-handoff.md'
   push:
     branches: [main]
-    paths:
-      - '.github/workflows/shared-handoff-acceptance.yml'
-      - 'internal/sharedhandoff/**'
-      - 'internal/ownerfs/**'
-      - 'internal/observation/**'
-      - 'internal/remoteprojection/**'
-      - 'go.mod'
-      - 'go.sum'
-      - 'docs/adr/018-shared-read-handoff.md'
-      - 'specs/012-connected-observation/shared-handoff.md'
+
+# This short security-boundary proof is a required merge check. Always report it:
+# workflow-level path filtering would leave unrelated PRs waiting for a missing check.
 
 permissions:
   contents: read

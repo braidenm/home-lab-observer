@@ -202,7 +202,42 @@ func runOwned(t *testing.T, root, role string) {
 	cmd.Stdout = output
 	cmd.Stderr = output
 	if err := cmd.Run(); err != nil || output.overflow {
-		t.Fatalf("owned fixture child failed: %s", role)
+		category := "UNKNOWN"
+		if role == "read-loop" {
+			category = readFixtureFailure(err)
+		}
+		t.Fatalf("owned fixture child failed: %s category=%s", role, category)
+	}
+}
+
+func readFixtureFailure(err error) string {
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		return readFixtureExit(exit.ExitCode())
+	}
+	return "UNKNOWN"
+}
+
+func readFixtureExit(code int) string {
+	switch code {
+	case 81:
+		return "UNSAFE"
+	case 82:
+		return "INVALID"
+	case 83:
+		return "MISSING"
+	case 84:
+		return "UNEXPECTED_ERROR"
+	case 85:
+		return "INVALID_RETURNED_DOCUMENT"
+	case 91:
+		return "OPEN_UNAVAILABLE"
+	case 92:
+		return "OPEN_UNSAFE"
+	case 93:
+		return "OPEN_OTHER"
+	default:
+		return "UNKNOWN"
 	}
 }
 
@@ -395,16 +430,42 @@ func runChild(t *testing.T, role string) {
 	case "read-loop":
 		r, err := OpenReader("/handoff", p)
 		if err != nil {
-			t.Fatal("loop reader failed")
+			switch err {
+			case ErrUnavailable:
+				os.Exit(91)
+			case ErrUnsafe:
+				os.Exit(92)
+			default:
+				os.Exit(93)
+			}
 		}
 		defer r.Close()
+		fmt.Fprintln(os.Stdout, "READY")
+		var release [1]byte
+		if _, err := io.ReadFull(os.Stdin, release[:]); err != nil || release[0] != 1 {
+			t.Fatal("reader rendezvous refused")
+		}
 		for i := 0; i < 1000; i++ {
 			data, err := r.Read(context.Background(), p.ServerID)
 			if err == ErrUnavailable {
 				continue
 			}
-			if err != nil || remoteprojection.Validate(data, p.ServerID) != nil {
-				t.Fatal("loop returned unsafe document")
+			// Child-only finite exit codes diagnose concurrency failures without
+			// retaining or printing any document, path or dependency error.
+			if err != nil {
+				switch err {
+				case ErrUnsafe:
+					os.Exit(81)
+				case ErrInvalid:
+					os.Exit(82)
+				case ErrMissing:
+					os.Exit(83)
+				default:
+					os.Exit(84)
+				}
+			}
+			if remoteprojection.Validate(data, p.ServerID) != nil {
+				os.Exit(85)
 			}
 		}
 	case "reject-directory":
@@ -437,6 +498,16 @@ type readyOutput struct {
 	notified bool
 }
 
+func beginConcurrent(readerReady, writerReady, releaseReader func() error) error {
+	if err := readerReady(); err != nil {
+		return err
+	}
+	if err := writerReady(); err != nil {
+		return err
+	}
+	return releaseReader()
+}
+
 func (w *readyOutput) Write(b []byte) (int, error) {
 	if !w.notified {
 		needed := 6 - len(w.prefix)
@@ -455,6 +526,21 @@ func (w *readyOutput) Write(b []byte) (int, error) {
 func runConcurrent(t *testing.T, root string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	reader := exec.CommandContext(ctx, "/helper", "-test.run=^TestOwnedCrossPrincipalFixture$", "-test.timeout=12s")
+	reader.SysProcAttr = &syscall.SysProcAttr{Chroot: root, Credential: &syscall.Credential{Uid: fixturePolicy.UploaderUID, Gid: 61012, Groups: []uint32{fixturePolicy.SharedGID}}}
+	reader.Dir = "/"
+	reader.Env = []string{"OBSERVER_SHARED_CHILD=read-loop"}
+	readerInput, err := reader.StdinPipe()
+	if err != nil {
+		cancel()
+		t.Fatal("concurrent reader pipe failed")
+	}
+	defer readerInput.Close()
+	readerOutput := &readyOutput{ready: make(chan struct{})}
+	reader.Stdout, reader.Stderr = readerOutput, readerOutput
+	readerDone := make(chan struct{})
+	readerStarted := false
+	var readerErr error
 	cmd := exec.CommandContext(ctx, "/helper", "-test.run=^TestOwnedCrossPrincipalFixture$", "-test.timeout=12s")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Chroot: root, Credential: &syscall.Credential{Uid: fixturePolicy.CollectorUID, Gid: fixturePolicy.SharedGID, Groups: []uint32{}}}
 	cmd.Dir = "/"
@@ -463,25 +549,68 @@ func runConcurrent(t *testing.T, root string) {
 	output := &readyOutput{ready: make(chan struct{})}
 	cmd.Stdout = output
 	cmd.Stderr = output
-	if err := cmd.Start(); err != nil {
-		cancel()
-		t.Fatal("concurrent fixture start failed")
-	}
 	done := make(chan struct{})
+	writerStarted := false
 	var waitErr error
-	go func() { waitErr = cmd.Wait(); close(done) }()
-	defer func() { cancel(); <-done }()
-	select {
-	case <-output.ready:
-	case <-done:
-		t.Fatal("concurrent fixture readiness failed")
-	case <-ctx.Done():
-		t.Fatal("concurrent fixture readiness timeout")
+	defer func() {
+		cancel()
+		if readerStarted {
+			<-readerDone
+		}
+		if writerStarted {
+			<-done
+		}
+	}()
+	ready := func(signal, exited <-chan struct{}) error {
+		select {
+		case <-signal:
+			return nil
+		case <-exited:
+			select {
+			case <-signal:
+				return nil
+			default:
+				return errors.New("fixture_child_exited")
+			}
+		case <-ctx.Done():
+			return errors.New("fixture_readiness_timeout")
+		}
 	}
-	runOwned(t, root, "read-loop")
+	err = beginConcurrent(func() error {
+		if err := reader.Start(); err != nil {
+			return err
+		}
+		readerStarted = true
+		go func() { readerErr = reader.Wait(); close(readerDone) }()
+		return ready(readerOutput.ready, readerDone)
+	}, func() error {
+		if err := cmd.Start(); err != nil {
+			return err
+		}
+		writerStarted = true
+		go func() { waitErr = cmd.Wait(); close(done) }()
+		return ready(output.ready, done)
+	}, func() error {
+		n, err := readerInput.Write([]byte{1})
+		if err != nil || n != 1 {
+			return errors.New("fixture_release_failed")
+		}
+		return nil
+	})
+	if err != nil {
+		cancel()
+		if readerStarted {
+			<-readerDone
+		}
+		if writerStarted {
+			<-done
+		}
+		t.Fatalf("concurrent fixture rendezvous failed reader=%s", readFixtureFailure(readerErr))
+	}
+	<-readerDone
 	<-done
-	if waitErr != nil || output.overflow {
-		t.Fatal("concurrent fixture failed")
+	if readerErr != nil || readerOutput.overflow || waitErr != nil || output.overflow {
+		t.Fatalf("concurrent fixture failed reader=%s", readFixtureFailure(readerErr))
 	}
 }
 

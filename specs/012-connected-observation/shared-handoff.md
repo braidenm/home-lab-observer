@@ -122,6 +122,40 @@ These results prove scoped DAC/ACL behavior, not installed systemd isolation, re
 global group membership exclusivity, durability across power loss or full canary acceptance.
 
 The `Shared handoff acceptance` workflow compiles the static fixture on a GitHub-hosted Ubuntu runner and explicitly
-enables the privileged test three times with a five-minute job limit. It runs for relevant implementation/dependency/policy
-changes and manual dispatch. No private runner or secret is used. This exercises the opted-in failure/concurrency tests;
+enables the privileged test three times with a five-minute job limit. It runs for every pull request, main push and
+manual dispatch. No private runner or secret is used. This exercises the opted-in failure/concurrency tests;
 the ordinary runtime suite alone skips them. Hosted execution evidence is pending until the workflow runs successfully.
+
+## Concurrent fixture construction (2026-10-29)
+
+Directory enumeration is not an atomic view of publication. A staged entry captured by `ReadDir` can be renamed or
+removed before its metadata lookup; the existing fixed result is unavailable, with no returned bytes. The constructor
+also performs this check, so beginning its construction only after the writer starts mutating creates an unrelated
+startup race in a fixture intended to exercise already-open concurrent reads.
+The [Go directory-entry contract](https://pkg.go.dev/io/fs#DirEntry) explicitly permits a later metadata lookup to fail
+after the entry is removed or renamed; a recorded name is not a pinned file handle.
+
+The fixture now establishes its reader first, receives its fixed readiness marker, then starts the writer and releases
+the reader through one fixed stdin byte. Both children remain deadline-bounded and are joined on success or failure.
+Read-time unavailable remains permitted; unsafe metadata, ACLs, invalid documents and other failures are not ignored.
+Private `checkEntries` extraction leaves production checks unchanged and permits a deterministic real-file test:
+capture the safe stage entry, remove only that owned file, and verify unavailable. Applying that boundary to the old
+writer-before-reader ordering failed deterministically; reader-first ordering passes. Existing mode/link/ACL negatives
+remain in force. Child failure diagnostics expose only closed error categories, never child output or rejected values.
+
+PR 136's first hosted repetition failed while two later repetitions passed. Its original error category was not captured,
+and 150 bounded local pre-fix repetitions did not reproduce it. The deterministic proof establishes and removes a real
+fixture-construction race; it does not retroactively prove that the hosted failure had that exact cause. Fresh exact-head
+hosted acceptance is still required, and the finite diagnostics distinguish any remaining constructor/read failure.
+
+## Required-check correction (2026-10-29)
+
+PR 136 auto-merged when its required checks passed, despite the separate handoff fixture failure: `linux-dac-acl` was
+not a protected-branch requirement. No richer artifact was released or installed. The follow-up removes workflow-level
+path filters so the short, bounded security proof reports on every PR, and adds its exact GitHub Actions check to the
+existing required-check set without removing or weakening any prior requirement. Verify the actual protected-branch
+configuration separately; a workflow file alone does not enforce merging.
+
+This follows [GitHub's required-check guidance](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks):
+workflow path filters can leave required checks pending rather than producing a usable result. Keep this short proof
+on the ordinary PR path; the long installed VM journey remains a separate manual release gate.
