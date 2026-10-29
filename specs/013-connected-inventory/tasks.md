@@ -8,19 +8,21 @@
 - [x] Implement pure process/container egress DTOs, strict schemas and synthetic compatibility/privacy fixtures
   ([first profile](workload-profile.md)); locally tested, not upload-admitted or released.
 - [ ] Implement actual receiver/parser contracts and nullable authorized read models; retain legacy fixtures.
+  Process-only receiver/read model is deployed in Platform Demo PR 470; nullable container views remain open.
 - [x] Define and independently review the pure combined host/workload envelope without extending upload admission;
   Windows full Go tests/vet, focused coverage 92.3% and exact-head native/race CI pass (PR 131 merged).
 - [ ] Approve and implement host-local opt-in policy plus rich acquisition/isolation profile.
 - [x] Independently review immutable separately enrolled rich policy and staged process-only proof (ADR 024); installed
-  implementation, receiver approval and actual owner rollout remain pending.
+  process-only composition/VM evidence is now recorded below; Docker approval and actual owner rollout remain pending.
 - [x] Separate normalized container model from Engine acquisition; preserve aliases/JSON and prove no-Docker combined
   projection dependency closure (PR 132 merged after required CI).
 - [x] Implement unused profile-bound pure state machine with explicit rich-processes group guard and strict default
   numeric APIs. TDD, independent implementation review and exact-head required CI pass (PR 133 merged).
 - [x] Implement unused rich schema-v2 ledger with fixed 128-page/512 KiB DB and 2 MiB transactional envelope; no
   migration. Real-SQLite/crash/ENOSPC proof, independent review and exact-head CI pass (PR 135 merged).
-- [ ] Complete the coherent VM-installable process-only package, following [its acceptance scope](installable-process-proof.md).
-  Source composition and focused tests are in progress; no owner-host installation or rich release is accepted yet.
+- [x] Complete the coherent VM-installable process-only package, following [its acceptance scope](installable-process-proof.md).
+  Exact source `24153fa278eea907cb0987ae96c26137c9aae909` passed the packaged first-boot/reboot gate and all 19 PR checks;
+  [independent evidence](../../docs/acceptance/connected-rich-processes-2026-10-29.md). No owner-host install or rich release accepted.
 - [ ] Rehearse fresh Docker-rich installation alongside numeric with no existing rich root; preserve numeric bytes/state.
   Separately prove pre-mutation refusal and byte-for-byte preservation of an existing process-only rich root.
   Rich-to-rich replacement and simultaneous rich installations are not implemented by this slice.
@@ -38,8 +40,8 @@
 ## Coherent installed process-and-Docker delivery (ADR 025)
 
 - [x] Record delegated engineering decision and [concrete installation plan](installable-docker-observation.md);
-  documentation only, implementation and activation gated. Independent review of this documentation remains pending.
-- [ ] Pass exact packaged process-only VM proof before Docker runtime implementation.
+  independently reviewed and merged in PR 138; Docker implementation/activation retain their remaining gates.
+- [x] Pass exact packaged process-only VM proof before Docker runtime implementation (exact source and evidence above).
 - [ ] Freeze helper file/freshness/socket/layout/resources and new immutable collection definition with independent review.
 - [ ] Deploy new-profile/event/feature readers and record rollback floors before any new writer/feature event.
 - [ ] Deliver fixed Docker reader, typed file, kind2/schema-v3 state, installer/units and complete four-executable
@@ -116,5 +118,6 @@ identify unexecuted native/OS proofs rather than substituting a fake or skipped 
 - The explicit disposable `rich-processes` fixture is not in default/all scopes. It uses synthetic credentials and
   separately pinned packages, proves numeric coexistence, real rich principals/effective units, large pending bodies,
   policy-tamper refusal and byte-identical reboot retry. Fixture tests are not an executed VM result.
-- Packaged VM acceptance, exact-head CI and immutable artifact evidence remain pending. This process-only package
-  is VM-only; no owner-host install, production profile writer, public release, Docker observation or control is enabled.
+- Packaged first-boot/reboot acceptance and all 19 exact-head PR checks passed at source `24153fa278eea907cb0987ae96c26137c9aae909`;
+  local immutable input evidence is [recorded separately](../../docs/acceptance/connected-rich-processes-2026-10-29.md), not publication provenance.
+  This package remains VM-only; no owner-host install, production profile writer, public release, Docker observation or control is enabled.

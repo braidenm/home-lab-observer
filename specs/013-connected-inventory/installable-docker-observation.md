@@ -1,7 +1,8 @@
 # Installed process and Docker observation
 
-Status: engineering plan accepted in ADR 025; no implementation or activation. Process-only packaged VM proof is the
-first gate. The useful owner release is process-and-Docker, not another intermediate process-only server entry.
+Status: engineering plan accepted in ADR 025; no Docker implementation or activation accepted. The prerequisite
+process-only packaged VM gate [passed on 2026-10-29](../../docs/acceptance/connected-rich-processes-2026-10-29.md).
+The useful owner release is process-and-Docker, not another intermediate process-only server entry.
 
 ## Complete outcome and fixed scope
 
@@ -83,7 +84,8 @@ trusted code, not daemon enforcement: a compromised reader still has root-equiva
 
 ## Hosted integration and rollout order
 
-1. Finish exact packaged process-only VM acceptance. Keep this Docker implementation blocked until that proof passes.
+1. Exact packaged process-only VM acceptance passed at the pinned source in the record above. That prerequisite
+   permits Docker implementation, not owner activation or a claim that the remaining gates have passed.
 2. Deploy Platform readers for the new immutable profile, DB constraint and versioned event/serializer/replay support
    before any writer emits it. Add a separate default-off Docker readiness feature; no persisted new-key event before
    readers/readiness. Record permanent event-reader floors; disabling/revoking does not undo them.

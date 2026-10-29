@@ -1,6 +1,10 @@
 # Disposable first-install and activation acceptance
 
-## Separate process-only proof (two runs failed; acceptance pending)
+## Separate process-only proof (packaged staging VM passed)
+
+The exact first-boot/reboot run at source `24153fa278eea907cb0987ae96c26137c9aae909` passed with independent
+identity/result review and 19 green PR checks. See the [canonical acceptance record](../../../docs/acceptance/connected-rich-processes-2026-10-29.md).
+This is VM-only staging evidence, not Docker, owner-host or public-release acceptance. The failed-attempt history below remains relevant.
 
 `--scope rich-processes` is an explicit opt-in; neither the default nor `--scope all`
 includes it. It installs the separately pinned numeric primary bundle stopped,
@@ -47,7 +51,7 @@ Known start refusals now retain only their allowlisted phase; unknown output,
 raw errors, observations and credentials never enter serial evidence. Only the
 closed failure marker is written directly to the fixture serial device, since
 the postboot oneshot deliberately discards ordinary stdout/stderr.
-No rich proof has passed merely because these fixture tests pass. Record the
+No rich proof passes merely because fixture tests pass. Record the
 exact frozen package/receiver/harness/image pins and independently review them
 before starting a VM; retain failure disks and only closed diagnostic output.
 
