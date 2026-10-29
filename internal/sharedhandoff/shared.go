@@ -2,7 +2,12 @@
 // It is separate from owner-private handoff and contains no worker or installer.
 package sharedhandoff
 
-import "errors"
+import (
+	"errors"
+	"regexp"
+)
+
+var serverPattern = regexp.MustCompile(`^srv_[a-f0-9]{32}$`)
 
 type Policy struct {
 	CollectorUID uint32

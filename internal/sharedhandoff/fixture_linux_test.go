@@ -110,6 +110,7 @@ func TestOwnedCrossPrincipalFixture(t *testing.T) {
 	for _, role := range []string{"rich-publish", "rich-read"} {
 		runOwned(t, root, role)
 	}
+	runDockerFrameFixture(t, root)
 	// All mutations below affect only synthetic files in this owned chroot.
 	for _, kind := range []string{"access", "default"} {
 		name := "system.posix_acl_" + kind
@@ -181,10 +182,10 @@ func runOwned(t *testing.T, root, role string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	uid, gid, groups := fixturePolicy.CollectorUID, fixturePolicy.SharedGID, []uint32{}
-	if role == "read-denials" || role == "read-native" || role == "reject-directory" || role == "reject-file" || role == "read-loop" || role == "reader-missing" || role == "read-invalid" || role == "rich-read" {
+	if role == "read-denials" || role == "read-native" || role == "reject-directory" || role == "reject-file" || role == "read-loop" || role == "reader-missing" || role == "read-invalid" || role == "rich-read" || strings.HasPrefix(role, "frame-read") {
 		uid, gid, groups = fixturePolicy.UploaderUID, 61012, []uint32{fixturePolicy.SharedGID}
 	}
-	if role == "third" || role == "wrong-reader" {
+	if role == "third" || role == "wrong-reader" || role == "frame-third" {
 		uid, gid = 61003, 61013
 	}
 	if role == "wrong-group" {
@@ -242,6 +243,10 @@ func readFixtureExit(code int) string {
 }
 
 func runChild(t *testing.T, role string) {
+	if strings.HasPrefix(role, "frame-") {
+		runDockerFrameChild(t, role)
+		return
+	}
 	if os.Geteuid() == 0 {
 		t.Fatal("child retained root")
 	}

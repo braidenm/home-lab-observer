@@ -134,7 +134,7 @@ func open(ctx context.Context, directory string, binding uploadstate.Binding, pr
 				}
 			}
 			parameters := `?,?,?,?,?,?,?,?,?,?`
-			if profile.Kind == uploadstate.RichProcessesProfile {
+			if hasPolicyColumns(profile) {
 				parameters += `,?,?`
 			}
 			if _, err := l.conn.ExecContext(bounded, `INSERT INTO upload_record(singleton,`+columnsFor(profile)+`) VALUES(1,`+parameters+`)`, argsFor(uploadstate.Record{Binding: binding, Profile: profile})...); err != nil {

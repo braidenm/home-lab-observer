@@ -12,6 +12,9 @@ type storageLimits struct {
 }
 
 func limits(profile uploadstate.ProfileBinding) storageLimits {
+	if profile.Kind == uploadstate.RichProcessesDockerProfile {
+		return storageLimits{pages: 128, version: 3, bodyBytes: 288 * 1024, databaseBytes: 4096 * 128, totalBytes: 2 * 1024 * 1024}
+	}
 	if profile.Kind == uploadstate.RichProcessesProfile {
 		return storageLimits{pages: 128, version: 2, bodyBytes: 288 * 1024, databaseBytes: 4096 * 128, totalBytes: 2 * 1024 * 1024}
 	}
@@ -40,6 +43,9 @@ const richColumns = columns + `,profile_kind,policy_digest`
 const richUpdateRecord = `UPDATE upload_record SET server_id=?,connector_id=?,watermark=?,has_ack=?,last_ack=?,stopped=?,pending_sequence=?,pending_body=?,pending_digest=?,pending_at=?,profile_kind=?,policy_digest=? WHERE singleton=1`
 
 func schemaFor(profile uploadstate.ProfileBinding) string {
+	if profile.Kind == uploadstate.RichProcessesDockerProfile {
+		return dockerRichSchema
+	}
 	if profile.Kind == uploadstate.RichProcessesProfile {
 		return richSchema
 	}
@@ -47,14 +53,14 @@ func schemaFor(profile uploadstate.ProfileBinding) string {
 }
 
 func columnsFor(profile uploadstate.ProfileBinding) string {
-	if profile.Kind == uploadstate.RichProcessesProfile {
+	if hasPolicyColumns(profile) {
 		return richColumns
 	}
 	return columns
 }
 
 func updateFor(profile uploadstate.ProfileBinding) string {
-	if profile.Kind == uploadstate.RichProcessesProfile {
+	if hasPolicyColumns(profile) {
 		return richUpdateRecord
 	}
 	return updateRecord
@@ -62,7 +68,7 @@ func updateFor(profile uploadstate.ProfileBinding) string {
 
 func argsFor(r uploadstate.Record) []any {
 	args := recordArgs(r)
-	if r.Profile.Kind == uploadstate.RichProcessesProfile {
+	if hasPolicyColumns(r.Profile) {
 		args = append(args, int(r.Profile.Kind), r.Profile.PolicyDigest[:])
 	}
 	return args

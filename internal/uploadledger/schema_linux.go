@@ -47,8 +47,8 @@ func readRecord(ctx context.Context, q queryer, binding uploadstate.Binding, pro
 	var count, bounded int
 	// Check lengths before copying a body from storage. The file itself is also bounded.
 	checks := `length(server_id)=36 AND length(connector_id)=38 AND length(last_ack)=32 AND length(stopped)<=32 AND (pending_body IS NULL OR length(pending_body)<=` + strconv.Itoa(limits(profile).bodyBytes) + `) AND (pending_digest IS NULL OR length(pending_digest)=32) AND (pending_at IS NULL OR length(pending_at)<=30)`
-	if profile.Kind == uploadstate.RichProcessesProfile {
-		checks += ` AND profile_kind=1 AND length(policy_digest)=32`
+	if hasPolicyColumns(profile) {
+		checks += ` AND profile_kind=` + strconv.Itoa(int(profile.Kind)) + ` AND length(policy_digest)=32`
 	}
 	err := q.QueryRowContext(ctx, `SELECT count(*), coalesce(min(`+checks+`),0) FROM upload_record`).Scan(&count, &bounded)
 	if err != nil || count != 1 || bounded != 1 {
@@ -62,18 +62,18 @@ func readRecord(ctx context.Context, q queryer, binding uploadstate.Binding, pro
 	var kind int
 	var policy []byte
 	targets := []any{&r.Binding.ServerID, &r.Binding.ConnectorID, &r.Watermark, &ack, &last, &r.Stopped, &sequence, &body, &digest, &at}
-	if profile.Kind == uploadstate.RichProcessesProfile {
+	if hasPolicyColumns(profile) {
 		targets = append(targets, &kind, &policy)
 	}
 	err = q.QueryRowContext(ctx, `SELECT `+columnsFor(profile)+` FROM upload_record WHERE singleton=1`).Scan(targets...)
 	if err != nil || (ack != 0 && ack != 1) || len(last) != 32 {
 		return uploadstate.Record{}, ErrRecovery
 	}
-	if profile.Kind == uploadstate.RichProcessesProfile {
-		if kind != int(uploadstate.RichProcessesProfile) || len(policy) != 32 {
+	if hasPolicyColumns(profile) {
+		if kind != int(profile.Kind) || len(policy) != 32 {
 			return uploadstate.Record{}, ErrRecovery
 		}
-		r.Profile.Kind = uploadstate.RichProcessesProfile
+		r.Profile.Kind = uploadstate.ProfileKind(kind)
 		copy(r.Profile.PolicyDigest[:], policy)
 	}
 	r.HasAck = ack == 1

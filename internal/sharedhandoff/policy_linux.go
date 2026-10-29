@@ -6,15 +6,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"regexp"
 	"syscall"
 
 	"golang.org/x/sys/unix"
 
 	"github.com/braidenm/home-lab-observer/internal/ownerfs"
 )
-
-var serverPattern = regexp.MustCompile(`^srv_[a-f0-9]{32}$`)
 
 func validPolicy(p Policy) bool {
 	return p.CollectorUID != 0 && p.UploaderUID != 0 && p.SharedGID != 0 && p.CollectorUID != p.UploaderUID && serverPattern.MatchString(p.ServerID)
