@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"strconv"
 	"time"
 
 	"github.com/braidenm/home-lab-observer/internal/uploadstate"
@@ -42,10 +43,14 @@ func recordArgs(r uploadstate.Record) []any {
 	return args
 }
 
-func readRecord(ctx context.Context, q queryer, binding uploadstate.Binding) (uploadstate.Record, error) {
+func readRecord(ctx context.Context, q queryer, binding uploadstate.Binding, profile uploadstate.ProfileBinding) (uploadstate.Record, error) {
 	var count, bounded int
 	// Check lengths before copying a body from storage. The file itself is also bounded.
-	err := q.QueryRowContext(ctx, `SELECT count(*), coalesce(min(length(server_id)=36 AND length(connector_id)=38 AND length(last_ack)=32 AND length(stopped)<=32 AND (pending_body IS NULL OR length(pending_body)<=16384) AND (pending_digest IS NULL OR length(pending_digest)=32) AND (pending_at IS NULL OR length(pending_at)<=30)),0) FROM upload_record`).Scan(&count, &bounded)
+	checks := `length(server_id)=36 AND length(connector_id)=38 AND length(last_ack)=32 AND length(stopped)<=32 AND (pending_body IS NULL OR length(pending_body)<=` + strconv.Itoa(limits(profile).bodyBytes) + `) AND (pending_digest IS NULL OR length(pending_digest)=32) AND (pending_at IS NULL OR length(pending_at)<=30)`
+	if profile.Kind == uploadstate.RichProcessesProfile {
+		checks += ` AND profile_kind=1 AND length(policy_digest)=32`
+	}
+	err := q.QueryRowContext(ctx, `SELECT count(*), coalesce(min(`+checks+`),0) FROM upload_record`).Scan(&count, &bounded)
 	if err != nil || count != 1 || bounded != 1 {
 		return uploadstate.Record{}, ErrRecovery
 	}
@@ -54,10 +59,22 @@ func readRecord(ctx context.Context, q queryer, binding uploadstate.Binding) (up
 	var last, body, digest []byte
 	var sequence sql.NullInt64
 	var at sql.NullString
-	err = q.QueryRowContext(ctx, `SELECT `+columns+` FROM upload_record WHERE singleton=1`).Scan(
-		&r.Binding.ServerID, &r.Binding.ConnectorID, &r.Watermark, &ack, &last, &r.Stopped, &sequence, &body, &digest, &at)
+	var kind int
+	var policy []byte
+	targets := []any{&r.Binding.ServerID, &r.Binding.ConnectorID, &r.Watermark, &ack, &last, &r.Stopped, &sequence, &body, &digest, &at}
+	if profile.Kind == uploadstate.RichProcessesProfile {
+		targets = append(targets, &kind, &policy)
+	}
+	err = q.QueryRowContext(ctx, `SELECT `+columnsFor(profile)+` FROM upload_record WHERE singleton=1`).Scan(targets...)
 	if err != nil || (ack != 0 && ack != 1) || len(last) != 32 {
 		return uploadstate.Record{}, ErrRecovery
+	}
+	if profile.Kind == uploadstate.RichProcessesProfile {
+		if kind != int(uploadstate.RichProcessesProfile) || len(policy) != 32 {
+			return uploadstate.Record{}, ErrRecovery
+		}
+		r.Profile.Kind = uploadstate.RichProcessesProfile
+		copy(r.Profile.PolicyDigest[:], policy)
 	}
 	r.HasAck = ack == 1
 	copy(r.LastAck[:], last)
@@ -72,7 +89,7 @@ func readRecord(ctx context.Context, q queryer, binding uploadstate.Binding) (up
 	} else if at.Valid || body != nil || digest != nil {
 		return uploadstate.Record{}, ErrRecovery
 	}
-	if uploadstate.ValidateRecord(r, binding) != nil {
+	if uploadstate.ValidateRecordForProfile(r, binding, profile) != nil {
 		return uploadstate.Record{}, ErrRecovery
 	}
 	return r, nil
@@ -85,10 +102,13 @@ func samePending(a, b *uploadstate.Pending) bool {
 	return a.Sequence == b.Sequence && a.Digest == b.Digest && a.CollectedAt.Equal(b.CollectedAt) && bytes.Equal(a.Body, b.Body)
 }
 func sameRecord(a, b uploadstate.Record) bool {
-	return a.Binding == b.Binding && a.Watermark == b.Watermark && a.HasAck == b.HasAck && a.LastAck == b.LastAck && a.Stopped == b.Stopped && samePending(a.Pending, b.Pending)
+	return a.Binding == b.Binding && a.Profile == b.Profile && a.Watermark == b.Watermark && a.HasAck == b.HasAck && a.LastAck == b.LastAck && a.Stopped == b.Stopped && samePending(a.Pending, b.Pending)
 }
 func validChange(expected, next uploadstate.Record, binding uploadstate.Binding) bool {
-	return uploadstate.ValidateRecord(expected, binding) == nil && uploadstate.ValidateRecord(next, binding) == nil &&
+	return validChangeForProfile(expected, next, binding, uploadstate.ProfileBinding{})
+}
+func validChangeForProfile(expected, next uploadstate.Record, binding uploadstate.Binding, profile uploadstate.ProfileBinding) bool {
+	return uploadstate.ValidateRecordForProfile(expected, binding, profile) == nil && uploadstate.ValidateRecordForProfile(next, binding, profile) == nil &&
 		next.Watermark >= expected.Watermark &&
 		(next.Pending == nil || next.Pending.Sequence > expected.Watermark || samePending(expected.Pending, next.Pending))
 }

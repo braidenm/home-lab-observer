@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -22,6 +23,7 @@ type Ledger struct {
 	mu      sync.Mutex
 	dir     string
 	binding uploadstate.Binding
+	profile uploadstate.ProfileBinding
 	lock    *os.File
 	db      *sql.DB
 	conn    *sql.Conn
@@ -32,24 +34,38 @@ type Ledger struct {
 }
 
 func Provision(ctx context.Context, directory string, binding uploadstate.Binding) (*Ledger, error) {
-	return open(ctx, directory, binding, true)
+	return ProvisionForProfile(ctx, directory, binding, uploadstate.ProfileBinding{})
 }
 func OpenExisting(ctx context.Context, directory string, binding uploadstate.Binding) (*Ledger, error) {
-	return open(ctx, directory, binding, false)
+	return OpenExistingForProfile(ctx, directory, binding, uploadstate.ProfileBinding{})
+}
+
+// ProvisionForProfile creates only new state for a fixed supported profile.
+func ProvisionForProfile(ctx context.Context, directory string, binding uploadstate.Binding, profile uploadstate.ProfileBinding) (*Ledger, error) {
+	return open(ctx, directory, binding, profile, true)
+}
+
+// OpenExistingForProfile never migrates, adopts or creates missing state.
+func OpenExistingForProfile(ctx context.Context, directory string, binding uploadstate.Binding, profile uploadstate.ProfileBinding) (*Ledger, error) {
+	return open(ctx, directory, binding, profile, false)
 }
 
 func dataSource(dir string) string {
+	return dataSourceForProfile(dir, uploadstate.ProfileBinding{})
+}
+
+func dataSourceForProfile(dir string, profile uploadstate.ProfileBinding) string {
 	u := url.URL{Scheme: "file", Path: filepath.Join(dir, databaseName)}
 	q := url.Values{"mode": {"rw"}, "cache": {"private"}, "_txlock": {"immediate"}, "_defensive": {"true"}}
-	for _, pragma := range []string{"busy_timeout(250)", "synchronous(EXTRA)", "cache_size(64)", "cache_spill(OFF)", "temp_store(MEMORY)", "trusted_schema(OFF)", "mmap_size(0)"} {
+	for _, pragma := range []string{"busy_timeout(250)", "synchronous(EXTRA)", "cache_size(" + strconv.Itoa(limits(profile).pages) + ")", "cache_spill(OFF)", "temp_store(MEMORY)", "trusted_schema(OFF)", "mmap_size(0)"} {
 		q.Add("_pragma", pragma)
 	}
 	u.RawQuery = q.Encode()
 	return u.String()
 }
 
-func open(ctx context.Context, directory string, binding uploadstate.Binding, create bool) (_ *Ledger, result error) {
-	if ctx.Err() != nil || uploadstate.ValidateRecord(uploadstate.Record{Binding: binding}, binding) != nil {
+func open(ctx context.Context, directory string, binding uploadstate.Binding, profile uploadstate.ProfileBinding, create bool) (_ *Ledger, result error) {
+	if ctx.Err() != nil || uploadstate.ValidateRecordForProfile(uploadstate.Record{Binding: binding, Profile: profile}, binding, profile) != nil {
 		return nil, ErrRecovery
 	}
 	dir, err := privateDirectory(directory)
@@ -60,7 +76,7 @@ func open(ctx context.Context, directory string, binding uploadstate.Binding, cr
 	if err != nil {
 		return nil, err
 	}
-	l := &Ledger{dir: dir, binding: binding, lock: lock}
+	l := &Ledger{dir: dir, binding: binding, profile: profile, lock: lock}
 	defer func() {
 		if result != nil {
 			l.Close()
@@ -81,13 +97,13 @@ func open(ctx context.Context, directory string, binding uploadstate.Binding, cr
 			return nil, ErrRecovery
 		}
 	}
-	if err := checkFiles(dir, true); err != nil {
+	if err := checkFilesForProfile(dir, true, profile); err != nil {
 		return nil, err
 	}
-	if !create && checkHeader(dir) != nil {
+	if !create && checkHeader(dir, profile) != nil {
 		return nil, ErrRecovery
 	}
-	db, err := sql.Open("sqlite", dataSource(dir))
+	db, err := sql.Open("sqlite", dataSourceForProfile(dir, profile))
 	if err != nil {
 		return nil, ErrRecovery
 	}
@@ -112,12 +128,16 @@ func open(ctx context.Context, directory string, binding uploadstate.Binding, cr
 	}
 	if create {
 		err := l.transaction(bounded, func() error {
-			for _, statement := range []string{schema, `PRAGMA application_id=1213156420`, `PRAGMA user_version=1`} {
+			for _, statement := range []string{schemaFor(profile), `PRAGMA application_id=1213156420`, `PRAGMA user_version=` + strconv.Itoa(limits(profile).version)} {
 				if _, err := l.conn.ExecContext(bounded, statement); err != nil {
 					return ErrRecovery
 				}
 			}
-			if _, err := l.conn.ExecContext(bounded, `INSERT INTO upload_record(singleton,`+columns+`) VALUES(1,?,?,?,?,?,?,?,?,?,?)`, recordArgs(uploadstate.Record{Binding: binding})...); err != nil {
+			parameters := `?,?,?,?,?,?,?,?,?,?`
+			if profile.Kind == uploadstate.RichProcessesProfile {
+				parameters += `,?,?`
+			}
+			if _, err := l.conn.ExecContext(bounded, `INSERT INTO upload_record(singleton,`+columnsFor(profile)+`) VALUES(1,`+parameters+`)`, argsFor(uploadstate.Record{Binding: binding, Profile: profile})...); err != nil {
 				return ErrRecovery
 			}
 			return nil
@@ -129,7 +149,7 @@ func open(ctx context.Context, directory string, binding uploadstate.Binding, cr
 	if err := l.verifySchema(bounded); err != nil {
 		return nil, err
 	}
-	if _, err := readRecord(bounded, l.conn, binding); err != nil {
+	if _, err := readRecord(bounded, l.conn, binding, profile); err != nil {
 		return nil, err
 	}
 	return l, nil
@@ -141,12 +161,13 @@ func (l *Ledger) configure(ctx context.Context) error {
 		return ErrRecovery
 	}
 	var size, count, max int
+	pages := limits(l.profile).pages
 	if l.conn.QueryRowContext(ctx, `PRAGMA page_size`).Scan(&size) != nil || size != 4096 ||
-		l.conn.QueryRowContext(ctx, `PRAGMA page_count`).Scan(&count) != nil || count > 64 ||
-		l.conn.QueryRowContext(ctx, `PRAGMA max_page_count=64`).Scan(&max) != nil || max != 64 {
+		l.conn.QueryRowContext(ctx, `PRAGMA page_count`).Scan(&count) != nil || count > pages ||
+		l.conn.QueryRowContext(ctx, `PRAGMA max_page_count=`+strconv.Itoa(pages)).Scan(&max) != nil || max != pages {
 		return ErrRecovery
 	}
-	for name, want := range map[string]int{"synchronous": 3, "cache_size": 64, "cache_spill": 0, "temp_store": 2, "trusted_schema": 0, "mmap_size": 0, "busy_timeout": 250} {
+	for name, want := range map[string]int{"synchronous": 3, "cache_size": pages, "cache_spill": 0, "temp_store": 2, "trusted_schema": 0, "mmap_size": 0, "busy_timeout": 250} {
 		var got int
 		if l.conn.QueryRowContext(ctx, `PRAGMA `+name).Scan(&got) != nil || got != want {
 			return ErrRecovery
@@ -157,13 +178,13 @@ func (l *Ledger) configure(ctx context.Context) error {
 
 func (l *Ledger) verifySchema(ctx context.Context) error {
 	var app, version int
-	if l.conn.QueryRowContext(ctx, `PRAGMA application_id`).Scan(&app) != nil || app != 1213156420 || l.conn.QueryRowContext(ctx, `PRAGMA user_version`).Scan(&version) != nil || version != 1 {
+	if l.conn.QueryRowContext(ctx, `PRAGMA application_id`).Scan(&app) != nil || app != 1213156420 || l.conn.QueryRowContext(ctx, `PRAGMA user_version`).Scan(&version) != nil || version != limits(l.profile).version {
 		return ErrRecovery
 	}
 	var count int
 	var definition string
 	if l.conn.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_schema`).Scan(&count) != nil || count != 1 ||
-		l.conn.QueryRowContext(ctx, `SELECT sql FROM sqlite_schema WHERE type='table' AND name='upload_record' AND tbl_name='upload_record'`).Scan(&definition) != nil || definition != schema {
+		l.conn.QueryRowContext(ctx, `SELECT sql FROM sqlite_schema WHERE type='table' AND name='upload_record' AND tbl_name='upload_record'`).Scan(&definition) != nil || definition != schemaFor(l.profile) {
 		return ErrRecovery
 	}
 	var integrity string
@@ -183,7 +204,7 @@ func (l *Ledger) Load(ctx context.Context) (uploadstate.Record, error) {
 	}
 	bounded, cancel := context.WithTimeout(ctx, operationTimeout)
 	defer cancel()
-	r, err := readRecord(bounded, l.conn, l.binding)
+	r, err := readRecord(bounded, l.conn, l.binding, l.profile)
 	if err != nil {
 		l.failed = true
 		return uploadstate.Record{}, ErrRecovery
@@ -199,7 +220,7 @@ func (l *Ledger) Commit(ctx context.Context, expected, next uploadstate.Record) 
 	if l.failed || l.conn == nil {
 		return ErrRecovery
 	}
-	if !validChange(expected, next, l.binding) {
+	if !validChangeForProfile(expected, next, l.binding, l.profile) {
 		l.failed = true
 		return ErrRecovery
 	}
@@ -217,11 +238,11 @@ func (l *Ledger) Commit(ctx context.Context, expected, next uploadstate.Record) 
 
 func (l *Ledger) commit(ctx context.Context, expected, next uploadstate.Record) error {
 	return l.transaction(ctx, func() error {
-		actual, err := readRecord(ctx, l.conn, l.binding)
+		actual, err := readRecord(ctx, l.conn, l.binding, l.profile)
 		if err != nil || !sameRecord(actual, expected) {
 			return ErrRecovery
 		}
-		result, err := l.conn.ExecContext(ctx, updateRecord, recordArgs(next)...)
+		result, err := l.conn.ExecContext(ctx, updateFor(l.profile), argsFor(next)...)
 		if err != nil {
 			return ErrRecovery
 		}
