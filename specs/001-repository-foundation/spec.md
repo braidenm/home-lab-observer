@@ -33,6 +33,9 @@ The observer prototype is coupled to a private infrastructure repository and del
 - **R6:** CI uses GitHub-hosted runners for pull requests; no public pull-request workflow references private runner labels or secrets.
 - **R7:** The replacement image will be `ghcr.io/braidenm/home-lab-observer`; the legacy package remains private until it can be removed after a verified migration.
 - **R8:** The executable scope is tracked by a separate spec with testable cross-platform acceptance criteria.
+- **R9:** Keep pinned contract-tool dependencies free of known fixable advisories within their supported dependency
+  ranges. A development-tool patch is not an observer runtime or installed-host upgrade; verify the actual lockfile
+  and contract suite without mixing unrelated major upgrades into feature work.
 
 ## Acceptance criteria
 

@@ -9,3 +9,6 @@
 - [x] Configure repository settings and required checks.
 - [x] Review for private data and stale project names.
 - [x] Open the foundation pull request and merge it through required checks.
+- [x] Refresh only the vulnerable development-tool `fast-uri` transitive patch from 3.1.7 to 3.1.9; clean Node 22.22.3
+  install, all 80 contracts/schema checks, foundation and zero-advisory audit pass (2026-10-29).
+- [ ] Independently review and complete exact-head required CI/governed merge for the maintenance slice.
