@@ -27,7 +27,7 @@ type request struct {
 }
 
 func main() {
-	if len(os.Args) != 5 || os.Args[1] != "93.184.216.34:443" || (os.Args[4] != "normal" && os.Args[4] != "interrupt" && os.Args[4] != "activation" && os.Args[4] != "rich-processes" && !bootstrapMode(os.Args[4])) {
+	if len(os.Args) != 5 || os.Args[1] != "93.184.216.34:443" || (os.Args[4] != "normal" && os.Args[4] != "interrupt" && os.Args[4] != "activation" && os.Args[4] != "rich-processes" && os.Args[4] != "rich-docker" && !bootstrapMode(os.Args[4])) {
 		fmt.Fprintln(os.Stderr, "FIXTURE_ARGS_REFUSED")
 		os.Exit(22)
 	}
@@ -79,6 +79,14 @@ func main() {
 		observed, err := restoreRichReceiver()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "FIXTURE_RICH_ADMISSION_REFUSED")
+			os.Exit(1)
+		}
+		handler = observed.handler()
+	}
+	if os.Args[4] == "rich-docker" {
+		observed, err := restoreDockerReceiver()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "FIXTURE_DOCKER_ADMISSION_REFUSED")
 			os.Exit(1)
 		}
 		handler = observed.handler()
