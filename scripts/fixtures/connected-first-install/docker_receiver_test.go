@@ -65,7 +65,7 @@ func dockerSnapshotWithRows(t *testing.T, unavailable, containersEnabled bool, c
 		rows = append(rows, observation.Process{PID: int32(42 + i), Name: fmt.Sprintf("hlofixture%06d%s", i, strings.Repeat("n", 64)), State: "sleeping", MemoryBytes: 4096})
 	}
 	at := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
-	raw := observation.Snapshot{SchemaVersion: observation.SchemaVersion, ObservedAt: at, Processes: observation.Section[[]observation.Process]{State: observation.Available, Data: &rows, Quality: observation.SectionQuality{Samples: 1, Total: count}}}
+	raw := observation.Snapshot{SchemaVersion: observation.SchemaVersion, ObservedAt: at, Processes: observation.Section[[]observation.Process]{State: observation.Available, Data: &rows, Quality: observation.SectionQuality{Samples: count, Total: count}}}
 	zero, memory := float64(0), uint64(4096)
 	engine := model.Inventory{SchemaVersion: model.SchemaVersion, ObservedAt: &at, SupportState: model.SupportSupported, CollectionState: model.CollectionOK, Freshness: model.FreshnessCurrent, ReturnedCount: 2, TotalCount: 2, Items: []model.Container{
 		{IDAlias: "ctr_0000000000000001", Name: "hlo-fixture-running", Image: "fixture:local", State: model.StateRunning, CPUPercent: &zero, MemoryBytes: &memory, MetricsState: model.MetricsAvailable},
