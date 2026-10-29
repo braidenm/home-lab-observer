@@ -17,6 +17,99 @@ import types
 
 
 class RichFixtureTest(unittest.TestCase):
+    def test_rich_collector_requires_all_ten_installed_and_effective_masks(self):
+        paths = tuple("-/etc/" + root + "/credentials" if name == "credentials" else "-/var/lib/" + root + "/" + name
+                      for root in ("home-lab-observer-connected", "home-lab-observer-connected-rich")
+                      for name in ("credentials", "ledger", "uploader-root", "enrollment", "uploader-status"))
+        installed = "InaccessiblePaths=" + " ".join(paths) + "\n"
+        for bad_installed, effective in ((installed, " ".join(reversed(paths))),
+                                          (installed.replace(paths[0], ""), " ".join(paths)),
+                                          (installed, " ".join(paths[1:])),
+                                          (installed, " ".join(paths + (paths[0],))),
+                                          (installed + installed, " ".join(paths))):
+            with mock.patch.object(Path, "read_text", return_value=bad_installed), mock.patch.object(rich_guest.assert_guest, "unit_properties", return_value={"InaccessiblePaths": effective}):
+                if bad_installed == installed and effective == " ".join(reversed(paths)):
+                    rich_guest.collector_masks()
+                else:
+                    with self.assertRaisesRegex(AssertionError, "^ISOLATION$"):
+                        rich_guest.collector_masks()
+        for missing in paths:
+            for bad_installed, effective in ((installed.replace(missing, ""), " ".join(paths)),
+                                              (installed, " ".join(p for p in paths if p != missing))):
+                with mock.patch.object(Path, "read_text", return_value=bad_installed), mock.patch.object(rich_guest.assert_guest, "unit_properties", return_value={"InaccessiblePaths": effective}):
+                    with self.assertRaisesRegex(AssertionError, "^ISOLATION$"):
+                        rich_guest.collector_masks()
+
+    def test_actual_namespace_probe_refuses_either_readable_private_path(self):
+        config = {"collector_uid": 60101, "shared_gid": 60103}
+        def properties(unit, fields):
+            if fields == ("ActiveState", "MainPID", "InvocationID"):
+                return {"ActiveState": "active", "MainPID": "100", "InvocationID": "a" * 32}
+            if fields == ("MainPID",):
+                return {"MainPID": "100" if unit == rich_guest.UNITS[0] else "101"}
+            return {"PrivateNetwork": "yes", "ProtectProc": "default", "CapabilityBoundingSet": "", "AmbientCapabilities": "", "NoNewPrivileges": "yes"}
+        with mock.patch.object(rich_guest, "collector_masks"), mock.patch.object(rich_guest.assert_guest, "unit_properties", side_effect=properties), mock.patch.object(Path, "iterdir", return_value=iter(())), mock.patch.object(Path, "exists", return_value=False), mock.patch.object(rich_guest.assert_guest, "plain") as plain, mock.patch.object(rich_guest, "run") as run, mock.patch.object(rich_guest, "verify_numeric"):
+            rich_guest.isolation(config)
+        plain.assert_called_once_with(Path("/var/lib/home-lab-observer-connected/uploader-root"), 0o755, 0, 0, True)
+        args = run.call_args.args
+        self.assertEqual(args[:3], ("/usr/bin/python3", "-I", "-c"))
+        self.assertEqual(args[4:], ("100", "60101", "60103"))
+        paths = ("/etc/home-lab-observer-connected-rich/credentials/connector.json", "/var/lib/home-lab-observer-connected/uploader-root")
+        for readable, invalid in ((None, None), *((p, None) for p in paths), *((None, bad) for bad in ("setns", "uid", "gid", "groups", "no-new-privileges"))):
+            events = []
+            def open_path(path, flags):
+                events.append(("open", path))
+                if path == "/proc/100/ns/mnt":
+                    return 17
+                if path == readable:
+                    return 123
+                raise PermissionError()
+            libc = types.SimpleNamespace(setns=lambda fd, kind: events.append(("setns", fd, kind)) or int(invalid == "setns"),
+                                         prctl=lambda op, *unused: events.append(("prctl", op)) or (int(invalid != "no-new-privileges") if op == 39 else 0))
+            with mock.patch.object(rich_guest.os, "open", side_effect=open_path) as opened, mock.patch.object(rich_guest.os, "close", side_effect=lambda fd: events.append(("close", fd))), mock.patch.object(rich_guest.ctypes, "CDLL", return_value=libc), mock.patch.object(rich_guest.sys, "argv", ["-c", *args[4:]]), mock.patch.object(rich_guest.os, "setgroups", side_effect=lambda groups: events.append(("groups", groups))), mock.patch.object(rich_guest.os, "setresgid", side_effect=lambda *ids: events.append(("gid", *ids))), mock.patch.object(rich_guest.os, "setresuid", side_effect=lambda *ids: events.append(("uid", *ids))), mock.patch.object(rich_guest.os, "getresuid", return_value=((60102 if invalid == "uid" else 60101),) * 3), mock.patch.object(rich_guest.os, "getresgid", return_value=((60104 if invalid == "gid" else 60103),) * 3), mock.patch.object(rich_guest.os, "getgroups", return_value=[1] if invalid == "groups" else []):
+                if readable is None and invalid is None:
+                    exec(args[3], {})
+                    self.assertEqual([c.args[0] for c in opened.call_args_list], ["/proc/100/ns/mnt", *paths])
+                else:
+                    with self.assertRaises(SystemExit) as refused:
+                        exec(args[3], {})
+                    self.assertEqual(refused.exception.code, 1)
+            if invalid is not None:
+                self.assertEqual([c.args[0] for c in opened.call_args_list], ["/proc/100/ns/mnt"])
+                continue
+            self.assertLess(events.index(("setns", 17, 0x20000)), events.index(("close", 17)))
+            self.assertLess(events.index(("close", 17)), events.index(("groups", [])))
+            self.assertLess(events.index(("groups", [])), events.index(("gid", 60103, 60103, 60103)))
+            self.assertLess(events.index(("gid", 60103, 60103, 60103)), events.index(("uid", 60101, 60101, 60101)))
+            self.assertLess(events.index(("uid", 60101, 60101, 60101)), events.index(("open", paths[0])))
+
+    def test_namespace_probe_requires_the_same_active_collector_invocation(self):
+        for changed in ({"MainPID": "200"}, {"InvocationID": "b" * 32}, {"ActiveState": "inactive"}):
+            probed = False
+            def properties(unit, fields):
+                if fields == ("ActiveState", "MainPID", "InvocationID"):
+                    state = {"ActiveState": "active", "MainPID": "100", "InvocationID": "a" * 32}
+                    return {**state, **changed} if probed else state
+                if fields == ("MainPID",):
+                    return {"MainPID": "100" if unit == rich_guest.UNITS[0] else "101"}
+                return {"PrivateNetwork": "yes", "ProtectProc": "default", "CapabilityBoundingSet": "", "AmbientCapabilities": "", "NoNewPrivileges": "yes"}
+            def probe(*args):
+                nonlocal probed
+                probed = True
+            with mock.patch.object(rich_guest, "collector_masks"), mock.patch.object(rich_guest.assert_guest, "unit_properties", side_effect=properties), mock.patch.object(Path, "iterdir", return_value=iter(())), mock.patch.object(Path, "exists", return_value=False), mock.patch.object(rich_guest.assert_guest, "plain"), mock.patch.object(rich_guest, "run", side_effect=probe), mock.patch.object(rich_guest, "verify_numeric"):
+                with self.assertRaisesRegex(AssertionError, "^ISOLATION$"):
+                    rich_guest.isolation({"collector_uid": 60101, "shared_gid": 60103})
+
+    def test_rich_start_failure_is_closed_and_preserves_known_phase(self):
+        for reason, expected in (("START_RECOVERY_COLLECTOR_READY", "START_RECOVERY_COLLECTOR_READY"),
+                                  ("START_COMMAND_UPLOADER_RESPONSE", "START_COMMAND_UPLOADER_RESPONSE"),
+                                  ("STOP_COMMAND_COLLECTOR_READY", "UNKNOWN"),
+                                  ("private credential", "UNKNOWN")):
+            output = io.StringIO()
+            with mock.patch.object(Path, "open", side_effect=OSError("no fixture serial")), mock.patch.object(rich_guest.sys, "argv", ["rich_guest.py", "first"]), mock.patch.object(rich_guest, "exercise", side_effect=rich_guest.activation_guest.Refused(reason)), contextlib.redirect_stderr(output):
+                self.assertEqual(rich_guest.main(), 1)
+            self.assertEqual(output.getvalue(), "HLO_VM_FAIL_RICH_" + expected + "\n")
+
     def test_rich_stopped_requires_exact_loaded_fragment_and_no_transient(self):
         def state(unit, fields):
             if unit.endswith("-enrollment.service"):
@@ -133,12 +226,13 @@ class RichFixtureTest(unittest.TestCase):
             body = b"x" * 16385
             digest = hashlib.sha256(body).digest()
             with sqlite3.connect(root / "ledger/upload.sqlite") as connection:
-                connection.execute("CREATE TABLE upload_record(singleton,pending_sequence,pending_body,pending_digest,watermark,profile_kind,policy_digest)")
-                connection.execute("INSERT INTO upload_record VALUES(1,7,?,?,6,1,?)", (body, digest, b"p" * 32))
+                connection.execute("CREATE TABLE upload_record(singleton,pending_sequence,pending_body,pending_digest,watermark,profile_kind,policy_digest,pending_at)")
+                connection.execute("INSERT INTO upload_record VALUES(1,7,?,?,6,1,?,?)", (body, digest, b"p" * 32, "2026-10-29T23:59:30Z"))
             with mock.patch.object(rich_guest, "STATE", root):
                 result = rich_guest.pending()
                 self.assertEqual(result["sequence"], 7)
                 self.assertEqual(result["size"], 16385)
+                self.assertEqual(result["collected_at"], "2026-10-29T23:59:30Z")
                 self.assertEqual(result["digest"], digest.hex())
                 self.assertNotIn(body.decode(), json.dumps(result))
             with sqlite3.connect(root / "ledger/upload.sqlite") as connection:
@@ -148,7 +242,7 @@ class RichFixtureTest(unittest.TestCase):
 
     def test_failure_output_is_closed(self):
         output = io.StringIO()
-        with mock.patch.object(rich_guest.sys, "argv", ["rich_guest.py", "first"]), mock.patch.object(rich_guest, "exercise", side_effect=OSError("private credential")), contextlib.redirect_stderr(output):
+        with mock.patch.object(Path, "open", side_effect=OSError("no fixture serial")), mock.patch.object(rich_guest.sys, "argv", ["rich_guest.py", "first"]), mock.patch.object(rich_guest, "exercise", side_effect=OSError("private credential")), contextlib.redirect_stderr(output):
             self.assertEqual(rich_guest.main(), 1)
         self.assertEqual(output.getvalue(), "HLO_VM_FAIL_RICH_UNKNOWN\n")
 
