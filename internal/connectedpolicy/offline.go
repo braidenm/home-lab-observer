@@ -28,6 +28,10 @@ var offlineFields = []string{
 }
 
 func offlineExpected(e OfflineExpectation) (map[string]string, error) {
+	return offlineExpectedForProfile(e, false)
+}
+
+func offlineExpectedForProfile(e OfflineExpectation, rich bool) (map[string]string, error) {
 	for _, id := range []uint32{e.UploaderUID, e.UploaderGID, e.SharedGID} {
 		if id == 0 || id == ^uint32(0) {
 			return nil, ErrUnsafe
@@ -42,7 +46,7 @@ func offlineExpected(e OfflineExpectation) (map[string]string, error) {
 	} else if e.Mode != "validate-enrollment" {
 		return nil, ErrUnsafe
 	}
-	return map[string]string{
+	want := map[string]string{
 		"Id": enrollmentUnit, "LoadState": "loaded", "NeedDaemonReload": "no", "DropInPaths": "", "Transient": "yes",
 		"User": fmt.Sprint(e.UploaderUID), "Group": fmt.Sprint(e.UploaderGID), "SupplementaryGroups": fmt.Sprint(e.SharedGID),
 		"RootDirectory": "/var/lib/home-lab-observer-connected/uploader-root", "RootImage": "",
@@ -53,14 +57,29 @@ func offlineExpected(e OfflineExpectation) (map[string]string, error) {
 		"SystemCallArchitectures": "native", "SystemCallErrorNumber": "1", "NoExecPaths": "/", "ExecPaths": "/bin/observer-connected-uploader",
 		"LimitCORE": "0", "RestrictNamespaces": "yes", "RestrictRealtime": "yes", "RestrictSUIDSGID": "yes", "LockPersonality": "yes",
 		"MemoryPressureWatch": "skip",
-	}, nil
+	}
+	if rich {
+		if e.Mode == "validate-existing-ledger" {
+			return nil, ErrUnsafe
+		}
+		want["Id"] = richEnrollmentUnit
+		want["RootDirectory"] = "/var/lib/home-lab-observer-connected-rich/uploader-root"
+		want["BindPaths"] = "/var/lib/home-lab-observer-connected-rich/" + state + ":/state/" + state + ":rbind"
+		want["BindReadOnlyPaths"] = "/opt/home-lab-observer-connected-rich/releases/" + e.ArtifactSHA256 + "/observer-connected-rich-uploader:/bin/observer-connected-rich-uploader:rbind"
+		want["ExecPaths"] = "/bin/observer-connected-rich-uploader"
+	}
+	return want, nil
 }
 
 // validateOffline checks normalized manager properties, not template text. The
 // manager expands syscall groups, so require the individual native denials that
 // establish network/IPC isolation; additional denied calls are safe to accept.
 func validateOffline(data []byte, e OfflineExpectation) error {
-	expected, err := offlineExpected(e)
+	return validateOfflineForProfile(data, e, false)
+}
+
+func validateOfflineForProfile(data []byte, e OfflineExpectation, rich bool) error {
+	expected, err := offlineExpectedForProfile(e, rich)
 	if err != nil || len(data) == 0 || len(data) > maxOutput || strings.ContainsAny(string(data), "\x00\r") {
 		return ErrUnsafe
 	}

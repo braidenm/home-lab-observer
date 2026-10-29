@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/braidenm/home-lab-observer/internal/combinedprojection"
 	"github.com/braidenm/home-lab-observer/internal/remoteprojection"
 	"github.com/braidenm/home-lab-observer/internal/uploadstate"
 )
@@ -52,17 +53,24 @@ type Transport struct {
 	origin      url.URL
 	credentials CredentialProvider
 	client      *http.Client
+	rich        bool
 }
 
 // New constructs the production transport. Trust roots and all HTTP behavior
 // are deliberately not caller-configurable.
 func New(origin string, credentials CredentialProvider) (*Transport, error) {
-	return newTransport(origin, credentials, nil)
+	return newTransport(origin, credentials, nil, false)
+}
+
+// NewRichProcesses is the fixed process-only combined transport. It does not
+// infer consent from a valid combined body and cannot enable container data.
+func NewRichProcesses(origin string, credentials CredentialProvider) (*Transport, error) {
+	return newTransport(origin, credentials, nil, true)
 }
 
 // newTransport differs from New only by accepting owned test-server roots.
 // It is package-private so production callers cannot weaken platform trust.
-func newTransport(origin string, credentials CredentialProvider, roots *x509.CertPool) (*Transport, error) {
+func newTransport(origin string, credentials CredentialProvider, roots *x509.CertPool, rich bool) (*Transport, error) {
 	parsed, ok := parseOrigin(origin)
 	if !ok || credentials == nil {
 		return nil, ErrConfig
@@ -71,6 +79,7 @@ func newTransport(origin string, credentials CredentialProvider, roots *x509.Cer
 		origin:      *parsed,
 		credentials: credentials,
 		client:      newHTTPClient(roots),
+		rich:        rich,
 	}, nil
 }
 
@@ -104,11 +113,12 @@ func newHTTPClient(roots *x509.CertPool) *http.Client {
 }
 
 func (t *Transport) Send(ctx context.Context, request uploadstate.Request) (uploadstate.Response, error) {
-	if ctx == nil || !validRequestEnvelope(request) {
+	if ctx == nil || !validRequestEnvelope(request, t.rich) {
 		return uploadstate.Response{}, ErrRequest
 	}
 	request.Body = bytes.Clone(request.Body)
-	if remoteprojection.ValidateUpload(request.Body, request.Binding.ServerID) != nil {
+	if (!t.rich && remoteprojection.ValidateUpload(request.Body, request.Binding.ServerID) != nil) ||
+		(t.rich && !validRichProcessesBody(request.Body, request.Binding.ServerID)) {
 		return uploadstate.Response{}, ErrRequest
 	}
 	requestContext, cancel := context.WithTimeout(ctx, SendTimeout)
@@ -159,10 +169,29 @@ func (t *Transport) CloseIdleConnections() {
 	}
 }
 
-func validRequestEnvelope(request uploadstate.Request) bool {
+func validRequestEnvelope(request uploadstate.Request, rich bool) bool {
+	max := remoteprojection.MaxBytes
+	if rich {
+		max = combinedprojection.MaxBytes
+	}
 	return serverPattern.MatchString(request.Binding.ServerID) &&
 		connectorPattern.MatchString(request.Binding.ConnectorID) &&
-		request.Sequence > 0 && len(request.Body) > 0 && len(request.Body) <= remoteprojection.MaxBytes
+		request.Sequence > 0 && len(request.Body) > 0 && len(request.Body) <= max
+}
+
+func validRichProcessesBody(body []byte, serverID string) bool {
+	if combinedprojection.Validate(body, serverID) != nil {
+		return false
+	}
+	var claims struct {
+		Workloads struct {
+			Policy struct {
+				Processes  bool `json:"processes_enabled"`
+				Containers bool `json:"containers_enabled"`
+			} `json:"policy"`
+		} `json:"workload_inventory"`
+	}
+	return json.Unmarshal(body, &claims) == nil && claims.Workloads.Policy.Processes && !claims.Workloads.Policy.Containers
 }
 
 func statusOutcome(status int) uploadstate.Outcome {

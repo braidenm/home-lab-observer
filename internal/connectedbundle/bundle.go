@@ -19,6 +19,7 @@ import (
 
 	"github.com/braidenm/home-lab-observer/internal/connectedcompat"
 	"github.com/braidenm/home-lab-observer/internal/connectedidentity"
+	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
 	"github.com/braidenm/home-lab-observer/internal/connectedunits"
 	"github.com/braidenm/home-lab-observer/internal/ownerfs"
 )
@@ -37,6 +38,20 @@ var binaries = map[string]string{
 	"observer-connected-uploader":  "uploader",
 	"observer-connected-install":   "install",
 }
+var richProcessesBinaries = map[string]string{
+	"observer-connected-rich-collector": "rich-collector",
+	"observer-connected-rich-uploader":  "rich-uploader",
+	"observer-connected-rich-install":   "rich-install",
+}
+
+type bundleSpec struct {
+	profile, contract, installRole string
+	binaries                       map[string]string
+	resources                      func() map[string][]byte
+}
+
+var numericBundleSpec = bundleSpec{Profile, connectedcompat.Digest(), "install", binaries, connectedunits.Resources}
+var richProcessesBundleSpec = bundleSpec{"ubuntu24.04-systemd255-amd64-rich-processes-canary", connectedprofile.RichProcessesDefinitionSHA256, "rich-install", richProcessesBinaries, connectedunits.RichProcessesResources}
 
 type File struct {
 	Name   string `json:"name"`
@@ -56,11 +71,19 @@ type Manifest struct {
 }
 
 func Names() []string {
-	names := make([]string, 0, 7)
-	for name := range binaries {
+	return names(numericBundleSpec)
+}
+
+func RichProcessesNames() []string {
+	return names(richProcessesBundleSpec)
+}
+
+func names(spec bundleSpec) []string {
+	names := make([]string, 0, len(spec.binaries)+len(spec.resources()))
+	for name := range spec.binaries {
 		names = append(names, name)
 	}
-	for name := range connectedunits.Resources() {
+	for name := range spec.resources() {
 		names = append(names, name)
 	}
 	sort.Strings(names)
@@ -71,21 +94,30 @@ func (m Manifest) Validate() error {
 	if m.Schema == VersionV2 && !connectedcompat.MatchesResources(connectedunits.Resources()) {
 		return ErrInvalid
 	}
-	identity := connectedidentity.Identity{Role: "install", Version: m.Version, Commit: m.Commit, OS: m.OS, Arch: m.Arch, ContractSHA256: m.ContractSHA256}
-	if (m.Schema != Version && m.Schema != VersionV2) || (m.Schema == Version && m.ContractSHA256 != "") || (m.Schema == VersionV2 && !connectedcompat.Known(m.ContractSHA256)) || m.Profile != Profile || identity.Validate() != nil {
+	return validateManifest(m, numericBundleSpec, true)
+}
+
+func (m Manifest) ValidateRichProcesses() error {
+	return validateManifest(m, richProcessesBundleSpec, false)
+}
+
+func validateManifest(m Manifest, spec bundleSpec, allowV1 bool) error {
+	schemaOK := m.Schema == VersionV2 || allowV1 && m.Schema == Version
+	identity := connectedidentity.Identity{Role: spec.installRole, Version: m.Version, Commit: m.Commit, OS: m.OS, Arch: m.Arch, ContractSHA256: m.ContractSHA256}
+	if !schemaOK || (m.Schema == Version && m.ContractSHA256 != "") || (m.Schema == VersionV2 && m.ContractSHA256 != spec.contract) || m.Profile != spec.profile || identity.Validate() != nil {
 		return ErrInvalid
 	}
-	names := Names()
-	if len(m.Files) != len(names) {
+	wantNames := names(spec)
+	if len(m.Files) != len(wantNames) {
 		return ErrInvalid
 	}
 	for i, f := range m.Files {
 		limit, mode := int64(MaxResourceBytes), uint32(0o644)
-		if _, ok := binaries[f.Name]; ok {
+		if _, ok := spec.binaries[f.Name]; ok {
 			limit = connectedidentity.MaxFileBytes
 			mode = 0o755
 		}
-		if f.Name != names[i] || f.Size <= 0 || f.Size > limit || f.Mode != mode || !digestPattern.MatchString(f.SHA256) {
+		if f.Name != wantNames[i] || f.Size <= 0 || f.Size > limit || f.Mode != mode || !digestPattern.MatchString(f.SHA256) {
 			return ErrInvalid
 		}
 	}
@@ -98,8 +130,20 @@ func (m Manifest) HasKnownContract() bool {
 	return m.Validate() == nil && m.Schema == VersionV2 && connectedcompat.Known(m.ContractSHA256)
 }
 
+func (m Manifest) HasKnownRichProcessesContract() bool {
+	return m.ValidateRichProcesses() == nil && m.Schema == VersionV2 && m.ContractSHA256 == connectedprofile.RichProcessesDefinitionSHA256
+}
+
 func Encode(m Manifest) ([]byte, error) {
-	if m.Validate() != nil {
+	return encode(m, m.Validate)
+}
+
+func EncodeRichProcesses(m Manifest) ([]byte, error) {
+	return encode(m, m.ValidateRichProcesses)
+}
+
+func encode(m Manifest, validate func() error) ([]byte, error) {
+	if validate() != nil {
 		return nil, ErrInvalid
 	}
 	b, err := json.Marshal(m)
@@ -110,11 +154,19 @@ func Encode(m Manifest) ([]byte, error) {
 }
 
 func Decode(data []byte) (Manifest, error) {
+	return decode(data, Encode)
+}
+
+func DecodeRichProcesses(data []byte) (Manifest, error) {
+	return decode(data, EncodeRichProcesses)
+}
+
+func decode(data []byte, encode func(Manifest) ([]byte, error)) (Manifest, error) {
 	var m Manifest
 	if len(data) == 0 || len(data) > MaxManifestBytes || json.Unmarshal(data, &m) != nil {
 		return Manifest{}, ErrInvalid
 	}
-	canonical, err := Encode(m)
+	canonical, err := encode(m)
 	if err != nil || !bytes.Equal(data, canonical) {
 		return Manifest{}, ErrInvalid
 	}
@@ -214,7 +266,7 @@ func inspectBinary(f *os.File, size int64, want connectedidentity.Identity) erro
 	return nil
 }
 
-func inspectFile(root *os.Root, directory string, entry File, m Manifest) error {
+func inspectFile(root *os.Root, directory string, entry File, m Manifest, spec bundleSpec) error {
 	f, err := openFile(root, directory, entry.Name, entry.Size)
 	if err != nil {
 		return ErrInvalid
@@ -237,13 +289,13 @@ func inspectFile(root *os.Root, directory string, entry File, m Manifest) error 
 	if err != nil || n != entry.Size || hex.EncodeToString(h.Sum(nil)) != entry.SHA256 {
 		return ErrInvalid
 	}
-	if role, ok := binaries[entry.Name]; ok {
+	if role, ok := spec.binaries[entry.Name]; ok {
 		if inspectBinary(f, entry.Size, connectedidentity.Identity{Role: role, Version: m.Version, Commit: m.Commit, OS: m.OS, Arch: m.Arch, ContractSHA256: m.ContractSHA256}) != nil {
 			return ErrInvalid
 		}
 	} else {
 		data, err := io.ReadAll(io.NewSectionReader(f, 0, entry.Size))
-		if err != nil || !bytes.Equal(data, connectedunits.Resources()[entry.Name]) {
+		if err != nil || !bytes.Equal(data, spec.resources()[entry.Name]) {
 			return ErrInvalid
 		}
 	}
@@ -258,6 +310,14 @@ func inspectFile(root *os.Root, directory string, entry File, m Manifest) error 
 // canonical-manifest digest. It is not a long-lived capability: a privileged
 // installer must verify its own freshly staged final copy before publishing it.
 func VerifyDirectory(directory, expectedManifestSHA256 string) (Manifest, error) {
+	return verifyDirectory(directory, expectedManifestSHA256, numericBundleSpec, Decode)
+}
+
+func VerifyRichProcessesDirectory(directory, expectedManifestSHA256 string) (Manifest, error) {
+	return verifyDirectory(directory, expectedManifestSHA256, richProcessesBundleSpec, DecodeRichProcesses)
+}
+
+func verifyDirectory(directory, expectedManifestSHA256 string, spec bundleSpec, decode func([]byte) (Manifest, error)) (Manifest, error) {
 	if !digestPattern.MatchString(expectedManifestSHA256) {
 		return Manifest{}, ErrInvalid
 	}
@@ -266,7 +326,8 @@ func VerifyDirectory(directory, expectedManifestSHA256 string) (Manifest, error)
 		return Manifest{}, err
 	}
 	defer r.Close()
-	if exactEntries(r, append(Names(), ManifestName)) != nil {
+	wantNames := names(spec)
+	if exactEntries(r, append(wantNames, ManifestName)) != nil {
 		return Manifest{}, ErrInvalid
 	}
 	f, err := openFile(r, directory, ManifestName, MaxManifestBytes)
@@ -284,16 +345,16 @@ func VerifyDirectory(directory, expectedManifestSHA256 string) (Manifest, error)
 	if readErr != nil || closeErr != nil || digest(data) != expectedManifestSHA256 {
 		return Manifest{}, ErrInvalid
 	}
-	m, err := Decode(data)
+	m, err := decode(data)
 	if err != nil {
 		return Manifest{}, err
 	}
 	for _, entry := range m.Files {
-		if inspectFile(r, directory, entry, m) != nil {
+		if inspectFile(r, directory, entry, m, spec) != nil {
 			return Manifest{}, ErrInvalid
 		}
 	}
-	if exactEntries(r, append(Names(), ManifestName)) != nil {
+	if exactEntries(r, append(wantNames, ManifestName)) != nil {
 		return Manifest{}, ErrInvalid
 	}
 	return m, nil
@@ -305,9 +366,17 @@ func CreateManifest(directory, version, commit string) ([]byte, error) {
 	return createManifest(directory, version, commit, VersionV2, connectedcompat.Digest())
 }
 
+func CreateRichProcessesManifest(directory, version, commit string) ([]byte, error) {
+	return createManifestForSpec(directory, version, commit, VersionV2, richProcessesBundleSpec.contract, richProcessesBundleSpec, EncodeRichProcesses)
+}
+
 func createManifest(directory, version, commit, schema, contract string) ([]byte, error) {
-	m := Manifest{Schema: schema, Version: version, Commit: commit, OS: "linux", Arch: "amd64", Profile: Profile, ContractSHA256: contract}
-	if (connectedidentity.Identity{Role: "install", Version: version, Commit: commit, OS: "linux", Arch: "amd64"}).Validate() != nil {
+	return createManifestForSpec(directory, version, commit, schema, contract, numericBundleSpec, Encode)
+}
+
+func createManifestForSpec(directory, version, commit, schema, contract string, spec bundleSpec, encode func(Manifest) ([]byte, error)) ([]byte, error) {
+	m := Manifest{Schema: schema, Version: version, Commit: commit, OS: "linux", Arch: "amd64", Profile: spec.profile, ContractSHA256: contract}
+	if (connectedidentity.Identity{Role: spec.installRole, Version: version, Commit: commit, OS: "linux", Arch: "amd64", ContractSHA256: contract}).Validate() != nil {
 		return nil, ErrInvalid
 	}
 	r, err := openRoot(directory)
@@ -315,12 +384,13 @@ func createManifest(directory, version, commit, schema, contract string) ([]byte
 		return nil, err
 	}
 	defer r.Close()
-	if exactEntries(r, Names()) != nil {
+	wantNames := names(spec)
+	if exactEntries(r, wantNames) != nil {
 		return nil, ErrInvalid
 	}
-	for _, name := range Names() {
+	for _, name := range wantNames {
 		limit, mode := int64(MaxResourceBytes), uint32(0o644)
-		if _, ok := binaries[name]; ok {
+		if _, ok := spec.binaries[name]; ok {
 			limit = connectedidentity.MaxFileBytes
 			mode = 0o755
 		}
@@ -337,9 +407,9 @@ func createManifest(directory, version, commit, schema, contract string) ([]byte
 		m.Files = append(m.Files, File{Name: name, SHA256: hex.EncodeToString(h.Sum(nil)), Size: n, Mode: mode})
 	}
 	for _, entry := range m.Files {
-		if inspectFile(r, directory, entry, m) != nil {
+		if inspectFile(r, directory, entry, m, spec) != nil {
 			return nil, ErrInvalid
 		}
 	}
-	return Encode(m)
+	return encode(m)
 }

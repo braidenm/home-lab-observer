@@ -89,6 +89,9 @@ system views through explicit local opt-in and a separately reviewed installed p
 does not silently widen the numeric beta, and keeps Docker actions separately permissioned under Spec 011.
 The pure [combined-envelope contract](specs/013-connected-inventory/delivery-envelope.md) binds host metrics and
 workloads to one upload cycle; it does not yet change the installed beta or receiver admission.
+The [process-only package proof](specs/013-connected-inventory/installable-process-proof.md) connects that contract to
+separate collector/uploader identities, policy-bound durable retries and an explicit installer. It is a disposable-VM
+acceptance slice, not a published upgrade or permission to collect processes on an existing numeric installation.
 
 ### Native log metadata and history
 

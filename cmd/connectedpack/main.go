@@ -14,9 +14,35 @@ import (
 	"github.com/braidenm/home-lab-observer/internal/connectedbundle"
 	"github.com/braidenm/home-lab-observer/internal/connectedcompat"
 	"github.com/braidenm/home-lab-observer/internal/connectedidentity"
+	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
 	"github.com/braidenm/home-lab-observer/internal/connectedunits"
 	"github.com/braidenm/home-lab-observer/internal/ownerfs"
 )
+
+type packSpec struct {
+	contract, installRole, directoryPrefix, installerName string
+	binaries                                              []string
+	resources                                             func() map[string][]byte
+	createManifest                                        func(string, string, string) ([]byte, error)
+	writeArchive                                          func(io.Writer, string, string) error
+	render                                                func([]byte, string, int64) ([]byte, error)
+}
+
+var numericPackSpec = packSpec{
+	contract: connectedcompat.Digest(), installRole: "install",
+	directoryPrefix: "home-lab-observer-connected_", installerName: "install-connected-linux.sh",
+	binaries:  []string{"observer-connected-collector", "observer-connected-uploader", "observer-connected-install"},
+	resources: connectedunits.Resources, createManifest: connectedbundle.CreateManifest,
+	writeArchive: connectedbundle.WriteArchive, render: connectedbootstrap.Render,
+}
+
+var richProcessesPackSpec = packSpec{
+	contract: connectedprofile.RichProcessesDefinitionSHA256, installRole: "rich-install",
+	directoryPrefix: "home-lab-observer-connected-rich-processes_", installerName: "install-connected-rich-processes-linux.sh",
+	binaries:  []string{"observer-connected-rich-collector", "observer-connected-rich-uploader", "observer-connected-rich-install"},
+	resources: connectedunits.RichProcessesResources, createManifest: connectedbundle.CreateRichProcessesManifest,
+	writeArchive: connectedbundle.WriteRichProcessesArchive, render: connectedbootstrap.RenderRichProcesses,
+}
 
 func main() {
 	if run(os.Args[1:]) != nil {
@@ -29,6 +55,7 @@ func run(args []string) error {
 	f := flag.NewFlagSet("connectedpack", flag.ContinueOnError)
 	f.SetOutput(io.Discard)
 	mode := f.String("mode", "", "identity or pack")
+	profile := f.String("profile", "numeric", "numeric or rich-processes")
 	role := f.String("role", "", "connected role")
 	version := f.String("version", "", "prerelease version")
 	commit := f.String("commit", "", "source commit")
@@ -37,7 +64,16 @@ func run(args []string) error {
 	if f.Parse(args) != nil || f.NArg() != 0 {
 		return connectedbundle.ErrInvalid
 	}
-	i := connectedidentity.Identity{Role: *role, Version: *version, Commit: *commit, OS: "linux", Arch: "amd64", ContractSHA256: connectedcompat.Digest()}
+	var spec packSpec
+	switch *profile {
+	case "numeric":
+		spec = numericPackSpec
+	case "rich-processes":
+		spec = richProcessesPackSpec
+	default:
+		return connectedbundle.ErrInvalid
+	}
+	i := connectedidentity.Identity{Role: *role, Version: *version, Commit: *commit, OS: "linux", Arch: "amd64", ContractSHA256: spec.contract}
 	if *mode == "identity" {
 		if *binaries != "" || *output != "" {
 			return connectedbundle.ErrInvalid
@@ -52,14 +88,14 @@ func run(args []string) error {
 	if *mode != "pack" || *role != "" || *binaries == "" || *output == "" {
 		return connectedbundle.ErrInvalid
 	}
-	i.Role = "install"
+	i.Role = spec.installRole
 	if i.Validate() != nil {
 		return connectedbundle.ErrInvalid
 	}
 	if err := os.Mkdir(*output, 0o755); err != nil {
 		return connectedbundle.ErrInvalid
 	}
-	directory := filepath.Join(*output, "home-lab-observer-connected_"+*version+"_linux_amd64")
+	directory := filepath.Join(*output, spec.directoryPrefix+*version+"_linux_amd64")
 	if os.Mkdir(directory, 0o755) != nil {
 		return connectedbundle.ErrInvalid
 	}
@@ -77,10 +113,10 @@ func run(args []string) error {
 	}
 	entries, readErr := listing.ReadDir(4)
 	closeErr := listing.Close()
-	if (readErr != nil && readErr != io.EOF) || closeErr != nil || len(entries) != 3 {
+	if (readErr != nil && readErr != io.EOF) || closeErr != nil || len(entries) != len(spec.binaries) {
 		return connectedbundle.ErrInvalid
 	}
-	for _, name := range []string{"observer-connected-collector", "observer-connected-uploader", "observer-connected-install"} {
+	for _, name := range spec.binaries {
 		info, err := ownerfs.ValidateRegular(filepath.Join(*binaries, name), connectedidentity.MaxFileBytes)
 		if err != nil || info.Size() <= 0 {
 			return connectedbundle.ErrInvalid
@@ -103,12 +139,12 @@ func run(args []string) error {
 			return connectedbundle.ErrInvalid
 		}
 	}
-	for name, data := range connectedunits.Resources() {
+	for name, data := range spec.resources() {
 		if writeNew(filepath.Join(directory, name), data) != nil {
 			return connectedbundle.ErrInvalid
 		}
 	}
-	manifest, err := connectedbundle.CreateManifest(directory, *version, *commit)
+	manifest, err := spec.createManifest(directory, *version, *commit)
 	if err != nil {
 		return err
 	}
@@ -123,7 +159,7 @@ func run(args []string) error {
 		return connectedbundle.ErrInvalid
 	}
 	hash := sha256.New()
-	packErr := connectedbundle.WriteArchive(io.MultiWriter(archive, hash), directory, manifestSHA)
+	packErr := spec.writeArchive(io.MultiWriter(archive, hash), directory, manifestSHA)
 	syncErr := archive.Sync()
 	closeErr = archive.Close()
 	if packErr != nil || syncErr != nil || closeErr != nil {
@@ -137,12 +173,12 @@ func run(args []string) error {
 		return connectedbundle.ErrInvalid
 	}
 	archiveSHA := hex.EncodeToString(hash.Sum(nil))
-	installer, err := connectedbootstrap.Render(manifest, archiveSHA, archiveInfo.Size())
-	if err != nil || writeNew(filepath.Join(*output, "install-connected-linux.sh"), installer) != nil {
+	installer, err := spec.render(manifest, archiveSHA, archiveInfo.Size())
+	if err != nil || writeNew(filepath.Join(*output, spec.installerName), installer) != nil {
 		return connectedbundle.ErrInvalid
 	}
 	installerHash := sha256.Sum256(installer)
-	checksums := archiveSHA + "  " + archiveName + "\n" + manifestSHA + "  " + connectedbundle.ManifestName + "\n" + hex.EncodeToString(installerHash[:]) + "  install-connected-linux.sh\n"
+	checksums := archiveSHA + "  " + archiveName + "\n" + manifestSHA + "  " + connectedbundle.ManifestName + "\n" + hex.EncodeToString(installerHash[:]) + "  " + spec.installerName + "\n"
 	if writeNew(filepath.Join(*output, "SHA256SUMS"), []byte(checksums)) != nil {
 		return connectedbundle.ErrInvalid
 	}

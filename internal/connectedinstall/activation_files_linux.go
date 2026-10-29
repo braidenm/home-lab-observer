@@ -5,6 +5,7 @@ package connectedinstall
 import (
 	"io"
 	"os"
+	"path/filepath"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -19,6 +20,14 @@ const activationPath = activationParent + "/activation"
 // pinActivation operates only with both workers stopped and the installation
 // lease held. Unknown files and interrupted staging require explicit recovery.
 func pinActivation(gid uint32) (*os.File, error) {
+	return pinActivationForPair(gid, numericPair)
+}
+
+func pinActivationForPair(gid uint32, pair workerPair) (*os.File, error) {
+	activationParent, activationPath, ok := pair.activationPaths()
+	if !ok {
+		return nil, ErrUnsafe
+	}
 	ancestor, err := rootDirectory("/run")
 	if err != nil {
 		return nil, ErrUnsafe
@@ -30,7 +39,7 @@ func pinActivation(gid uint32) (*os.File, error) {
 		mode  os.FileMode
 	}{{activationParent, 0, 0700}, {activationPath, gid, 0750}} {
 		if _, err := os.Lstat(item.path); os.IsNotExist(err) {
-			if createActivationDirectory(item.path, item.group, item.mode) != nil {
+			if createActivationDirectoryForPair(item.path, item.group, item.mode, pair) != nil {
 				return nil, ErrRecovery
 			}
 		} else if err != nil {
@@ -88,6 +97,14 @@ func activationDirectory(f *os.File, gid uint32, mode os.FileMode) bool {
 }
 
 func sameActivationDirectory(d *os.File, gid uint32) bool {
+	return sameActivationDirectoryForPair(d, gid, numericPair)
+}
+
+func sameActivationDirectoryForPair(d *os.File, gid uint32, pair workerPair) bool {
+	_, activationPath, ok := pair.activationPaths()
+	if !ok {
+		return false
+	}
 	current, err := rootDirectory(activationPath)
 	if err != nil {
 		return false
@@ -99,7 +116,11 @@ func sameActivationDirectory(d *os.File, gid uint32) bool {
 }
 
 func publishActivation(d *os.File, name string, b []byte, gid uint32) error {
-	if (name != "request.json" && name != "commit.json") || len(b) == 0 || len(b) > connectedactivation.MaxBytes || !sameActivationDirectory(d, gid) {
+	return publishActivationForPair(d, name, b, gid, numericPair)
+}
+
+func publishActivationForPair(d *os.File, name string, b []byte, gid uint32, pair workerPair) error {
+	if (name != "request.json" && name != "commit.json") || len(b) == 0 || len(b) > connectedactivation.MaxBytes || !sameActivationDirectoryForPair(d, gid, pair) {
 		return ErrUnsafe
 	}
 	fd, err := unix.Openat(int(d.Fd()), ".activation-next", unix.O_WRONLY|unix.O_CREAT|unix.O_EXCL|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0600)
@@ -114,7 +135,7 @@ func publishActivation(d *os.File, name string, b []byte, gid uint32) error {
 	n, writeErr := f.Write(b)
 	syncErr := f.Sync()
 	closeErr := f.Close()
-	if writeErr != nil || n != len(b) || syncErr != nil || closeErr != nil || !sameActivationDirectory(d, gid) {
+	if writeErr != nil || n != len(b) || syncErr != nil || closeErr != nil || !sameActivationDirectoryForPair(d, gid, pair) {
 		return ErrRecovery
 	}
 	if unix.Renameat2(int(d.Fd()), ".activation-next", int(d.Fd()), name, unix.RENAME_NOREPLACE) != nil || d.Sync() != nil {
@@ -152,7 +173,15 @@ func activationRecord(d *os.File, name string, uid, gid uint32, mode os.FileMode
 }
 
 func responseDirectory(c connectedprofile.Config) (*os.File, error) {
-	parent, err := rootDirectory(connectedprofile.StateDirectory)
+	return responseDirectoryForPair(c, numericPair)
+}
+
+func responseDirectoryForPair(c connectedprofile.Config, pair workerPair) (*os.File, error) {
+	state := pair.stateRoot()
+	if state == "" {
+		return nil, ErrUnsafe
+	}
+	parent, err := rootDirectory(state)
 	if err != nil {
 		return nil, ErrUnsafe
 	}
@@ -161,7 +190,11 @@ func responseDirectory(c connectedprofile.Config) (*os.File, error) {
 }
 
 func clearActivationResponse(c connectedprofile.Config) error {
-	d, err := responseDirectory(c)
+	return clearActivationResponseForPair(c, numericPair)
+}
+
+func clearActivationResponseForPair(c connectedprofile.Config, pair workerPair) error {
+	d, err := responseDirectoryForPair(c, pair)
 	if err != nil {
 		return err
 	}
@@ -183,7 +216,11 @@ func clearActivationResponse(c connectedprofile.Config) error {
 }
 
 func readActivationResponse(c connectedprofile.Config) (connectedactivation.Response, error) {
-	d, err := responseDirectory(c)
+	return readActivationResponseForPair(c, numericPair)
+}
+
+func readActivationResponseForPair(c connectedprofile.Config, pair workerPair) (connectedactivation.Response, error) {
+	d, err := responseDirectoryForPair(c, pair)
 	if err != nil {
 		return connectedactivation.Response{}, err
 	}
@@ -196,7 +233,15 @@ func readActivationResponse(c connectedprofile.Config) (connectedactivation.Resp
 }
 
 func createActivationDirectory(path string, gid uint32, mode os.FileMode) error {
-	parent, name := "/run", "home-lab-observer-connected"
+	return createActivationDirectoryForPair(path, gid, mode, numericPair)
+}
+
+func createActivationDirectoryForPair(path string, gid uint32, mode os.FileMode, pair workerPair) error {
+	activationParent, activationPath, ok := pair.activationPaths()
+	if !ok {
+		return ErrUnsafe
+	}
+	parent, name := "/run", filepath.Base(activationParent)
 	if path == activationPath {
 		if gid == 0 || mode != 0750 {
 			return ErrUnsafe

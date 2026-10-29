@@ -18,7 +18,9 @@ func TestCollectorDependencyClosure(t *testing.T) {
 		t.Fatal(err)
 	}
 	allowed := map[string]bool{}
-	for _, name := range strings.Fields("connectedcompat connectedidentity connectedprocess connectedprofile connectedruntime connectedstatus observation numerichost remoteprojection ownerfs sharedhandoff") {
+	// sharedhandoff's fixed rich sibling adds only pure wire validators/models;
+	// the numeric entrypoint still cannot select it or acquire the Engine adapter.
+	for _, name := range strings.Fields("connectedcompat connectedidentity connectedprocess connectedprofile connectedruntime connectedstatus observation numerichost remoteprojection ownerfs sharedhandoff combinedprojection workloadprojection containerobs/model") {
 		allowed[name] = true
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

@@ -14,10 +14,18 @@ import (
 // It rehashes the actual copied bytes so source replacement cannot produce a
 // successful archive result after a previous directory verification.
 func WriteArchive(w io.Writer, directory, expectedManifestSHA256 string) error {
+	return writeArchive(w, directory, expectedManifestSHA256, VerifyDirectory, Encode)
+}
+
+func WriteRichProcessesArchive(w io.Writer, directory, expectedManifestSHA256 string) error {
+	return writeArchive(w, directory, expectedManifestSHA256, VerifyRichProcessesDirectory, EncodeRichProcesses)
+}
+
+func writeArchive(w io.Writer, directory, expectedManifestSHA256 string, verify func(string, string) (Manifest, error), encode func(Manifest) ([]byte, error)) error {
 	if w == nil {
 		return ErrInvalid
 	}
-	m, err := VerifyDirectory(directory, expectedManifestSHA256)
+	m, err := verify(directory, expectedManifestSHA256)
 	if err != nil {
 		return ErrInvalid
 	}
@@ -26,7 +34,7 @@ func WriteArchive(w io.Writer, directory, expectedManifestSHA256 string) error {
 		return ErrInvalid
 	}
 	defer root.Close()
-	manifest, err := Encode(m)
+	manifest, err := encode(m)
 	if err != nil {
 		return ErrInvalid
 	}

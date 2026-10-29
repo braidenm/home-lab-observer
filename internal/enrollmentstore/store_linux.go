@@ -24,6 +24,8 @@ type Setup struct {
 	root           *os.Root
 	dir, lease     *os.File
 	binding        uploadstate.Binding
+	profile        uploadstate.ProfileBinding
+	rich           RichProcessesPrincipals
 	step           int
 	failed, closed bool
 	hook           func(string) error
@@ -101,6 +103,21 @@ func OpenNew(ctx context.Context, directory string) (*Setup, error) {
 	return open(ctx, directory, true)
 }
 
+func OpenNewRichProcesses(ctx context.Context, directory string, principals RichProcessesPrincipals) (*Setup, error) {
+	// Validate the closed principal tuple before touching storage. The real
+	// policy digest is derived later from Begin's generated connector identity.
+	synthetic := uploadstate.Binding{ServerID: "srv_00000000000000000000000000000000", ConnectorID: "agent_00000000000000000000000000000000"}
+	if _, err := principals.profile(synthetic); err != nil {
+		return nil, ErrRecovery
+	}
+	s, err := open(ctx, directory, true)
+	if err != nil {
+		return nil, err
+	}
+	s.rich = principals
+	return s, nil
+}
+
 func (s *Setup) check(ctx context.Context, binding uploadstate.Binding, step int) error {
 	if s.closed || s.failed || ctx == nil || ctx.Err() != nil || !validBinding(binding) || s.step != step || (step != 0 && s.binding != binding) {
 		s.failed = true
@@ -142,6 +159,14 @@ func (s *Setup) Begin(ctx context.Context, binding uploadstate.Binding) error {
 		return err
 	}
 	s.binding = binding
+	if !s.rich.zero() {
+		profile, err := s.rich.profile(binding)
+		if err != nil {
+			s.failed = true
+			return ErrRecovery
+		}
+		s.profile = profile
+	}
 	return s.write(ctx, attemptName, "ATTEMPTED", nil)
 }
 
@@ -184,14 +209,14 @@ func (s *Setup) Provision(ctx context.Context, binding uploadstate.Binding) erro
 		s.failed = true
 		return ErrRecovery
 	}
-	l, err := uploadledger.Provision(ctx, filepath.Join(s.path, ledgerName), binding)
+	l, err := uploadledger.ProvisionForProfile(ctx, filepath.Join(s.path, ledgerName), binding, s.profile)
 	if err != nil {
 		s.failed = true
 		return ErrRecovery
 	}
 	r, loadErr := l.Load(ctx)
 	closeErr := l.Close()
-	if loadErr != nil || closeErr != nil || !reflect.DeepEqual(r, uploadstate.Record{Binding: binding}) || s.ledgerPrivacy() != nil || s.dir.Sync() != nil || ctx.Err() != nil {
+	if loadErr != nil || closeErr != nil || !reflect.DeepEqual(r, uploadstate.Record{Binding: binding, Profile: s.profile}) || s.ledgerPrivacy() != nil || s.dir.Sync() != nil || ctx.Err() != nil {
 		s.failed = true
 		return ErrRecovery
 	}
@@ -217,14 +242,14 @@ func (s *Setup) MarkReady(ctx context.Context, binding uploadstate.Binding) erro
 		s.failed = true
 		return ErrRecovery
 	}
-	l, err := uploadledger.OpenExisting(ctx, filepath.Join(s.path, ledgerName), binding)
+	l, err := uploadledger.OpenExistingForProfile(ctx, filepath.Join(s.path, ledgerName), binding, s.profile)
 	if err != nil {
 		s.failed = true
 		return ErrRecovery
 	}
 	r, loadErr := l.Load(ctx)
 	closeErr := l.Close()
-	if loadErr != nil || closeErr != nil || !reflect.DeepEqual(r, uploadstate.Record{Binding: binding}) {
+	if loadErr != nil || closeErr != nil || !reflect.DeepEqual(r, uploadstate.Record{Binding: binding, Profile: s.profile}) {
 		s.failed = true
 		return ErrRecovery
 	}
@@ -232,6 +257,18 @@ func (s *Setup) MarkReady(ctx context.Context, binding uploadstate.Binding) erro
 }
 
 func OpenReady(ctx context.Context, directory string, binding uploadstate.Binding) (_ *Ready, result error) {
+	return openReady(ctx, directory, binding, uploadstate.ProfileBinding{})
+}
+
+func OpenReadyRichProcesses(ctx context.Context, directory string, binding uploadstate.Binding, principals RichProcessesPrincipals) (*Ready, error) {
+	profile, err := principals.profile(binding)
+	if err != nil {
+		return nil, ErrRecovery
+	}
+	return openReady(ctx, directory, binding, profile)
+}
+
+func openReady(ctx context.Context, directory string, binding uploadstate.Binding, profile uploadstate.ProfileBinding) (_ *Ready, result error) {
 	if !validBinding(binding) {
 		return nil, ErrRecovery
 	}
@@ -246,6 +283,7 @@ func OpenReady(ctx context.Context, directory string, binding uploadstate.Bindin
 		}
 	}()
 	s.binding = binding
+	s.profile = profile
 	entries, err := s.entries()
 	want := map[string]bool{lockName: true, attemptName: true, credentialName: true, readyName: true, ledgerName: true}
 	if err != nil || !reflect.DeepEqual(entries, want) {
@@ -276,7 +314,7 @@ func OpenReady(ctx context.Context, directory string, binding uploadstate.Bindin
 	if s.ledgerPrivacy() != nil {
 		return nil, ErrRecovery
 	}
-	r.ledger, err = uploadledger.OpenExisting(ctx, filepath.Join(s.path, ledgerName), binding)
+	r.ledger, err = uploadledger.OpenExistingForProfile(ctx, filepath.Join(s.path, ledgerName), binding, profile)
 	if err != nil {
 		return nil, ErrRecovery
 	}

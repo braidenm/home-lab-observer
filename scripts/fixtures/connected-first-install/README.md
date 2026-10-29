@@ -1,5 +1,41 @@
 # Disposable first-install and activation acceptance
 
+## Separate process-only proof (not yet executed)
+
+`--scope rich-processes` is an explicit opt-in; neither the default nor `--scope all`
+includes it. It installs the separately pinned numeric primary bundle stopped,
+then a same-source rich-processes bundle on that same disposable guest. Supply
+`--rich-archive`, `--expected-rich-archive-sha256` and
+`--expected-rich-manifest-sha256` in addition to the existing numeric inputs.
+The rich archive's directory must also contain its exact `connected-manifest.json`,
+`SHA256SUMS` and data-only `install-connected-rich-processes-linux.sh`.
+The helper is checksum-validated but is not executed by this direct-package scope.
+
+For this scope only, independently pin the canonical harness manifest over the
+existing seven files followed by `rich_scope.py rich_guest.py`, in that order.
+The independently pinned compiled receiver includes both fixed synthetic modes;
+it requires the exact rich profile and collection-definition echo and never uses
+real credentials, contacts the hosted app, or persists observation bodies.
+
+The guest keeps numeric workers stopped and compares their existing deep
+fingerprint before/after rich installation, activation and reboot. Two hundred
+bounded, sleeping, foreign-UID processes provide real metadata without a CPU
+load generator. Acceptance requires an actually valid body larger than 16 KiB,
+not an estimated size. The receiver retains only bounded synthetic admission,
+sequence/digest/counters and booleans. It withholds acknowledgements until the
+guest stops both rich workers, verifies the exact pending row and policy-tamper
+refusal, then reboots. The next boot must retain the same pending bytes and
+identity, keep both workers disabled/inactive until explicit start, and deliver
+the byte-identical retry before a fresh acknowledgement. It also checks the
+actual collector credential denial, uploader process-view exclusion, fixed
+process policy and 2 MiB ledger envelope. Schema validation rejects unapproved
+Docker data and forbidden process fields. This does not replace the separate
+SQLite crash/ENOSPC tests or prove Docker support or owner-host readiness.
+
+No rich proof has passed merely because these fixture tests pass. Record the
+exact frozen package/receiver/harness/image pins and independently review them
+before starting a VM; retain failure disks and only closed diagnostic output.
+
 This fixture is the accepted gate for the stopped Linux connected installer, not an
 owner-host installation recipe. The accepted package and bounded result are recorded in
 [`first-install-acceptance.md`](../../../specs/012-connected-observation/first-install-acceptance.md).

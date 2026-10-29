@@ -53,7 +53,7 @@ def failure_marker(output: bytes, code: int, prompted: bool) -> str:
 def main() -> int:
     if (
         len(sys.argv) != 4
-        or sys.argv[1] not in ("install", "interrupt")
+        or sys.argv[1] not in ("install", "interrupt", "install-rich")
         or not re.fullmatch(r"[a-f0-9]{64}", sys.argv[3])
     ):
         print("FIXTURE_DRIVER_ARGS_REFUSED", flush=True)
@@ -62,10 +62,11 @@ def main() -> int:
     if not bundle.startswith("/opt/observer-fixture/bundle/"):
         print("FIXTURE_DRIVER_BUNDLE_REFUSED", flush=True)
         return 22
-    binary = os.path.join(bundle, "observer-connected-install")
+    rich = sys.argv[1] == "install-rich"
+    binary = os.path.join(bundle, "observer-connected-rich-install" if rich else "observer-connected-install")
     child, terminal = pty.fork()
     if child == 0:
-        os.execv(binary, [binary, "install", bundle, digest, SERVER])
+        os.execv(binary, [binary, "install", bundle, digest, "srv_" + "b" * 32 if rich else SERVER])
 
     prompted = False
     child_running = True
@@ -108,7 +109,7 @@ def main() -> int:
                         return 1
                     if not prompted and b"One-use enrollment grant" in output:
                         prompted = True
-                        os.write(terminal, GRANT)
+                        os.write(terminal, b"hle_" + b"C" * 43 + b"\n" if rich else GRANT)
             finished, status = os.waitpid(child, os.WNOHANG)
             if finished:
                 child_running = False

@@ -48,11 +48,47 @@ type release struct {
 	Members                                                                 []member
 }
 
+type renderSpec struct {
+	decode          func([]byte) (connectedbundle.Manifest, error)
+	known           func(connectedbundle.Manifest) bool
+	archiveBasename func(string) string
+	installBinary   string
+	releaseRoot     string
+}
+
+var numericRenderSpec = renderSpec{
+	decode: connectedbundle.Decode,
+	known:  func(m connectedbundle.Manifest) bool { return m.HasKnownContract() },
+	archiveBasename: func(version string) string {
+		return "home-lab-observer-connected_" + version + "_linux_amd64.tar.gz"
+	},
+	installBinary: "observer-connected-install",
+	releaseRoot:   "/opt/home-lab-observer-connected/releases",
+}
+
+var richProcessesRenderSpec = renderSpec{
+	decode: connectedbundle.DecodeRichProcesses,
+	known:  func(m connectedbundle.Manifest) bool { return m.HasKnownRichProcessesContract() },
+	archiveBasename: func(version string) string {
+		return "home-lab-observer-connected-rich-processes_" + version + "_linux_amd64.tar.gz"
+	},
+	installBinary: "observer-connected-rich-install",
+	releaseRoot:   "/opt/home-lab-observer-connected-rich/releases",
+}
+
 // Render accepts only a canonical V2 manifest and independently computed archive
 // identity. The caller must first build/verify that archive with connectedbundle.
 func Render(manifest []byte, archiveSHA256 string, archiveSize int64) ([]byte, error) {
-	m, err := connectedbundle.Decode(manifest)
-	if err != nil || !m.HasKnownContract() || !versionPattern.MatchString(m.Version) ||
+	return render(manifest, archiveSHA256, archiveSize, numericRenderSpec)
+}
+
+func RenderRichProcesses(manifest []byte, archiveSHA256 string, archiveSize int64) ([]byte, error) {
+	return render(manifest, archiveSHA256, archiveSize, richProcessesRenderSpec)
+}
+
+func render(manifest []byte, archiveSHA256 string, archiveSize int64, spec renderSpec) ([]byte, error) {
+	m, err := spec.decode(manifest)
+	if err != nil || !spec.known(m) || !versionPattern.MatchString(m.Version) ||
 		!digestPattern.MatchString(archiveSHA256) || archiveSize < 1 || archiveSize > 256<<20 {
 		return nil, ErrInvalid
 	}
@@ -77,7 +113,9 @@ func Render(manifest []byte, archiveSHA256 string, archiveSize int64) ([]byte, e
 	}
 	r.Extraction = extractionSource + "\nMEMBERS = json.loads(base64.b64decode(\"" + base64.StdEncoding.EncodeToString(encoded) + "\", validate=True))\n"
 	r.Coordinator = strings.NewReplacer("@VERSION@", r.Version, "@ARCHIVE_SIZE@", strconv.FormatInt(r.ArchiveSize, 10),
-		"@ARCHIVE_SHA256@", r.ArchiveSHA256, "@MANIFEST_SHA256@", r.ManifestSHA256).Replace(coordinatorSource)
+		"@ARCHIVE_SHA256@", r.ArchiveSHA256, "@MANIFEST_SHA256@", r.ManifestSHA256,
+		"@ARCHIVE_BASENAME@", spec.archiveBasename(r.Version), "@INSTALL_BINARY@", spec.installBinary,
+		"@RELEASE_ROOT@", spec.releaseRoot).Replace(coordinatorSource)
 	tmpl, err := template.New("bootstrap").Parse(shellTemplate)
 	if err != nil {
 		return nil, ErrInvalid

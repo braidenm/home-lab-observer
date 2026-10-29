@@ -9,16 +9,18 @@
   ([first profile](workload-profile.md)); locally tested, not upload-admitted or released.
 - [ ] Implement actual receiver/parser contracts and nullable authorized read models; retain legacy fixtures.
 - [x] Define and independently review the pure combined host/workload envelope without extending upload admission;
-  local Windows full Go tests/vet pass, focused coverage 92.3%. Exact-head native/race CI is still required.
+  Windows full Go tests/vet, focused coverage 92.3% and exact-head native/race CI pass (PR 131 merged).
 - [ ] Approve and implement host-local opt-in policy plus rich acquisition/isolation profile.
 - [x] Independently review immutable separately enrolled rich policy and staged process-only proof (ADR 024); installed
   implementation, receiver approval and actual owner rollout remain pending.
 - [x] Separate normalized container model from Engine acquisition; preserve aliases/JSON and prove no-Docker combined
-  projection dependency closure (prerequisite commit `aae918c`, awaiting its own governed integration).
+  projection dependency closure (PR 132 merged after required CI).
 - [x] Implement unused profile-bound pure state machine with explicit rich-processes group guard and strict default
-  numeric APIs. Local TDD and independent implementation review pass; exact-head governed CI remains pending.
+  numeric APIs. TDD, independent implementation review and exact-head required CI pass (PR 133 merged).
 - [x] Implement unused rich schema-v2 ledger with fixed 128-page/512 KiB DB and 2 MiB transactional envelope; no
-  migration. Local real-SQLite/crash/ENOSPC proof passes; independent review and exact-head CI remain pending.
+  migration. Real-SQLite/crash/ENOSPC proof, independent review and exact-head CI pass (PR 135 merged).
+- [ ] Complete the coherent VM-installable process-only package, following [its acceptance scope](installable-process-proof.md).
+  Source composition and focused tests are in progress; no owner-host installation or rich release is accepted yet.
 - [ ] Implement/rehearse supported profile-changing migration or separately enrolled coexistence; preserve old connector.
 - [ ] Wire profile-aware bounded handoff/ledger/transport and receiver; no broad cap-only activation.
 - [ ] Add useful searchable workload/storage views and owner/delegate denial/revocation coverage.
@@ -81,3 +83,17 @@ identify unexecuted native/OS proofs rather than substituting a fake or skipped 
 - Native Windows full Go tests/vet, Node80/schema/foundation and diff hygiene pass. Real Linux Go1.27.3 race tests
   pass for uploadledger and uploadstate; independent review and exact-head governed CI remain pending.
 - No runtime, enrollment, policy-file, HTTP, handoff, witness, installer or credential admission is activated here.
+
+## Coherent process-only package source evidence (2026-10-29)
+
+- Fixed rich collector/uploader/installer, canonical installed policy, enrollment echo, handoff and schema-v2 ledger
+  are connected end to end in source. Numeric default constructors, wire caps and installed identities remain strict.
+- Full native Linux Go tests and vet pass. Focused Linux race tests and the actual root/DAC handoff fixture pass;
+  Windows full Go tests/vet pass. Independent code reviews cover packaging/enrollment, uploader and installer.
+- Review findings corrected before acceptance: audit newly allocated service principals before enrollment; use the
+  exact rich uploader-root configuration path; do not mislabel private-network loopback counters as host traffic.
+- The explicit disposable `rich-processes` fixture is not in default/all scopes. It uses synthetic credentials and
+  separately pinned packages, proves numeric coexistence, real rich principals/effective units, large pending bodies,
+  policy-tamper refusal and byte-identical reboot retry. Fixture tests are not an executed VM result.
+- Packaged VM acceptance, exact-head CI and immutable artifact evidence remain pending. This process-only package
+  is VM-only; no owner-host install, production profile writer, public release, Docker observation or control is enabled.

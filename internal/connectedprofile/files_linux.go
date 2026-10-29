@@ -88,3 +88,19 @@ func Load() (Config, error) {
 	}
 	return Decode(b)
 }
+
+func LoadRichProcessesConfig() (RichProcessesConfig, error) {
+	b, err := ReadRootFileMode(RichProcessesConfigPath, MaxConfigBytes, 0644)
+	if err != nil {
+		return RichProcessesConfig{}, ErrUnsafe
+	}
+	return DecodeRichProcessesConfig(b)
+}
+
+func LoadRichProcessesPolicy() (RichProcessesPolicy, error) {
+	b, err := ReadRootFileMode(RichProcessesPolicyPath, RichProcessesMaxPolicyBytes, 0644)
+	if err != nil {
+		return RichProcessesPolicy{}, ErrUnsafe
+	}
+	return DecodeRichProcessesPolicy(b)
+}

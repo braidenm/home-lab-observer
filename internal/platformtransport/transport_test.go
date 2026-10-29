@@ -70,7 +70,7 @@ func ownedRoots(server *httptest.Server) *x509.CertPool {
 
 func newOwnedTransport(t *testing.T, server *httptest.Server, provider *fakeCredentials) *Transport {
 	t.Helper()
-	transport, err := newTransport(server.URL, provider, ownedRoots(server))
+	transport, err := newTransport(server.URL, provider, ownedRoots(server), false)
 	if err != nil {
 		t.Fatal(err)
 	}

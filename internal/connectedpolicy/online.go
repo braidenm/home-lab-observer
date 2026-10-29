@@ -15,11 +15,15 @@ type OnlineExpectation struct {
 var onlineFields = append(append([]string(nil), offlineFields...), "RestrictAddressFamilies")
 
 func onlineExpected(e OnlineExpectation) (map[string]string, error) {
-	want, err := offlineExpected(OfflineExpectation{
+	return onlineExpectedForProfile(e, false)
+}
+
+func onlineExpectedForProfile(e OnlineExpectation, rich bool) (map[string]string, error) {
+	want, err := offlineExpectedForProfile(OfflineExpectation{
 		UploaderUID: e.UploaderUID, UploaderGID: e.UploaderGID,
 		SharedGID: e.SharedGID, ArtifactSHA256: e.ArtifactSHA256,
 		Mode: "validate-enrollment",
-	})
+	}, rich)
 	if err != nil {
 		return nil, ErrUnsafe
 	}
@@ -29,7 +33,11 @@ func onlineExpected(e OnlineExpectation) (map[string]string, error) {
 }
 
 func validateOnline(data []byte, e OnlineExpectation) error {
-	want, err := onlineExpected(e)
+	return validateOnlineForProfile(data, e, false)
+}
+
+func validateOnlineForProfile(data []byte, e OnlineExpectation, rich bool) error {
+	want, err := onlineExpectedForProfile(e, rich)
 	if err != nil || len(data) == 0 || len(data) > maxOutput || strings.ContainsAny(string(data), "\x00\r") {
 		return ErrUnsafe
 	}

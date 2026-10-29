@@ -76,6 +76,13 @@ func CheckInstalledUploaderScaffold() error {
 	return checkPhysicalScaffold("/var/lib/home-lab-observer-connected/uploader-root", 0, 0)
 }
 
+func CheckInstalledRichProcessesUploaderScaffold() error {
+	if os.Geteuid() != 0 || os.Getuid() != 0 {
+		return ErrUnsafe
+	}
+	return checkPhysicalScaffold("/var/lib/home-lab-observer-connected-rich/uploader-root", 0, 0)
+}
+
 func checkPhysicalScaffold(root string, uid, gid uint32) error {
 	d, err := readViewDirectoryLimit(root, len(uploaderRootChildren)+1)
 	if err != nil || !safeScaffold(d, scaffoldDirectory{"", 0755, uploaderRootChildren}, uid, gid, false) {
@@ -150,7 +157,19 @@ func sameViewObject(a, b unix.Stat_t) bool {
 // read-only remount may have another mount ID, but cannot substitute host data.
 // The caller audits PID/start identity before and after this bounded check.
 func CheckUploaderNamespace(pid int, root string, sources map[string]string) error {
-	if os.Geteuid() != 0 || pid < 2 || root != "/var/lib/home-lab-observer-connected/uploader-root" {
+	return checkUploaderNamespace(pid, root, sources, false)
+}
+
+func CheckRichProcessesUploaderNamespace(pid int, root string, sources map[string]string) error {
+	return checkUploaderNamespace(pid, root, sources, true)
+}
+
+func checkUploaderNamespace(pid int, root string, sources map[string]string, rich bool) error {
+	expectedRoot := "/var/lib/home-lab-observer-connected/uploader-root"
+	if rich {
+		expectedRoot = "/var/lib/home-lab-observer-connected-rich/uploader-root"
+	}
+	if os.Geteuid() != 0 || pid < 2 || root != expectedRoot {
 		return ErrUnsafe
 	}
 	proc := "/proc/" + strconv.Itoa(pid) + "/root"
@@ -161,7 +180,7 @@ func CheckUploaderNamespace(pid int, root string, sources map[string]string) err
 		return ErrUnsafe
 	}
 	defer unix.Close(fd)
-	if checkNamespaceBindings(root, sources, func(name string) (unix.Stat_t, error) { return viewObjectAt(fd, name) }, func(path string) (unix.Stat_t, error) {
+	if checkNamespaceBindingsForProfile(root, sources, rich, func(name string) (unix.Stat_t, error) { return viewObjectAt(fd, name) }, func(path string) (unix.Stat_t, error) {
 		var s unix.Stat_t
 		err := unix.Lstat(path, &s)
 		return s, err
@@ -199,7 +218,15 @@ func safePrivateMqueue(d viewDirectory) bool {
 }
 
 func checkNamespaceBindings(root string, sources map[string]string, actual, physical func(string) (unix.Stat_t, error)) error {
-	if len(sources) != 6 {
+	return checkNamespaceBindingsForProfile(root, sources, false, actual, physical)
+}
+
+func checkNamespaceBindingsForProfile(root string, sources map[string]string, rich bool, actual, physical func(string) (unix.Stat_t, error)) error {
+	targets := []string{"/bin/observer-connected-uploader", "/etc/home-lab-observer-connected/installed.json", "/handoff", "/activation", "/state/ledger", "/state/status"}
+	if rich {
+		targets = []string{"/bin/observer-connected-rich-uploader", "/etc/home-lab-observer-connected-rich/installed.json", "/etc/home-lab-observer-connected-rich/collection-policy.json", "/handoff", "/activation", "/state/ledger", "/state/status"}
+	}
+	if len(sources) != len(targets) {
 		return ErrUnsafe
 	}
 	match := func(name, source string) bool {
@@ -215,7 +242,7 @@ func checkNamespaceBindings(root string, sources map[string]string, actual, phys
 			return ErrUnsafe
 		}
 	}
-	for _, target := range []string{"/bin/observer-connected-uploader", "/etc/home-lab-observer-connected/installed.json", "/handoff", "/activation", "/state/ledger", "/state/status"} {
+	for _, target := range targets {
 		source, ok := sources[target]
 		if !ok || !match(strings.TrimPrefix(target, "/"), source) {
 			return ErrUnsafe

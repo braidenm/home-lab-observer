@@ -12,6 +12,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/braidenm/home-lab-observer/internal/ownerfs"
+	"github.com/braidenm/home-lab-observer/internal/uploadstate"
 )
 
 func noACL(f *os.File, directory bool) bool {
@@ -197,10 +198,16 @@ func (s *Setup) ledgerPrivacy() error {
 		return ErrUnsafe
 	}
 	for _, entry := range entries {
-		limit := int64(1024 * 1024)
+		totalLimit := int64(1024 * 1024)
+		databaseLimit := int64(4096 * 64)
+		if s.profile.Kind == uploadstate.RichProcessesProfile {
+			totalLimit = 2 * 1024 * 1024
+			databaseLimit = 4096 * 128
+		}
+		limit := totalLimit
 		switch entry.Name() {
 		case "upload.sqlite":
-			limit = 4096 * 64
+			limit = databaseLimit
 		case ".upload-lock":
 			limit = 0
 		case "upload.sqlite-journal":

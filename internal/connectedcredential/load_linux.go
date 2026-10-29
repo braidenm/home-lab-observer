@@ -16,7 +16,24 @@ const directory = "/run/credentials/home-lab-observer-connected-uploader.service
 // independently probed with a synthetic credential, including its per-UID ACL.
 // The final packaged unit remains subject to its own installed acceptance gate.
 func Load(server, connector string) (CredentialRecord, error) {
-	if os.Geteuid() == 0 || os.Getenv("CREDENTIALS_DIRECTORY") != directory {
+	return loadCredential(server, connector, false)
+}
+
+// LoadRichProcesses uses only the distinct rich unit's manager credential mount.
+func LoadRichProcesses(server, connector string) (CredentialRecord, error) {
+	return loadCredential(server, connector, true)
+}
+
+func credentialUnit(rich bool) string {
+	if rich {
+		return "home-lab-observer-connected-rich-uploader.service"
+	}
+	return "home-lab-observer-connected-uploader.service"
+}
+
+func loadCredential(server, connector string, rich bool) (CredentialRecord, error) {
+	unit := credentialUnit(rich)
+	if os.Geteuid() == 0 || os.Getenv("CREDENTIALS_DIRECTORY") != "/run/credentials/"+unit {
 		return CredentialRecord{}, ErrUnsafe
 	}
 	fd, err := unix.Open("/", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
@@ -24,7 +41,7 @@ func Load(server, connector string) (CredentialRecord, error) {
 		return CredentialRecord{}, ErrUnsafe
 	}
 	defer func() { unix.Close(fd) }()
-	parts := []string{"run", "credentials", "home-lab-observer-connected-uploader.service", "connector.json"}
+	parts := []string{"run", "credentials", unit, "connector.json"}
 	for i, name := range parts {
 		flags := unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NOFOLLOW | unix.O_NONBLOCK
 		if i < 3 {

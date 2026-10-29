@@ -35,6 +35,31 @@ func Run(parent context.Context, c connectedprofile.Config, status *connectedsta
 	if parent == nil || status == nil || c.Validate() != nil {
 		return ErrUnsafe
 	}
+	configuration, err := connectedprofile.Encode(c)
+	if err != nil {
+		return ErrUnsafe
+	}
+	return runBound(parent, status, startupBinding{configuration: configuration, artifact: c.ArtifactSHA256, generation: c.PolicyGeneration, gid: c.UploaderGID, addresses: c.Addresses, current: func() ([]byte, error) {
+		current, err := connectedprofile.Load()
+		if err != nil {
+			return nil, ErrUnsafe
+		}
+		return connectedprofile.Encode(current)
+	}})
+}
+
+// startupBinding is private and constructed only by the two named installed
+// profiles. It is not a caller-selected path, protocol or network-probe API.
+type startupBinding struct {
+	configuration []byte
+	artifact      string
+	generation    uint64
+	gid           uint32
+	addresses     []string
+	current       func() ([]byte, error)
+}
+
+func runBound(parent context.Context, status *connectedstatus.Writer, b startupBinding) error {
 	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 	defer cancel()
 	if connectedruntime.CheckPrimitives(false) != nil {
@@ -49,19 +74,19 @@ func Run(parent context.Context, c connectedprofile.Config, status *connectedsta
 	}
 	directory := os.NewFile(uintptr(fd), "activation")
 	defer directory.Close()
-	if !rootDirectory(directory, c.UploaderGID) {
+	if !rootDirectory(directory, b.gid) {
 		return &stageError{75}
 	}
-	err = rendezvous(ctx, c, startupPorts{
+	err = rendezvousBound(ctx, b.configuration, b.artifact, b.generation, boundStartupPorts{
 		read: func(ctx context.Context, name string) ([]byte, error) {
-			return waitRecord(ctx, directory, name, c.UploaderGID)
+			return waitRecord(ctx, directory, name, b.gid)
 		},
 		prove: func(ctx context.Context, request connectedactivation.Request) error {
-			if !deniedLoopback(ctx, "tcp4", "127.0.0.1", request.IPv4Port) || !deniedLoopback(ctx, "tcp6", "::1", request.IPv6Port) || fixedTLS(ctx, c.Addresses) != nil {
+			if !deniedLoopback(ctx, "tcp4", "127.0.0.1", request.IPv4Port) || !deniedLoopback(ctx, "tcp6", "::1", request.IPv6Port) || fixedTLS(ctx, b.addresses) != nil {
 				return ErrUnsafe
 			}
 			return nil
-		}, publish: status.WriteActivationResponse, current: connectedprofile.Load, random: rand.Reader, invocation: os.Getenv("INVOCATION_ID"),
+		}, publish: status.WriteActivationResponse, current: b.current, random: rand.Reader, invocation: os.Getenv("INVOCATION_ID"),
 	})
 	if err != nil {
 		return &stageError{76}
@@ -88,6 +113,28 @@ func rendezvous(ctx context.Context, c connectedprofile.Config, p startupPorts) 
 	if err != nil {
 		return ErrUnsafe
 	}
+	return rendezvousBound(ctx, configuration, c.ArtifactSHA256, c.PolicyGeneration, boundStartupPorts{read: p.read, prove: p.prove, publish: p.publish, random: p.random, invocation: p.invocation, current: func() ([]byte, error) {
+		current, err := p.current()
+		if err != nil {
+			return nil, ErrUnsafe
+		}
+		return connectedprofile.Encode(current)
+	}})
+}
+
+type boundStartupPorts struct {
+	read       func(context.Context, string) ([]byte, error)
+	prove      func(context.Context, connectedactivation.Request) error
+	publish    func([]byte) error
+	current    func() ([]byte, error)
+	random     io.Reader
+	invocation string
+}
+
+func rendezvousBound(ctx context.Context, configuration []byte, artifact string, generation uint64, p boundStartupPorts) error {
+	if ctx == nil || ctx.Err() != nil {
+		return ErrUnsafe
+	}
 	digest := sha256.Sum256(configuration)
 	// Missing request NEVER authorizes probes, credentials or ordinary work.
 	requestBytes, err := p.read(ctx, "request.json")
@@ -95,7 +142,7 @@ func rendezvous(ctx context.Context, c connectedprofile.Config, p startupPorts) 
 		return ErrUnsafe
 	}
 	request, err := connectedactivation.DecodeRequest(requestBytes)
-	if err != nil || request.ArtifactSHA256 != c.ArtifactSHA256 || request.ConfigSHA256 != hex.EncodeToString(digest[:]) || request.PolicyGeneration != c.PolicyGeneration {
+	if err != nil || request.ArtifactSHA256 != artifact || request.ConfigSHA256 != hex.EncodeToString(digest[:]) || request.PolicyGeneration != generation {
 		return ErrUnsafe
 	}
 	challenge := make([]byte, 32)
@@ -127,12 +174,11 @@ func rendezvous(ctx context.Context, c connectedprofile.Config, p startupPorts) 
 	if err != nil || !connectedactivation.MatchCommit(request, response, commit) || ctx.Err() != nil {
 		return ErrUnsafe
 	}
-	current, err := p.current()
+	currentBytes, err := p.current()
 	if err != nil {
 		return ErrUnsafe
 	}
-	currentBytes, err := connectedprofile.Encode(current)
-	if err != nil || !bytes.Equal(currentBytes, configuration) || ctx.Err() != nil {
+	if !bytes.Equal(currentBytes, configuration) || ctx.Err() != nil {
 		return ErrUnsafe
 	}
 	return nil

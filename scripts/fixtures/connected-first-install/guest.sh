@@ -152,7 +152,7 @@ EOF
 }
 
 case "${1:-}" in
-  success|success-cut|interrupt|activation|bootstrap)
+  success|success-cut|interrupt|activation|bootstrap|rich-processes)
     baseline
     prepare_guest "$1"
     bundle="$(cat "$fixture_root/bundle-path")"
@@ -210,6 +210,14 @@ case "${1:-}" in
         systemctl reboot
         exit 0
       fi
+      if [ "$1" = rich-processes ]; then
+        kill "$receiver_pid"
+        wait "$receiver_pid" || true
+        python3 "$payload/rich_guest.py" first || fail RICH
+        emit RICH_FIRST_BOOT
+        systemctl reboot
+        exit 0
+      fi
       sync
       if [ "$1" = success-cut ]; then
         emit SUCCESS_READY_FOR_CUT
@@ -225,7 +233,13 @@ case "${1:-}" in
   postboot)
     baseline
     mode="$(cat "$fixture_root/postboot-mode")"
-    if [ "$mode" = activation ]; then
+    if [ "$mode" = rich-processes ]; then
+      installed_assertions
+      python3 "$payload/assert_guest.py" verify || fail NUMERIC_MUTATED
+      ip addr add "$alias_ip/32" dev lo || fail LOOPBACK_ALIAS
+      python3 "$payload/rich_guest.py" reboot || fail RICH_REBOOT
+      emit RICH_REBOOT_PASS
+    elif [ "$mode" = activation ]; then
       installed_assertions
       ip addr add "$alias_ip/32" dev lo || fail LOOPBACK_ALIAS
       "$payload/connected-first-install-receiver" "$alias_ip:443" "$fixture_root/cert.pem" "$fixture_root/key.pem" activation >/dev/null 2>&1 &

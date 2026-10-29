@@ -25,13 +25,14 @@ func activateStopped(parent context.Context, c connectedprofile.Config) (result 
 }
 
 func activateStoppedWith(parent context.Context, c connectedprofile.Config, ops activationOperations) (result error) {
+	collectorUnit, uploaderUnit, _, validPair := ops.pair.units()
 	phase := "ACTIVATION_PREPARE"
 	defer func() {
 		if result != nil {
 			result = &lifecycleError{phase, result}
 		}
 	}()
-	if parent == nil || parent.Err() != nil || c.Validate() != nil {
+	if !validPair || parent == nil || parent.Err() != nil || c.Validate() != nil {
 		return ErrUnsafe
 	}
 	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
@@ -80,11 +81,11 @@ func activateStoppedWith(parent context.Context, c connectedprofile.Config, ops 
 	}
 	uploader := owned[uploaderUnit]
 	phase = "UPLOADER_AUDIT"
-	identity, err := ops.audit(ctx, uploader.PID, connectedprofile.ReleaseDirectory+"/"+c.ArtifactSHA256+"/observer-connected-uploader")
+	identity, err := ops.audit(ctx, uploader.PID, ops.pair.uploaderExecutable(c.ArtifactSHA256))
 	if err != nil || identity.PID != uploader.PID || !ops.sameWorker(ctx, uploaderUnit, uploader) {
 		return ErrUnsafe
 	}
-	config, err := connectedprofile.Encode(c)
+	config, err := ops.encodeConfig(c)
 	if err != nil {
 		return ErrUnsafe
 	}
@@ -151,7 +152,7 @@ func activateStoppedWith(parent context.Context, c connectedprofile.Config, ops 
 	if pair.finish(ctx) != nil || !ops.unchanged(ctx, c, config, uploader) || !ops.sameWorker(ctx, collectorUnit, collector) {
 		return ErrUnsafe
 	}
-	currentIdentity, err := ops.audit(ctx, uploader.PID, connectedprofile.ReleaseDirectory+"/"+c.ArtifactSHA256+"/observer-connected-uploader")
+	currentIdentity, err := ops.audit(ctx, uploader.PID, ops.pair.uploaderExecutable(c.ArtifactSHA256))
 	if err != nil || currentIdentity != identity || !ops.sameWorker(ctx, uploaderUnit, uploader) || !ops.sameWorker(ctx, collectorUnit, collector) {
 		return ErrUnsafe
 	}
@@ -197,12 +198,26 @@ func activateStoppedWith(parent context.Context, c connectedprofile.Config, ops 
 }
 
 func (ops activationOperations) unchanged(ctx context.Context, c connectedprofile.Config, encoded []byte, uploader workerInstance) bool {
+	_, uploaderUnit, _, validPair := ops.pair.units()
+	if !validPair {
+		return false
+	}
 	current, err := ops.installed()
 	if err != nil {
 		return false
 	}
-	actual, err := connectedprofile.Encode(current)
+	actual, err := ops.encodeConfig(current)
 	return err == nil && bytes.Equal(actual, encoded) && ops.policy(ctx, uploaderUnit, c.Addresses) == nil && ops.sameWorker(ctx, uploaderUnit, uploader)
+}
+
+func (ops activationOperations) encodeConfig(c connectedprofile.Config) ([]byte, error) {
+	if ops.pair == numericPair && ops.configBytes == nil {
+		return connectedprofile.Encode(c)
+	}
+	if ops.pair == richProcessesPair && ops.configBytes != nil {
+		return ops.configBytes(c)
+	}
+	return nil, ErrUnsafe
 }
 
 func (ops activationOperations) sameWorker(ctx context.Context, unit string, want workerInstance) bool {

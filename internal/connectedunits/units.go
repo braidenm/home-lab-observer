@@ -17,6 +17,8 @@ import (
 
 const CollectorUnit = "home-lab-observer-connected-collector.service"
 const UploaderUnit = "home-lab-observer-connected-uploader.service"
+const RichProcessesCollectorUnit = "home-lab-observer-connected-rich-collector.service"
+const RichProcessesUploaderUnit = "home-lab-observer-connected-rich-uploader.service"
 const MaxRenderedBytes = 16384
 
 var ErrInvalid = errors.New("connected_units_invalid")
@@ -26,7 +28,13 @@ var digestPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 var resources embed.FS
 
 type Units struct{ Collector, Uploader []byte }
+type RichProcessesUnits struct{ Collector, Uploader []byte }
 type EnrollmentInput struct {
+	UploaderUID, UploaderGID, SharedGID uint32
+	ArtifactSHA256                      string
+	Addresses                           []string
+}
+type RichProcessesEnrollmentInput struct {
 	UploaderUID, UploaderGID, SharedGID uint32
 	ArtifactSHA256                      string
 	Addresses                           []string
@@ -56,6 +64,19 @@ func Resources() map[string][]byte {
 		data, err := resources.ReadFile("templates/" + name)
 		if err != nil {
 			panic("connected template missing")
+		}
+		result[name] = data
+	}
+	return result
+}
+
+func RichProcessesResources() map[string][]byte {
+	names := []string{RichProcessesCollectorUnit + ".tmpl", RichProcessesUploaderUnit + ".tmpl", "rich-enrollment.properties.tmpl", "rich-installed-config.schema.json", "rich-collection-policy.schema.json"}
+	result := make(map[string][]byte, len(names))
+	for _, name := range names {
+		data, err := resources.ReadFile("templates/" + name)
+		if err != nil {
+			panic("connected rich template missing")
 		}
 		result[name] = data
 	}
@@ -115,6 +136,26 @@ func RenderUnits(c connectedprofile.Config) (Units, error) {
 	return Units{collector, uploader}, nil
 }
 
+func RenderRichProcessesUnits(c connectedprofile.RichProcessesConfig) (RichProcessesUnits, error) {
+	if c.Validate() != nil || !validID(c.CollectorUID) || !validID(c.UploaderUID) || !validID(c.UploaderGID) || !validID(c.SharedGID) {
+		return RichProcessesUnits{}, ErrInvalid
+	}
+	addresses, err := rules(c.Addresses)
+	if err != nil {
+		return RichProcessesUnits{}, ErrInvalid
+	}
+	d := renderData{CollectorUID: c.CollectorUID, UploaderUID: c.UploaderUID, UploaderGID: c.UploaderGID, SharedGID: c.SharedGID, ArtifactSHA256: c.ArtifactSHA256, AddressRules: addresses}
+	collector, err := render(RichProcessesCollectorUnit+".tmpl", d)
+	if err != nil {
+		return RichProcessesUnits{}, err
+	}
+	uploader, err := render(RichProcessesUploaderUnit+".tmpl", d)
+	if err != nil {
+		return RichProcessesUnits{}, err
+	}
+	return RichProcessesUnits{collector, uploader}, nil
+}
+
 // RenderEnrollmentProperties is for a fixed systemd-run --pipe --wait invocation.
 // StandardInput/Output must remain those private inherited pipes; stderr must be
 // discarded by the root parent. No secret enters properties or arguments.
@@ -142,4 +183,32 @@ func RenderEnrollmentProperties(c EnrollmentInput, mode EnrollmentMode) (Enrollm
 		return EnrollmentCommand{}, err
 	}
 	return EnrollmentCommand{Properties: strings.Split(strings.TrimSuffix(string(data), "\n"), "\n"), Executable: "/bin/observer-connected-uploader", Args: []string{string(mode)}}, nil
+}
+
+func RenderRichProcessesEnrollmentProperties(c RichProcessesEnrollmentInput, mode EnrollmentMode) (EnrollmentCommand, error) {
+	// Compatible-artifact refresh needs a separately reviewed profile-aware
+	// witness. Fresh rich installation deliberately exposes only these modes.
+	if (mode != Enroll && mode != ValidateEnrollment && mode != ValidateLedger) || !validID(c.UploaderUID) || !validID(c.UploaderGID) || !validID(c.SharedGID) || c.UploaderGID == c.SharedGID || !digestPattern.MatchString(c.ArtifactSHA256) {
+		return EnrollmentCommand{}, ErrInvalid
+	}
+	addresses, err := rules(c.Addresses)
+	if err != nil {
+		return EnrollmentCommand{}, err
+	}
+	d := renderData{UploaderUID: c.UploaderUID, UploaderGID: c.UploaderGID, SharedGID: c.SharedGID, ArtifactSHA256: c.ArtifactSHA256, AddressRules: addresses, AddressFamilies: "AF_INET AF_INET6", PrivateNetwork: "no", StateBind: connectedprofile.RichProcessesStateDirectory + "/enrollment:/state/enrollment", StateWrite: "/state/enrollment"}
+	if mode != Enroll {
+		d.AddressRules = ""
+		d.AddressFamilies = ""
+		d.SocketDeny = " socket"
+		d.PrivateNetwork = "yes"
+	}
+	if mode == ValidateLedger {
+		d.StateBind = connectedprofile.RichProcessesStateDirectory + "/ledger:/state/ledger"
+		d.StateWrite = "/state/ledger"
+	}
+	data, err := render("rich-enrollment.properties.tmpl", d)
+	if err != nil {
+		return EnrollmentCommand{}, err
+	}
+	return EnrollmentCommand{Properties: strings.Split(strings.TrimSuffix(string(data), "\n"), "\n"), Executable: "/bin/observer-connected-rich-uploader", Args: []string{string(mode)}}, nil
 }

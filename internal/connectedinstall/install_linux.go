@@ -299,6 +299,12 @@ func copyBundle(source string, layout installLayout) error {
 	if err != nil {
 		return ErrUnsafe
 	}
+	return copyBundleFiles(source, destination, layout.digest, connectedbundle.Names(), connectedbundle.VerifyDirectory)
+}
+
+// Arguments are supplied only by the two fixed layout constructors. The copy,
+// descriptor, bounded member and final verification mechanics remain shared.
+func copyBundleFiles(source, destination, digest string, names []string, verify func(string, string) (connectedbundle.Manifest, error)) error {
 	root, err := os.OpenRoot(destination)
 	if err != nil {
 		return ErrRecovery
@@ -314,7 +320,7 @@ func copyBundle(source string, layout installLayout) error {
 		return ErrUnsafe
 	}
 	defer inputDirectory.Close()
-	for _, name := range append(connectedbundle.Names(), connectedbundle.ManifestName) {
+	for _, name := range append(names, connectedbundle.ManifestName) {
 		mode := os.FileMode(0644)
 		if strings.HasPrefix(name, "observer-connected-") {
 			mode = 0755
@@ -352,7 +358,7 @@ func copyBundle(source string, layout installLayout) error {
 			return ErrRecovery
 		}
 	}
-	if _, err := connectedbundle.VerifyDirectory(destination, layout.digest); err != nil {
+	if _, err := verify(destination, digest); err != nil {
 		return ErrRecovery
 	}
 	d, err := root.Open(".")
@@ -367,6 +373,15 @@ func copyBundle(source string, layout installLayout) error {
 }
 
 func prepareRoot(layout installLayout, addresses []string) error {
+	return prepareRootFiles(layout, addresses)
+}
+
+type fixedLayout interface {
+	createDirectory(directoryRole) error
+	publishFile(fileRole, []byte) error
+}
+
+func prepareRootFiles(layout fixedLayout, addresses []string) error {
 	for _, role := range []directoryRole{
 		dirHandoff, dirCollectorStatus, dirUploaderStatus, dirEnrollment,
 		dirUploaderRoot, dirUploaderBin, dirUploaderEtc, dirUploaderSSL,
@@ -433,17 +448,21 @@ func missingGroup(err error) bool {
 }
 
 func promote(layout installLayout, secret []byte) error {
-	parent, err := rootDirectory(connectedprofile.StateDirectory)
+	return promoteFiles(layout, connectedprofile.StateDirectory, layout.uploaderUID, layout.uploaderGID, secret)
+}
+
+func promoteFiles(layout fixedLayout, stateRoot string, uploaderUID, uploaderGID uint32, secret []byte) error {
+	parent, err := rootDirectory(stateRoot)
 	if err != nil {
 		return ErrRecovery
 	}
 	defer parent.Close()
-	stage, err := privateDirectoryAt(parent, "enrollment", layout.uploaderUID, layout.uploaderGID)
+	stage, err := privateDirectoryAt(parent, "enrollment", uploaderUID, uploaderGID)
 	if err != nil {
 		return ErrRecovery
 	}
 	defer stage.Close()
-	ledger, err := privateDirectoryAt(stage, "ledger", layout.uploaderUID, layout.uploaderGID)
+	ledger, err := privateDirectoryAt(stage, "ledger", uploaderUID, uploaderGID)
 	if err != nil {
 		return ErrRecovery
 	}
@@ -464,7 +483,7 @@ func promote(layout installLayout, secret []byte) error {
 	if unix.Renameat2(int(stage.Fd()), "ledger", int(parent.Fd()), "ledger", unix.RENAME_NOREPLACE) != nil || stage.Sync() != nil || parent.Sync() != nil {
 		return ErrRecovery
 	}
-	promoted, err := privateDirectoryAt(parent, "ledger", layout.uploaderUID, layout.uploaderGID)
+	promoted, err := privateDirectoryAt(parent, "ledger", uploaderUID, uploaderGID)
 	if err != nil {
 		return ErrRecovery
 	}
