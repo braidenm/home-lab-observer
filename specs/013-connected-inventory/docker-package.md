@@ -1,6 +1,6 @@
 # Dormant installed Docker package implementation
 
-Status: implementation in progress after the separately reviewed process-only VM gate; no owner installation,
+Status: source implementation independently reviewed after the separately reviewed process-only VM gate; no owner installation,
 approved production enrollment writer or published rich release. This is part of one coherent ADR 025 package,
 not a separately activated contract. Numeric and process-only definitions/resources remain unchanged.
 
@@ -84,7 +84,7 @@ Local validation: Windows full Go tests/vet; Linux installer/enrollment/policy/r
 frame DAC fixtures; Node 80 contract tests, runtime snapshot and foundation policy. Synthetic startup negatives cover
 preexisting/replaced invocation, both audits, stale response/status, uncertain start, cancellation and publication
 failure. These do not prove an installed Docker service, real daemon fault isolation, reboot or owner/delegate use.
-Independent review, exact-head CI, actual reproducible package build, the complete disposable VM target, immutable
+Independent source review passed without remaining P0–P2 findings. Exact-head CI, actual reproducible package build, the complete disposable VM target, immutable
 artifact publication and hosted reader-first approval remain separate release gates. No public rich installer or
 owner-host activation is enabled by this source evidence.
 
