@@ -11,6 +11,13 @@
 - [x] Define and independently review the pure combined host/workload envelope without extending upload admission;
   local Windows full Go tests/vet pass, focused coverage 92.3%. Exact-head native/race CI is still required.
 - [ ] Approve and implement host-local opt-in policy plus rich acquisition/isolation profile.
+- [x] Independently review immutable separately enrolled rich policy and staged process-only proof (ADR 024); installed
+  implementation, receiver approval and actual owner rollout remain pending.
+- [x] Separate normalized container model from Engine acquisition; preserve aliases/JSON and prove no-Docker combined
+  projection dependency closure (prerequisite commit `aae918c`, awaiting its own governed integration).
+- [x] Implement unused profile-bound pure state machine with explicit rich-processes group guard and strict default
+  numeric APIs. Local TDD and independent implementation review pass; exact-head governed CI remains pending.
+- [ ] Add rich schema-v2 ledger with fixed 128-page/512 KiB DB and proved 2 MiB transactional envelope; no migration.
 - [ ] Implement/rehearse supported profile-changing migration or separately enrolled coexistence; preserve old connector.
 - [ ] Wire profile-aware bounded handoff/ledger/transport and receiver; no broad cap-only activation.
 - [ ] Add useful searchable workload/storage views and owner/delegate denial/revocation coverage.
@@ -39,3 +46,17 @@
 
 No release or canary item is complete because a contract exists. Keep evidence beside the corresponding task;
 identify unexecuted native/OS proofs rather than substituting a fake or skipped test.
+
+## Unused profile-bound state evidence (2026-10-29)
+
+- New profile tests first failed on absent APIs, then pass for the closed kinds, empty/terminal policy binding,
+  rich-only payloads above 16 KiB, default-numeric refusal, group/schema/privacy negatives, pre-transport recovery,
+  cached retry validation, exact bytes/sequence across machine restart, expiry/watermark and uncertain commits.
+- Go1.27.3 native Windows full tests and vet pass; uncached upload-state coverage is 95.6%. The compiled Linux amd64
+  pure state tests also pass under Ubuntu WSL. This is not Linux ledger, installed service or physical crash proof.
+- Node22.22.3 unchanged contracts pass 80/80, schema validation and foundation policy pass; no schema fixture, dependency
+  or lockfile changes. Existing `fast-uri` development-tool advisories are separately triaged, not silently upgraded.
+- Independent exact-byte implementation review found no P0-P2 findings; its real Linux race test passed in 9.2 seconds.
+  Exact-head governed CI remains required. Schema-v2 storage, policy files,
+  handoff, credentials, HTTP transport limits, server registration approval and runtime activation are not implemented
+  by this slice; existing installed constructors remain numeric.

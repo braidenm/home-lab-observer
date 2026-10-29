@@ -18,7 +18,7 @@ func TestUploaderDependencyClosure(t *testing.T) {
 		t.Fatal(err)
 	}
 	allowed := map[string]bool{}
-	for _, name := range strings.Fields("connectedcompat connectedcredential connectedprofile connectedactivation connectedruntime connectedstartup observation remoteprojection uploadstate enrollmentcoord ownerfs uploadledger ledgerwitness enrollmentstore platformtransport connectedenroll connectedidentity connectedstatus sharedhandoff uploadloop") {
+	for _, name := range strings.Fields("connectedcompat connectedcredential connectedprofile connectedactivation connectedruntime connectedstartup observation remoteprojection combinedprojection workloadprojection containerobs/model uploadstate enrollmentcoord ownerfs uploadledger ledgerwitness enrollmentstore platformtransport connectedenroll connectedidentity connectedstatus sharedhandoff uploadloop") {
 		allowed[name] = true
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

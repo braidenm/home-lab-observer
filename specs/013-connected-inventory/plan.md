@@ -19,7 +19,9 @@ field cannot establish that host data is visible or that the richer runtime is i
    quality/boundary tests. Add a corresponding backend parser/receiver contract before any producer wire activation.
    Preserve nullable container metrics instead of changing the legacy mandatory-numeric DTO. Exact first-slice fields,
    consent, quality mappings and budgets are in [the executable profile](workload-profile.md).
-3. **Opt-in rich runtime:** settle the installed observation profile and local policy in ADR 023. Reuse the collectors
+3. **Opt-in rich runtime:** use the separately enrolled immutable policy in [ADR 024](../../docs/adr/024-immutable-rich-installation-profiles.md).
+   First prove process-only acquisition without any Docker role/socket; this staging proof does not require an interim
+   owner-host entry. Hold the useful rich owner rollout until the process-and-Docker profile is accepted. Reuse the collectors
    behind a minimal, credential-free acquisition role. Any Docker-authority helper is separately mediated and confined;
    the network uploader receives only an allowlisted bounded document, never socket access or raw inspect data.
 4. **Delivery and migration:** apply profile-aware limits throughout handoff, ledger, transport and receiver; preserve
@@ -27,6 +29,9 @@ field cannot establish that host data is visible or that the richer runtime is i
    separately enrolled coexistence path. Do not bypass current installed admission to accelerate the canary.
    First define the unused [combined envelope contract](delivery-envelope.md), so host and workloads share one cycle
    and pending upload instead of introducing independent streams. This contract does not increase runtime limits.
+   Implement the [profile-bound state and storage contract](upload-profiles.md) in separate coherent slices: adapter-free
+   model prerequisite, unused pure state machine, then exact-profile durable ledger. Only afterward wire approved
+   enrollment/policy, bounded handoff/transport and receiver; no current worker silently selects the rich profile.
 5. **Useful dashboard:** host overview plus searchable/bounded Containers, Processes and Storage views. Keep empty,
    disabled, failed, truncated and stale explicit. Add Services and aggregate trends as separately coherent changes;
    don't make container visibility wait for an entire log/history implementation.
@@ -50,6 +55,7 @@ owner/delegate HTTP journey for integration. No second full Spring context, Dirt
 Use manual disposable fixtures for daemon faults and installed isolation, with only redacted fixed result records.
 
 Before activation, removing an unused contract/profile is a code rollback with no data migration. After activation,
-disable the new group/broker and keep credentials, pending bytes, sequence and unresolved action evidence intact.
+stop/fence new rich workers and keep credentials, pending bytes, sequence and unresolved action evidence intact.
+Group changes require ADR 024's confirmed revocation and separately enrolled identity, not a live policy toggle.
 Exact compatible code rollback and profile replacement must be proved; neither restore an old ledger nor assume
 changing a release-directory symlink is safe.

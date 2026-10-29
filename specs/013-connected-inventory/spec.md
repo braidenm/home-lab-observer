@@ -87,9 +87,11 @@ or a zero/unavailable panel is not delivery. Control has its own independent Spe
 
 ## Decision status
 
-No further product decision is needed for the read-only scope. Exact rich-profile sandbox, profile-changing migration,
-local consent persistence and bounded workload identity policy require independent architecture/security review before
-activation. Choosing those mechanisms is delegated engineering work, not permission to weaken accepted boundaries.
+No further product decision is needed for the read-only scope. ADR 024 selects immutable, separately enrolled rich
+policy and a staged process-only implementation proof. Exact installed sandbox, policy persistence, replacement and
+bounded workload identity implementation still require independent review and acceptance before activation. Choosing
+those mechanisms is delegated engineering work, not permission to weaken accepted boundaries.
 
 See [plan](plan.md), [tasks](tasks.md), [research](../../docs/architecture-research/008-connected-inventory.md),
-[ADR 023](../../docs/adr/023-opt-in-connected-inventory.md), and [the existing numeric contract](../012-connected-observation/spec.md).
+[ADR 023](../../docs/adr/023-opt-in-connected-inventory.md), [ADR 024](../../docs/adr/024-immutable-rich-installation-profiles.md),
+[the profile-bound state contract](upload-profiles.md), and [the existing numeric contract](../012-connected-observation/spec.md).
