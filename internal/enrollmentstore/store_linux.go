@@ -26,6 +26,7 @@ type Setup struct {
 	binding        uploadstate.Binding
 	profile        uploadstate.ProfileBinding
 	rich           RichProcessesPrincipals
+	docker         RichProcessesDockerPrincipals
 	step           int
 	failed, closed bool
 	hook           func(string) error
@@ -118,6 +119,19 @@ func OpenNewRichProcesses(ctx context.Context, directory string, principals Rich
 	return s, nil
 }
 
+func OpenNewRichProcessesDocker(ctx context.Context, directory string, principals RichProcessesDockerPrincipals) (*Setup, error) {
+	synthetic := uploadstate.Binding{ServerID: "srv_00000000000000000000000000000000", ConnectorID: "agent_00000000000000000000000000000000"}
+	if _, err := principals.profile(synthetic); err != nil {
+		return nil, ErrRecovery
+	}
+	s, err := open(ctx, directory, true)
+	if err != nil {
+		return nil, err
+	}
+	s.docker = principals
+	return s, nil
+}
+
 func (s *Setup) check(ctx context.Context, binding uploadstate.Binding, step int) error {
 	if s.closed || s.failed || ctx == nil || ctx.Err() != nil || !validBinding(binding) || s.step != step || (step != 0 && s.binding != binding) {
 		s.failed = true
@@ -159,8 +173,20 @@ func (s *Setup) Begin(ctx context.Context, binding uploadstate.Binding) error {
 		return err
 	}
 	s.binding = binding
+	if !s.rich.zero() && !s.docker.zero() {
+		s.failed = true
+		return ErrRecovery
+	}
 	if !s.rich.zero() {
 		profile, err := s.rich.profile(binding)
+		if err != nil {
+			s.failed = true
+			return ErrRecovery
+		}
+		s.profile = profile
+	}
+	if !s.docker.zero() {
+		profile, err := s.docker.profile(binding)
 		if err != nil {
 			s.failed = true
 			return ErrRecovery
@@ -261,6 +287,14 @@ func OpenReady(ctx context.Context, directory string, binding uploadstate.Bindin
 }
 
 func OpenReadyRichProcesses(ctx context.Context, directory string, binding uploadstate.Binding, principals RichProcessesPrincipals) (*Ready, error) {
+	profile, err := principals.profile(binding)
+	if err != nil {
+		return nil, ErrRecovery
+	}
+	return openReady(ctx, directory, binding, profile)
+}
+
+func OpenReadyRichProcessesDocker(ctx context.Context, directory string, binding uploadstate.Binding, principals RichProcessesDockerPrincipals) (*Ready, error) {
 	profile, err := principals.profile(binding)
 	if err != nil {
 		return nil, ErrRecovery

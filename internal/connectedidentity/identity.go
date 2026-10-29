@@ -47,6 +47,8 @@ func validRoleContract(role, contract string) bool {
 		return contract == "" || connectedcompat.Known(contract)
 	case "rich-collector", "rich-uploader", "rich-install":
 		return contract == connectedprofile.RichProcessesDefinitionSHA256
+	case "rich-docker-collector", "rich-docker-reader", "rich-docker-uploader", "rich-docker-install":
+		return contract == connectedprofile.RichProcessesDockerDefinitionSHA256
 	default:
 		return false
 	}

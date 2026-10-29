@@ -42,6 +42,8 @@
 - [ ] Independently review [source layer 1: implemented bounded data plane/storage](docker-data-plane.md), independently
   of later worker and installer source. Follow with dormant three-worker composition, then complete privileged package;
   retain one packaged acceptance target and keep activation off throughout these review-size splits.
+- [ ] Independently validate/review [source layer 2: dormant fixed workers](docker-worker-runtime.md), keeping complete
+  privileged installation and supported four-binary packaging in the final source layer; no release/approval inferred.
 
 - [x] Record delegated engineering decision and [concrete installation plan](installable-docker-observation.md);
   independently reviewed and merged in PR 138; Docker implementation/activation retain their remaining gates.
