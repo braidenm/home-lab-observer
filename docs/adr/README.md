@@ -24,5 +24,6 @@
 | [020](020-linux-installed-worker-composition.md) | Accepted for implementation | Bounded first installed Linux worker composition; release remains gated |
 | [021](021-connected-activation-evidence.md) | Accepted for implementation | Current invocation and same-process checks before connected upload |
 | [022](022-compatible-connected-code-transitions.md) | Proposed | Explicit verified code selection, used-ledger compatibility and one transition journal |
+| [023](023-opt-in-connected-inventory.md) | Proposed | Versioned opt-in workload egress and reviewed rich acquisition profile; numeric canary unchanged |
 
 Accepted ADRs are immutable except for status and supersession links. Material changes require a new ADR.

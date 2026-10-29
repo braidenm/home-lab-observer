@@ -84,6 +84,10 @@ not rich local snapshots. The published Linux beta composes isolated enrollment,
 the [operator guide](docs/connected-linux.md) covers its narrow host profile and manual lifecycle.
 Local process, container and log details do not become upload-eligible through enrollment.
 
+The next [rich connected inventory slice](specs/013-connected-inventory/spec.md) expands hosted process/container and
+system views through explicit local opt-in and a separately reviewed installed profile. It reuses the local collectors,
+does not silently widen the numeric beta, and keeps Docker actions separately permissioned under Spec 011.
+
 ### Native log metadata and history
 
 [Preview 3](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-preview.3) implements

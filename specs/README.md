@@ -14,5 +14,6 @@
 | [010 Kubernetes inventory](010-kubernetes-inventory/spec.md) | Deferred by owner | Bounded read-only Pods, container status and controller views |
 | [011 Docker container actions](011-container-actions/spec.md) | Proposed; action scope approved, architecture pending | Separately granted start, stop and restart with explicit broker authority and audit |
 | [012 Connected observation](012-connected-observation/spec.md) | Slice A implementation | Explicit numeric-host projection before isolated authenticated delivery |
+| [013 Rich connected inventory](013-connected-inventory/spec.md) | Pure contract local; runtime pending | Opt-in process/container/system views with explicit egress, isolation and migration gates |
 
 Each specification owns its requirements, implementation plan, tasks, acceptance evidence, and follow-up decisions. Work that changes behavior must update the relevant specification before implementation.
