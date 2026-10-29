@@ -2,6 +2,10 @@
 
 ## Outcome and scope
 
+Current gate, 2026-10-29: exact packaged first-boot/reboot acceptance **passed** for source
+`24153fa278eea907cb0987ae96c26137c9aae909`; see the [canonical evidence and limits](../../docs/acceptance/connected-rich-processes-2026-10-29.md).
+Historical attempt sections below retain their failed/pending state at that attempt; they do not supersede this result.
+
 Deliver one complete, VM-installable `RICH_PROCESSES_V1` package, rather than more unbound libraries. This is an
 intermediate proof for the useful process-and-Docker release. Do not install it on the owner's host, create an interim
 production server entry, or expose a production installer. Numeric installation and remote admission remain unchanged.
@@ -123,7 +127,7 @@ the fixture compares entries without treating display order as authority.
 They do not constitute another VM run. New exact-source package/receiver/harness pins, independent review and an actual
 packaged VM pass remain mandatory before acceptance; no owner installation or public rich release is authorized here.
 
-## Corrected-package reboot: fixture TTL failure, third run pending (2026-10-29)
+## Corrected-package reboot: fixture TTL failure (historical, 2026-10-29)
 
 The corrected package, source `013747e0e58f73f74fd671ec6a967d0c911557d0`, passed its first boot. Its second boot
 reported `RICH_REBOOT`; the postboot oneshot's deliberate
@@ -140,6 +144,7 @@ service-start failure. The copied journal also contains a late network-online wa
 
 The fixture-only correction removes that no-NIC wait before reboot and adds the bounded real-clock/pending-age gates
 above. It forwards only allowlisted rich failure markers directly to the serial device, never raw stderr, tracebacks,
-observations or credentials. Focused synthetic tests do not substitute for a third packaged run: exact new source and
-harness pins, independent review and the full reboot/exact-retry acceptance remain pending. Docker implementation and
-owner rollout remain blocked until that gate passes; no production upload, ledger, TTL or service unit changes here.
+observations or credentials. At this attempt, focused synthetic tests did not substitute for a third packaged run;
+Docker implementation and owner rollout remained blocked. The subsequent exact-source run passed as recorded above.
+Owner rollout, Docker acceptance and publication remain separate gates. No production upload, ledger, TTL or service
+unit changed in this fixture correction.

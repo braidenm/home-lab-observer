@@ -85,3 +85,10 @@ disable new admissions, stop/fence workers and retain/revoke identity through su
 
 This decision extends [ADR 024](024-immutable-rich-installation-profiles.md); it does not rewrite accepted numeric,
 process-only or [local read-only container](006-specialized-container-read-model.md) contracts.
+
+## Dated gate update — 2026-10-29
+
+The prerequisite process-only packaged VM gate subsequently passed at exact source
+`24153fa278eea907cb0987ae96c26137c9aae909`; [input pins, independent result and limits](../acceptance/connected-rich-processes-2026-10-29.md).
+This permits implementation under the decision above. It does not accept Docker, public release, owner rollout or controls;
+the earlier decision-time pending language is historical, not evidence that those remaining gates passed.
