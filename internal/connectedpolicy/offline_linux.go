@@ -48,6 +48,8 @@ func inspectTransient(ctx context.Context, unit string, fields []string, validat
 	object := "/org/freedesktop/systemd1/unit/home_2dlab_2dobserver_2dconnected_2denrollment_2eservice"
 	if unit == richEnrollmentUnit {
 		object = "/org/freedesktop/systemd1/unit/home_2dlab_2dobserver_2dconnected_2drich_2denrollment_2eservice"
+	} else if unit == dockerEnrollmentUnit {
+		object = "/org/freedesktop/systemd1/unit/home_2dlab_2dobserver_2dconnected_2drich_2ddocker_2denrollment_2eservice"
 	} else if unit != enrollmentUnit {
 		return ErrUnsafe
 	}

@@ -23,6 +23,7 @@ type activationOperations struct {
 	configBytes   func(connectedprofile.Config) ([]byte, error)
 	inspect       func(context.Context, string) (workerInstance, error)
 	service       func(context.Context, string, string) error
+	started       func(string, workerInstance)
 	audit         func(context.Context, int, string) (connectedprocess.Identity, error)
 	pin           func(uint32) (activationRecords, error)
 	clearResponse func(connectedprofile.Config) error

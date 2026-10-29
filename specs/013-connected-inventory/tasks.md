@@ -45,6 +45,8 @@
   after all18 exact-head checks passed; this is source-only, not installed acceptance.
 - [ ] Independently validate/review [source layer 2: dormant fixed workers](docker-worker-runtime.md), keeping complete
   privileged installation and supported four-binary packaging in the final source layer; no release/approval inferred.
+- [ ] Independently validate/review [source layer 3: complete privileged package](docker-package.md), preserving the
+  exact old profiles/resources and actual source/artifact/VM/hosted/owner gates before release or enrollment exposure.
 
 - [x] Record delegated engineering decision and [concrete installation plan](installable-docker-observation.md);
   independently reviewed and merged in PR 138; Docker implementation/activation retain their remaining gates.

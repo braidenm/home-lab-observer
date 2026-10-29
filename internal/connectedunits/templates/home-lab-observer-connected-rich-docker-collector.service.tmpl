@@ -1,0 +1,57 @@
+[Unit]
+Description=Home Lab Observer connected process and Docker frame collector
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+[Service]
+Type=exec
+User={{.CollectorUID}}
+Group={{.SharedGID}}
+SupplementaryGroups={{.FrameGID}}
+ExecStart=/opt/home-lab-observer-connected-rich/releases/{{.ArtifactSHA256}}/observer-connected-rich-docker-collector
+WorkingDirectory=/
+UMask=0077
+StandardInput=null
+StandardOutput=null
+StandardError=null
+Environment=GODEBUG=netdns=go
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateNetwork=yes
+PrivateIPC=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectProc=default
+ProcSubset=all
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=~@mount @module @raw-io @reboot @swap @ipc ptrace process_vm_readv process_vm_writev kcmp perf_event_open bpf userfaultfd socket socketpair io_uring_setup io_uring_enter io_uring_register mknod mknodat
+SystemCallErrorNumber=EPERM
+NoExecPaths=/
+ExecPaths=/opt/home-lab-observer-connected-rich/releases/{{.ArtifactSHA256}}/observer-connected-rich-docker-collector
+InaccessiblePaths=-/run/docker.sock -/var/run/docker.sock -/run/containerd/containerd.sock -/etc/home-lab-observer-connected-rich/credentials -/var/lib/home-lab-observer-connected-rich/ledger -/var/lib/home-lab-observer-connected-rich/uploader-root -/var/lib/home-lab-observer-connected-rich/reader-root -/var/lib/home-lab-observer-connected-rich/enrollment -/var/lib/home-lab-observer-connected-rich/uploader-status -/var/lib/home-lab-observer-connected-rich/reader-status -/etc/home-lab-observer-connected/credentials -/var/lib/home-lab-observer-connected/ledger -/var/lib/home-lab-observer-connected/uploader-root -/var/lib/home-lab-observer-connected/enrollment -/var/lib/home-lab-observer-connected/uploader-status -/run/home-lab-observer-connected-rich/activation -/run/home-lab-observer-connected-rich/reader-activation
+ReadOnlyPaths=/etc/home-lab-observer-connected-rich/installed.json /etc/home-lab-observer-connected-rich/collection-policy.json /var/lib/home-lab-observer-connected-rich/docker-frame
+ReadWritePaths=/var/lib/home-lab-observer-connected-rich/handoff /var/lib/home-lab-observer-connected-rich/collector-status
+LimitCORE=0
+MemoryMax=256M
+MemoryPressureWatch=skip
+TasksMax=64
+TimeoutStopSec=15s
+KillMode=control-group
+SendSIGKILL=yes
+Restart=no
+FileDescriptorStoreMax=0
+
+[Install]
+WantedBy=multi-user.target

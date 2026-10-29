@@ -38,7 +38,14 @@ func validateOnline(data []byte, e OnlineExpectation) error {
 
 func validateOnlineForProfile(data []byte, e OnlineExpectation, rich bool) error {
 	want, err := onlineExpectedForProfile(e, rich)
-	if err != nil || len(data) == 0 || len(data) > maxOutput || strings.ContainsAny(string(data), "\x00\r") {
+	if err != nil {
+		return ErrUnsafe
+	}
+	return validateOnlineAgainst(data, want)
+}
+
+func validateOnlineAgainst(data []byte, want map[string]string) error {
+	if len(data) == 0 || len(data) > maxOutput || strings.ContainsAny(string(data), "\x00\r") {
 		return ErrUnsafe
 	}
 	actual := make(map[string]string, len(onlineFields))

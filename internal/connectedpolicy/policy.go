@@ -100,7 +100,8 @@ func expectedPrefixes(addresses []string) (map[netip.Prefix]bool, error) {
 
 func ownedUnit(name string) bool {
 	switch name {
-	case "home-lab-observer-connected-uploader.service", enrollmentUnit, "home-lab-observer-connected-rich-uploader.service", richEnrollmentUnit:
+	case "home-lab-observer-connected-uploader.service", enrollmentUnit, "home-lab-observer-connected-rich-uploader.service", richEnrollmentUnit,
+		"home-lab-observer-connected-rich-docker-uploader.service", dockerEnrollmentUnit:
 		return true
 	}
 	return false

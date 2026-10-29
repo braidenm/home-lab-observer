@@ -155,6 +155,9 @@ func runEnrollmentForPair(ctx context.Context, properties []string, executable, 
 	if pair == richProcessesPair {
 		wantExecutable = "/bin/observer-connected-rich-uploader"
 	}
+	if pair == richProcessesDockerPair {
+		wantExecutable = "/bin/observer-connected-rich-docker-uploader"
+	}
 	if !validPair || executable != wantExecutable || (mode != "enroll" && mode != "validate-enrollment" && mode != "validate-ledger") || len(properties) > 64 || len(input) > 512 {
 		return nil, ErrUnsafe
 	}
@@ -198,14 +201,18 @@ func runEnrollmentForPair(ctx context.Context, properties []string, executable, 
 	if err == nil {
 		if mode == "validate-ledger" || mode == "validate-enrollment" {
 			expected := connectedpolicy.OfflineExpectation{UploaderUID: policy.UploaderUID, UploaderGID: policy.UploaderGID, SharedGID: policy.SharedGID, ArtifactSHA256: policy.ArtifactSHA256, Mode: mode}
-			if pair == richProcessesPair {
+			if pair == richProcessesDockerPair {
+				err = connectedpolicy.ValidateRichProcessesDockerOffline(child, enrollmentUnit, expected)
+			} else if pair == richProcessesPair {
 				err = connectedpolicy.ValidateRichProcessesOffline(child, enrollmentUnit, expected)
 			} else {
 				err = connectedpolicy.ValidateOffline(child, enrollmentUnit, expected)
 			}
 		} else {
 			expected := connectedpolicy.OnlineExpectation{UploaderUID: policy.UploaderUID, UploaderGID: policy.UploaderGID, SharedGID: policy.SharedGID, ArtifactSHA256: policy.ArtifactSHA256}
-			if pair == richProcessesPair {
+			if pair == richProcessesDockerPair {
+				err = connectedpolicy.ValidateRichProcessesDockerOnline(child, enrollmentUnit, expected)
+			} else if pair == richProcessesPair {
 				err = connectedpolicy.ValidateRichProcessesOnline(child, enrollmentUnit, expected)
 			} else {
 				err = connectedpolicy.ValidateOnline(child, enrollmentUnit, expected)

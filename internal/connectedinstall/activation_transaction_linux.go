@@ -80,6 +80,9 @@ func activateStoppedWith(parent context.Context, c connectedprofile.Config, ops 
 		return err
 	}
 	uploader := owned[uploaderUnit]
+	if ops.started != nil {
+		ops.started(uploaderUnit, uploader)
+	}
 	phase = "UPLOADER_AUDIT"
 	identity, err := ops.audit(ctx, uploader.PID, ops.pair.uploaderExecutable(c.ArtifactSHA256))
 	if err != nil || identity.PID != uploader.PID || !ops.sameWorker(ctx, uploaderUnit, uploader) {
@@ -129,6 +132,9 @@ func activateStoppedWith(parent context.Context, c connectedprofile.Config, ops 
 		return err
 	}
 	collector := owned[collectorUnit]
+	if ops.started != nil {
+		ops.started(collectorUnit, collector)
+	}
 	phase = "COLLECTOR_READY"
 	for {
 		if !ops.sameWorker(ctx, collectorUnit, collector) || !ops.sameWorker(ctx, uploaderUnit, uploader) {
@@ -214,7 +220,7 @@ func (ops activationOperations) encodeConfig(c connectedprofile.Config) ([]byte,
 	if ops.pair == numericPair && ops.configBytes == nil {
 		return connectedprofile.Encode(c)
 	}
-	if ops.pair == richProcessesPair && ops.configBytes != nil {
+	if (ops.pair == richProcessesPair || ops.pair == richProcessesDockerPair) && ops.configBytes != nil {
 		return ops.configBytes(c)
 	}
 	return nil, ErrUnsafe
