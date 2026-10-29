@@ -1,6 +1,6 @@
 # Dormant fixed Docker workers — source layer 2 of 3
 
-Date: 2026-10-30. Status: implemented locally; independent exact-layer review and exact-head CI pending.
+Date: 2026-10-29. Status: implemented and independently reviewed GO; exact rebased-head CI pending.
 
 ## Outcome and boundary
 
@@ -43,7 +43,9 @@ server reader-before-writer, immutable release or owner/delegate acceptance.
 ## Local source evidence
 
 - The 53 implementation/test/workflow files are exact Git blobs from reviewed full-composition source
-  `70cadaf9b6bfcfd8542291385571ffa50ef8ce5b`, stacked over source layer1 `b6e6054e6ff350dd7517a34980628799fbbc5c1a`.
+  `70cadaf9b6bfcfd8542291385571ffa50ef8ce5b`, initially reviewed over layer1 `b6e6054e6ff350dd7517a34980628799fbbc5c1a`.
+  The publication branch is based on its merged main `15e95fde7528ba76da31c09502564a305208f4ef` (PR141), retaining
+  the same worker blobs and the main branch's acceptance records.
   No installer, unit/resource, bundle/bootstrap or packer source changed; no build reference targets a missing command.
 - Go1.27.3 Windows and Ubuntu WSL full `go test -p=2 ./...`/`go vet -p=2 ./...` pass, including the actual Linux command,
   dependency-closure, namespace and reader barrier tests. Focused Linux race checks cover the eight changed internal
@@ -55,3 +57,7 @@ server reader-before-writer, immutable release or owner/delegate acceptance.
 
 No current worker, installation, service or public release selects this dormant runtime through a supported entry
 point. Exact-layer review/CI and every installed/VM/release/hosted/owner gate remain separate.
+
+Independent layer review verified all55 code/test/workflow/ADR blobs match the
+reviewed full composition, with no P0–P2. The planned date correction and mechanical
+rebase do not change implementation bytes; current-head CI remains required.
