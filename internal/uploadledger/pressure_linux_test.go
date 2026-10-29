@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/braidenm/home-lab-observer/internal/uploadstate"
 )
 
 // This explicitly opted-in test never fills a host filesystem. The subprocess
@@ -35,11 +37,15 @@ func TestStoragePressureFixture(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, executable, "-test.run=^TestStoragePressureFixture$", "-test.count=1")
-	cmd.Env = []string{"HLO_LEDGER_PRESSURE=1", "HLO_LEDGER_PRESSURE_CHILD=1", "TMPDIR=/tmp"}
-	cmd.SysProcAttr = &syscall.SysProcAttr{Cloneflags: unix.CLONE_NEWNS, Pdeathsig: unix.SIGKILL}
-	if cmd.Run() != nil {
-		t.Fatal("isolated storage-pressure fixture failed")
+	for _, profile := range []string{"numeric", "rich"} {
+		t.Run(profile, func(t *testing.T) {
+			cmd := exec.CommandContext(ctx, executable, "-test.run=^TestStoragePressureFixture$", "-test.count=1")
+			cmd.Env = []string{"HLO_LEDGER_PRESSURE=1", "HLO_LEDGER_PRESSURE_CHILD=1", "HLO_LEDGER_PRESSURE_PROFILE=" + profile, "TMPDIR=/tmp"}
+			cmd.SysProcAttr = &syscall.SysProcAttr{Cloneflags: unix.CLONE_NEWNS, Pdeathsig: unix.SIGKILL}
+			if cmd.Run() != nil {
+				t.Fatal("isolated storage-pressure fixture failed")
+			}
+		})
 	}
 }
 
@@ -67,12 +73,21 @@ func runStoragePressure(t *testing.T) {
 	if os.Mkdir(dir, 0o700) != nil {
 		t.Fatal("fixture directory creation failed")
 	}
-	ledger, err := Provision(context.Background(), dir, binding)
+	profile := uploadstate.ProfileBinding{}
+	first, next := pending(t, 1, 0), pending(t, 2, time.Second)
+	switch os.Getenv("HLO_LEDGER_PRESSURE_PROFILE") {
+	case "numeric":
+	case "rich":
+		profile = rich
+		first, next = richPending(t, 1, 0), richPending(t, 2, time.Second)
+	default:
+		t.Fatal("unknown pressure fixture profile")
+	}
+	ledger, err := ProvisionForProfile(context.Background(), dir, binding, profile)
 	if err != nil {
 		t.Fatal("fixture ledger provisioning failed")
 	}
 	defer ledger.Close()
-	first := pending(t, 1, 0)
 	if ledger.Commit(context.Background(), load(t, ledger), first) != nil {
 		t.Fatal("fixture initial admission failed")
 	}
@@ -93,7 +108,7 @@ func runStoragePressure(t *testing.T) {
 	if fill.Close() != nil || !full {
 		t.Fatal("fixture did not establish kernel ENOSPC")
 	}
-	if !errors.Is(ledger.Commit(context.Background(), first, pending(t, 2, time.Second)), ErrRecovery) {
+	if !errors.Is(ledger.Commit(context.Background(), first, next), ErrRecovery) {
 		t.Fatal("full filesystem commit was not refused")
 	}
 	if _, err := ledger.Load(context.Background()); !errors.Is(err, ErrRecovery) {
@@ -106,7 +121,7 @@ func runStoragePressure(t *testing.T) {
 	if ledger.Close() != nil {
 		t.Fatal("fixture ledger close failed")
 	}
-	reopened, err := OpenExisting(context.Background(), dir, binding)
+	reopened, err := OpenExistingForProfile(context.Background(), dir, binding, profile)
 	if err != nil {
 		t.Fatal("fixture ledger recovery failed")
 	}

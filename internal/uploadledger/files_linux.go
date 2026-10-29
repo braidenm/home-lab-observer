@@ -4,6 +4,7 @@ package uploadledger
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"io"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/braidenm/home-lab-observer/internal/ownerfs"
+	"github.com/braidenm/home-lab-observer/internal/uploadstate"
 )
 
 // Directory ancestry is checked without changing existing permissions. A sticky
@@ -53,6 +55,11 @@ func privateFile(info os.FileInfo, limit int64) bool {
 
 // Uses metadata only; never opens/closes the database while SQLite owns it.
 func checkFiles(dir string, requireDatabase bool) error {
+	return checkFilesForProfile(dir, requireDatabase, uploadstate.ProfileBinding{})
+}
+
+func checkFilesForProfile(dir string, requireDatabase bool, profile uploadstate.ProfileBinding) error {
+	budget := limits(profile)
 	f, err := os.Open(dir)
 	if err != nil {
 		return ErrUnsafe
@@ -68,10 +75,10 @@ func checkFiles(dir string, requireDatabase bool) error {
 	var total int64
 	var database, lock bool
 	for _, entry := range entries {
-		limit := int64(maxTotalBytes)
+		limit := budget.totalBytes
 		switch entry.Name() {
 		case databaseName:
-			limit = maxDatabaseBytes
+			limit = budget.databaseBytes
 			database = true
 		case lockName:
 			limit = 0
@@ -86,7 +93,7 @@ func checkFiles(dir string, requireDatabase bool) error {
 		}
 		total += info.Size()
 	}
-	if !lock || (requireDatabase && !database) || total > maxTotalBytes {
+	if !lock || (requireDatabase && !database) || total > budget.totalBytes {
 		return ErrRecovery
 	}
 	return nil
@@ -128,15 +135,15 @@ func createDatabase(dir string) error {
 }
 
 // Called only after acquiring the lease and before opening any SQL connection.
-// Refuse foreign page/journal formats before SQLite could migrate or create sidecars.
-func checkHeader(dir string) error {
+// Refuse foreign page/journal/profile headers before SQLite can recover or write.
+func checkHeader(dir string, profile uploadstate.ProfileBinding) error {
 	f, err := os.OpenFile(filepath.Join(dir, databaseName), os.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
 	if err != nil {
 		return ErrRecovery
 	}
 	defer f.Close()
 	info, err := f.Stat()
-	if err != nil || !privateFile(info, maxDatabaseBytes) {
+	if err != nil || !privateFile(info, limits(profile).databaseBytes) {
 		return ErrUnsafe
 	}
 	var header [100]byte
@@ -144,6 +151,9 @@ func checkHeader(dir string) error {
 		return ErrRecovery
 	}
 	if !bytes.Equal(header[:16], []byte("SQLite format 3\x00")) || header[16] != 16 || header[17] != 0 || header[18] != 1 || header[19] != 1 {
+		return ErrRecovery
+	}
+	if binary.BigEndian.Uint32(header[60:64]) != uint32(limits(profile).version) || binary.BigEndian.Uint32(header[68:72]) != 1213156420 {
 		return ErrRecovery
 	}
 	return nil

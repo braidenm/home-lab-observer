@@ -17,7 +17,8 @@
   projection dependency closure (prerequisite commit `aae918c`, awaiting its own governed integration).
 - [x] Implement unused profile-bound pure state machine with explicit rich-processes group guard and strict default
   numeric APIs. Local TDD and independent implementation review pass; exact-head governed CI remains pending.
-- [ ] Add rich schema-v2 ledger with fixed 128-page/512 KiB DB and proved 2 MiB transactional envelope; no migration.
+- [x] Implement unused rich schema-v2 ledger with fixed 128-page/512 KiB DB and 2 MiB transactional envelope; no
+  migration. Local real-SQLite/crash/ENOSPC proof passes; independent review and exact-head CI remain pending.
 - [ ] Implement/rehearse supported profile-changing migration or separately enrolled coexistence; preserve old connector.
 - [ ] Wire profile-aware bounded handoff/ledger/transport and receiver; no broad cap-only activation.
 - [ ] Add useful searchable workload/storage views and owner/delegate denial/revocation coverage.
@@ -60,3 +61,23 @@ identify unexecuted native/OS proofs rather than substituting a fake or skipped 
   Exact-head governed CI remains required. Schema-v2 storage, policy files,
   handoff, credentials, HTTP transport limits, server registration approval and runtime activation are not implemented
   by this slice; existing installed constructors remain numeric.
+
+## Unused Linux ledger evidence (2026-10-29)
+
+- New profile tests first failed on absent storage APIs, then pass against the shared real SQLite adapter. Numeric
+  schema-v1 SQL and existing tests remain unchanged; explicit rich APIs use schema v2, 128 pages and exact persisted
+  kind/policy binding. Invalid profiles refuse before creating the lock or database.
+- Native Linux tests prove a 131,827-byte escaped/max-field section-budget fixture through persistence, reopen,
+  byte-identical machine retry/ack, expiry and maximum signed sequence; policy/group/source/digest/time/CAS mismatches
+  fail closed. Before/after-commit subprocess death and hot-journal recovery preserve complete old-or-new state.
+- Cross-kind hot-journal attempts leave both DB and journal bytes unchanged before correct-kind recovery. Matching-kind
+  recovery remains SQLite-owned; this does not promise bytewise non-mutation after later logical binding refusal.
+- SQL-only 294,912-byte BLOB capacity and 294,913-byte refusal are distinct from canonical wire acceptance. Repeated
+  bounded transactions and full-ceiling BLOB replacement sample 603,208 bytes DB+journal before/after commit; observed
+  per-file maxima also sum to 603,208 bytes, below 2 MiB. The source-bound page/journal argument remains necessary
+  for transient COMMIT intervals not sampled by hooks; `journal_size_limit` is not used as an active quota.
+- The explicit privileged ENOSPC fixture passes for numeric and rich in separate WSL mount namespaces, each using
+  only its own 1 MiB tmpfs. It neither fills a host filesystem nor proves persistent-disk power-loss behavior.
+- Native Windows full Go tests/vet, Node80/schema/foundation and diff hygiene pass. Real Linux Go1.27.3 race tests
+  pass for uploadledger and uploadstate; independent review and exact-head governed CI remain pending.
+- No runtime, enrollment, policy-file, HTTP, handoff, witness, installer or credential admission is activated here.

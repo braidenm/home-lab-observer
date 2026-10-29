@@ -1,6 +1,6 @@
 # Profile-bound upload state and Linux ledger
 
-Status: Pure state-machine slice implemented locally, 2026-10-29; exact-head CI, ledger and installed activation pending.
+Status: Pure state machine and unused Linux ledger implemented locally, 2026-10-29; exact-head CI and activation pending.
 Decision: [ADR 024](../../docs/adr/024-immutable-rich-installation-profiles.md).
 Build on the unused [combined envelope](delivery-envelope.md), not a second upload stream.
 
@@ -53,12 +53,20 @@ legacy/native-compatible wire validator, not a claim that old registrations have
 `LEGACY_COMPATIBLE` and `NUMERIC_HOST_V1` remain distinct server-side policies, not newly inferred Go kinds.
 
 Each Step validates loaded/cached records before terminal/expiry decisions, then revalidates before Send. Every Commit
-validates both bound records before passing detached values to the existing Ledger CAS interface. No existing ledger
-or transport constructor selects the rich kind; numeric persistence and HTTP limits remain unchanged in this PR.
+validates both bound records before passing detached values to the existing Ledger CAS interface. No existing installed
+ledger or transport caller selects the rich kind; default numeric persistence and HTTP limits remain unchanged.
+
+### Implemented unused Linux storage API
+
+`ProvisionForProfile(ctx, directory, binding, profile)` and `OpenExistingForProfile(ctx, directory, binding, profile)`
+select only the same closed code-owned kinds. Default `Provision`/`OpenExisting` supply zero numeric binding. Invalid
+profiles are refused before filesystem mutation. Both reuse the existing adapter, lifetime lock, transaction and
+recovery latch. Non-Linux profile-aware APIs return unsupported without touching storage. This is not installer,
+enrollment, handoff, transport, ledger-witness or worker activation.
 
 ## Exact per-kind storage budgets
 
-| Property | Numeric, unchanged | Rich-processes, proposed |
+| Property | Numeric, unchanged | Rich-processes, unused library |
 | --- | --- | --- |
 | Pending-body ceiling | 16,384 bytes | 294,912 bytes (288 KiB) |
 | Database schema/user_version | Exact existing v1 | Separate exact v2 |
@@ -102,17 +110,17 @@ Measure DB/journal metadata during transactions without reopening the database w
 
 - [x] TDD closed-kind/default-numeric constructors and record validation, including empty and terminal bindings;
   local proof only, independent implementation review and exact-head CI pending.
-- [ ] Preserve numeric schema SQL, fixtures, exact retry/sequence semantics, 64-page budget and unchanged default callers.
-- [ ] Rich process-only canonical roundtrip above 16 KiB; reject wrong group, source, digest, timestamp, unknown kind,
+- [x] Preserve numeric schema SQL, fixtures, exact retry/sequence semantics, 64-page budget and unchanged default callers.
+- [x] Rich process-only canonical roundtrip above 16 KiB; reject wrong group, source, digest, timestamp, unknown kind,
   numeric body in rich state, rich body in numeric state, malformed/oversized bytes and attempted profile/digest mutation.
-- [ ] Largest valid rich body persists, closes/reopens, retries with identical bytes/sequence/digest and acknowledges;
+- [x] Maximum-field, section-byte-budget rich fixture persists, closes/reopens, retries with identical bytes/sequence/digest and acknowledges;
   ack/expiry/restart never lowers watermark or reuses retired sequence. Include a pending maximum signed sequence.
-- [ ] Strict SQL bounds, exact v2 schema/profile metadata and allocation-before-validation negatives; no migration/adoption.
-- [ ] Cross-kind opens refuse before SQLite, with byte snapshots of DB and validated hot journal unchanged; same-kind
+- [x] Strict SQL bounds, exact v2 schema/profile metadata and allocation-before-validation negatives; no migration/adoption.
+- [x] Cross-kind opens refuse before SQLite, with byte snapshots of DB and validated hot journal unchanged; same-kind
   hot-journal recovery remains owned by SQLite and restores complete old-or-new state.
-- [ ] Shared real SQLite tests cover full-record CAS/lock contention, detached records, cancellation/commit uncertainty,
+- [x] Shared real SQLite tests cover full-record CAS/lock contention, detached records, cancellation/commit uncertainty,
   process death before/after commit, repeated maximum-profile transactions and measured total under 2 MiB.
-- [ ] Run the existing opt-in disposable ENOSPC fixture for the rich kind; document execution separately from ordinary
+- [x] Run the existing opt-in disposable ENOSPC fixture for the rich kind; document execution separately from ordinary
   unit failures. Physical power-loss and packaged installed acceptance remain later explicit VM release gates.
 - [ ] Native Windows full Go tests/vet and exact-head Linux/race CI; run real Linux ledger tests rather than treating
   non-Linux unsupported stubs as persistence proof. Existing Node numeric/workload/combined fixtures stay unchanged.
@@ -125,3 +133,7 @@ Ubuntu packaged isolation/resource/crash acceptance; later Docker-only mediation
 and ordinary recipient read/revoke/deny journey. No extra production server entry is required for process-only staging.
 Replacement must follow ADR 024's stop/join/fence plus confirmed revocation before a new identity; uncertainty leaves
 old workers stopped and retained state outside new binds. Numeric canary and legacy connectors remain independent.
+Permit at most one bounded retired rich slot; refuse another replacement until explicit reviewed removal frees it.
+Compatible artifact refresh must keep the exact collection-definition digest, not merely the same friendly profile
+name. A future distinct `RICH_PROCESSES_DOCKER_V1` approval requires its own accepted implementation/VM proof; it is
+not a supported kind in this library and must not be enabled by interpreting the general combined wire profile.

@@ -18,6 +18,12 @@ func TestUnsupportedDoesNotTouchDirectory(t *testing.T) {
 	if _, err := OpenExisting(context.Background(), dir, uploadstate.Binding{}); err != ErrUnsupported {
 		t.Fatal("unsupported open")
 	}
+	if _, err := ProvisionForProfile(context.Background(), dir, uploadstate.Binding{}, uploadstate.ProfileBinding{}); err != ErrUnsupported {
+		t.Fatal("unsupported profile provision")
+	}
+	if _, err := OpenExistingForProfile(context.Background(), dir, uploadstate.Binding{}, uploadstate.ProfileBinding{}); err != ErrUnsupported {
+		t.Fatal("unsupported profile open")
+	}
 	entries, err := os.ReadDir(dir)
 	if err != nil || len(entries) != 0 {
 		t.Fatal("unsupported platform touched storage")

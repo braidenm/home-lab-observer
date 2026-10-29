@@ -16,6 +16,12 @@ func Provision(context.Context, string, uploadstate.Binding) (*Ledger, error) {
 func OpenExisting(context.Context, string, uploadstate.Binding) (*Ledger, error) {
 	return nil, ErrUnsupported
 }
+func ProvisionForProfile(context.Context, string, uploadstate.Binding, uploadstate.ProfileBinding) (*Ledger, error) {
+	return nil, ErrUnsupported
+}
+func OpenExistingForProfile(context.Context, string, uploadstate.Binding, uploadstate.ProfileBinding) (*Ledger, error) {
+	return nil, ErrUnsupported
+}
 func (*Ledger) Load(context.Context) (uploadstate.Record, error) {
 	return uploadstate.Record{}, ErrUnsupported
 }
