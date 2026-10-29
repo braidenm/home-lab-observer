@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Fixed synthetic process proof; runs only inside the admitted no-NIC guest."""
 import ctypes
+from datetime import datetime
 import grp
 import hashlib
 import json
 import os
 from pathlib import Path
 import pwd
+import re
 import signal
 import sqlite3
 import subprocess
@@ -24,7 +26,7 @@ CONFIG = Path("/etc/home-lab-observer-connected-rich")
 STATE = Path("/var/lib/home-lab-observer-connected-rich")
 SERVER = "srv_" + "b" * 32
 UNITS = ("home-lab-observer-connected-rich-collector.service", "home-lab-observer-connected-rich-uploader.service")
-FAILURES = frozenset(("INPUT", "PACKAGE", "INSTALL", "STOPPED", "IDENTITY", "PROCESSES", "ISOLATION", "PENDING", "TAMPER", "RETRY", "BOUNDS", "NUMERIC", "RECEIVER"))
+FAILURES = frozenset(("INPUT", "PACKAGE", "INSTALL", "STOPPED", "IDENTITY", "PROCESSES", "ISOLATION", "PENDING", "TAMPER", "RETRY", "RETRY_WINDOW", "REBOOT_LAYOUT", "BOUNDS", "NUMERIC", "RECEIVER"))
 
 
 def need(value, code):
@@ -117,9 +119,48 @@ def pending():
     database = STATE / "ledger/upload.sqlite"
     need(database.is_file(), "PENDING")
     with sqlite3.connect("file:" + str(database) + "?mode=ro", uri=True) as connection:
-        row = connection.execute("SELECT pending_sequence,pending_body,pending_digest,watermark,profile_kind,policy_digest FROM upload_record WHERE singleton=1").fetchone()
+        row = connection.execute("SELECT pending_sequence,pending_body,pending_digest,watermark,profile_kind,policy_digest,pending_at FROM upload_record WHERE singleton=1").fetchone()
     need(row is not None and row[0] is not None and 16384 < len(row[1]) <= 294912 and hashlib.sha256(row[1]).digest() == row[2] and row[4] == 1, "PENDING")
-    return {"sequence": row[0], "digest": row[2].hex(), "size": len(row[1]), "watermark": row[3], "policy": row[5].hex()}
+    return {"sequence": row[0], "digest": row[2].hex(), "size": len(row[1]), "watermark": row[3], "policy": row[5].hex(), "collected_at": row[6]}
+
+
+def prepare_reboot():
+    # This guest has no network by construction; waiting for a non-loopback
+    # interface would consume the real pending TTL. Never stop a network daemon.
+    need({v.name for v in Path("/sys/class/net").iterdir()} == {"lo"}, "REBOOT_LAYOUT")
+    for family in ("-4", "-6"):
+        need(preflight_probe.command("/usr/sbin/ip", family, "route", "show", "default", limit=1024) == b"", "REBOOT_LAYOUT")
+    need(assert_guest.unit_properties("NetworkManager-wait-online.service", ("LoadState",)) == {"LoadState": "not-found"}, "REBOOT_LAYOUT")
+    need(preflight_probe.command("/usr/bin/systemctl", "list-units", "--all", "--no-legend", "--plain", "--", "systemd-networkd-wait-online@*.service", limit=4096) == b"", "REBOOT_LAYOUT")
+    unit = "systemd-networkd-wait-online.service"
+    fields = ("Id", "LoadState", "FragmentPath", "DropInPaths", "NeedDaemonReload", "ActiveState", "MainPID")
+    values = assert_guest.unit_properties(unit, fields)
+    need(values.get("ActiveState") in ("inactive", "failed") and values == {"Id": unit, "LoadState": "loaded", "FragmentPath": "/usr/lib/systemd/system/" + unit, "DropInPaths": "", "NeedDaemonReload": "no", "ActiveState": values.get("ActiveState"), "MainPID": "0"}, "REBOOT_LAYOUT")
+    run("/usr/bin/systemctl", "mask", "--", unit)
+    need(assert_guest.unit_properties(unit, ("LoadState", "UnitFileState")) == {"LoadState": "masked", "UnitFileState": "masked"}, "REBOOT_LAYOUT")
+
+
+def pending_age_ns(value):
+    at = value.get("collected_at")
+    need(isinstance(at, str) and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?Z", at) is not None, "RETRY_WINDOW")
+    # Parse Go's UTC RFC3339Nano without Python's microsecond truncation.
+    try:
+        seconds = int(datetime.fromisoformat(at[:19] + "+00:00").timestamp())
+    except ValueError:
+        raise AssertionError("RETRY_WINDOW") from None
+    fraction = at[20:-1] if at[19] == "." else ""
+    return time.time_ns() - (seconds * 1_000_000_000 + int(fraction.ljust(9, "0")))
+
+
+def retry_window(prior):
+    before = prior["reboot_requested_at_ns"]
+    need(type(before) is int and before > 0, "RETRY_WINDOW")
+    elapsed = time.time_ns() - before
+    need(0 <= elapsed < 90_000_000_000 and 0 <= pending_age_ns(prior["pending"]) < 90_000_000_000, "RETRY_WINDOW")
+
+
+def pending_fresh(value):
+    need(0 <= pending_age_ns(value) < 120_000_000_000, "RETRY_WINDOW")
 
 
 def sleepers(first):
@@ -176,9 +217,11 @@ def receiver():
     raise AssertionError("RECEIVER")
 
 
-def wait_counts(predicate):
+def wait_counts(predicate, held=None):
     deadline = time.monotonic() + 115
     while time.monotonic() < deadline:
+        if held is not None:
+            pending_fresh(held)
         try:
             value = record(ROOT / "rich-receiver.json")
             if predicate(value):
@@ -252,6 +295,8 @@ def collector_masks():
 def exercise(mode):
     need(mode in ("first", "reboot") and os.geteuid() == 0, "INPUT")
     verify_numeric()
+    if mode == "first":
+        prepare_reboot()
     children = []
     p = receiver()
     try:
@@ -287,15 +332,17 @@ def exercise(mode):
             finally:
                 policy.write_bytes(original)
             need(fingerprint() == before, "IDENTITY")
-            result = {"identity": before, "pending": held, "duplicates": json.loads(counts)["duplicates"]}
+            result = {"identity": before, "pending": held, "duplicates": json.loads(counts)["duplicates"], "reboot_requested_at_ns": time.time_ns()}
             (ROOT / "rich-result.json").write_text(json.dumps(result, separators=(",", ":")))
             (ROOT / "rich-result.json").chmod(0o600)
         else:
             prior = record(ROOT / "rich-result.json")
             need(prior["identity"] == before and prior["pending"] == pending(), "PENDING")
+            retry_window(prior)
             (ROOT / "rich-hold").unlink()
             activation_guest.command(binary, "start")
-            wait_counts(lambda v: v["duplicates"] > prior["duplicates"] and v["sequence"] == prior["pending"]["sequence"] and v["sha256"] == prior["pending"]["digest"] and v["large_body"] and v["foreign_process"])
+            wait_counts(lambda v: v["duplicates"] > prior["duplicates"] and v["sequence"] == prior["pending"]["sequence"] and v["sha256"] == prior["pending"]["digest"] and v["large_body"] and v["foreign_process"], prior["pending"])
+            pending_fresh(prior["pending"])
             deadline = time.monotonic() + 30
             while json.loads(activation_guest.command(binary, "status"))["state"] != "ACKNOWLEDGED_FRESH":
                 need(time.monotonic() < deadline, "RETRY"); time.sleep(0.5)
@@ -331,6 +378,17 @@ def numeric_workers_absent():
     return True
 
 
+def emit_failure(code):
+    if code not in FAILURES and not (code in activation_guest.FAILURES and code.startswith("START_")):
+        code = "UNKNOWN"
+    marker = "HLO_VM_FAIL_RICH_" + code + "\n"
+    try:
+        with Path("/dev/ttyS0").open("w", encoding="ascii") as serial:
+            serial.write(marker)
+    except OSError:
+        print(marker, end="", file=sys.stderr)
+
+
 def main():
     try:
         need(len(sys.argv) == 2, "INPUT")
@@ -342,7 +400,7 @@ def main():
             code = str(error)
         elif isinstance(error, activation_guest.Refused) and str(error) in activation_guest.FAILURES and str(error).startswith("START_"):
             code = str(error)
-        print("HLO_VM_FAIL_RICH_" + code, file=sys.stderr)
+        emit_failure(code)
         return 1
 
 

@@ -106,7 +106,7 @@ class RichFixtureTest(unittest.TestCase):
                                   ("STOP_COMMAND_COLLECTOR_READY", "UNKNOWN"),
                                   ("private credential", "UNKNOWN")):
             output = io.StringIO()
-            with mock.patch.object(rich_guest.sys, "argv", ["rich_guest.py", "first"]), mock.patch.object(rich_guest, "exercise", side_effect=rich_guest.activation_guest.Refused(reason)), contextlib.redirect_stderr(output):
+            with mock.patch.object(Path, "open", side_effect=OSError("no fixture serial")), mock.patch.object(rich_guest.sys, "argv", ["rich_guest.py", "first"]), mock.patch.object(rich_guest, "exercise", side_effect=rich_guest.activation_guest.Refused(reason)), contextlib.redirect_stderr(output):
                 self.assertEqual(rich_guest.main(), 1)
             self.assertEqual(output.getvalue(), "HLO_VM_FAIL_RICH_" + expected + "\n")
 
@@ -226,12 +226,13 @@ class RichFixtureTest(unittest.TestCase):
             body = b"x" * 16385
             digest = hashlib.sha256(body).digest()
             with sqlite3.connect(root / "ledger/upload.sqlite") as connection:
-                connection.execute("CREATE TABLE upload_record(singleton,pending_sequence,pending_body,pending_digest,watermark,profile_kind,policy_digest)")
-                connection.execute("INSERT INTO upload_record VALUES(1,7,?,?,6,1,?)", (body, digest, b"p" * 32))
+                connection.execute("CREATE TABLE upload_record(singleton,pending_sequence,pending_body,pending_digest,watermark,profile_kind,policy_digest,pending_at)")
+                connection.execute("INSERT INTO upload_record VALUES(1,7,?,?,6,1,?,?)", (body, digest, b"p" * 32, "2026-10-29T23:59:30Z"))
             with mock.patch.object(rich_guest, "STATE", root):
                 result = rich_guest.pending()
                 self.assertEqual(result["sequence"], 7)
                 self.assertEqual(result["size"], 16385)
+                self.assertEqual(result["collected_at"], "2026-10-29T23:59:30Z")
                 self.assertEqual(result["digest"], digest.hex())
                 self.assertNotIn(body.decode(), json.dumps(result))
             with sqlite3.connect(root / "ledger/upload.sqlite") as connection:
@@ -241,7 +242,7 @@ class RichFixtureTest(unittest.TestCase):
 
     def test_failure_output_is_closed(self):
         output = io.StringIO()
-        with mock.patch.object(rich_guest.sys, "argv", ["rich_guest.py", "first"]), mock.patch.object(rich_guest, "exercise", side_effect=OSError("private credential")), contextlib.redirect_stderr(output):
+        with mock.patch.object(Path, "open", side_effect=OSError("no fixture serial")), mock.patch.object(rich_guest.sys, "argv", ["rich_guest.py", "first"]), mock.patch.object(rich_guest, "exercise", side_effect=OSError("private credential")), contextlib.redirect_stderr(output):
             self.assertEqual(rich_guest.main(), 1)
         self.assertEqual(output.getvalue(), "HLO_VM_FAIL_RICH_UNKNOWN\n")
 

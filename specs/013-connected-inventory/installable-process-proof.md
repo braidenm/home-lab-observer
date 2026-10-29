@@ -73,6 +73,13 @@ On a fresh Ubuntu 24.04/systemd255 fixture, use synthetic enrollment and a bound
    a stopped or substituted invocation cannot count as a successful namespace proof.
 3. A valid process body larger than 16 KiB persists in the rich ledger; response loss/restart retries identical sequence,
    bytes and digest, then acknowledgement advances state. Real SQLite crash/storage tests remain separate mandatory proof.
+   Before creating that pending request, independently prove the disposable guest has only loopback and no IPv4/IPv6
+   default route. Refuse alternate/instanced wait providers and unexpected unit fragments; mask only its fixed
+   `systemd-networkd-wait-online.service`, without stopping a network daemon. Retain production's two-minute TTL.
+   Read the exact ledger `pending_at` (UTC RFC3339Nano, parsed without sub-microsecond truncation) and record a private
+   reboot-request timestamp. Both elapsed reboot time and pending age must remain below 90 seconds before explicit
+   Start; the actual same-sequence/hash duplicate must still arrive before age 120 seconds. Expiry, clock reversal or
+   an insufficient retry window fails the fixture; never increase the TTL, fake the clock or accept a new sequence.
 4. Tampered installed policy fails closed and preserves pending bytes. No Docker role, group, helper, unit or socket
    exists in this process-only bundle.
 5. Bounded status/error output contains no observation body,
@@ -115,3 +122,24 @@ Systemd255 exposes `InaccessiblePaths` as a string array in
 the fixture compares entries without treating display order as authority.
 They do not constitute another VM run. New exact-source package/receiver/harness pins, independent review and an actual
 packaged VM pass remain mandatory before acceptance; no owner installation or public rich release is authorized here.
+
+## Corrected-package reboot: fixture TTL failure, third run pending (2026-10-29)
+
+The corrected package, source `013747e0e58f73f74fd671ec6a967d0c911557d0`, passed its first boot. Its second boot
+reported `RICH_REBOOT`; the postboot oneshot's deliberate
+null stdout/stderr hid the inner closed Python marker. The failed disk is preserved with SHA-256
+`4ad3dd2a2c89c8ec599d0de6a1746a99c2f86d004a3c627a77338bd15cc2b3ab`, unchanged by offline diagnosis. Only a derived
+partition copy was journal-replayed; the original overlay and base image were never written.
+
+Recovered first/second-boot manager timestamps show **135.630 seconds** from collector stop to its next start. The old
+pending request was already collected before that stop, so its age necessarily exceeded the unchanged 120-second
+production limit. The recovered uploader was `ACKNOWLEDGED_FRESH`, with a newer receiver sequence, no advanced duplicate
+count, and valid large/foreign-process flags. This is consistent with required expiry followed by a new upload, not a
+service-start failure. The copied journal also contains a late network-online wait. Systemd255
+[documents that loopback is ignored and the default wait is 120 seconds](https://www.freedesktop.org/software/systemd/man/255/systemd-networkd-wait-online.service.html).
+
+The fixture-only correction removes that no-NIC wait before reboot and adds the bounded real-clock/pending-age gates
+above. It forwards only allowlisted rich failure markers directly to the serial device, never raw stderr, tracebacks,
+observations or credentials. Focused synthetic tests do not substitute for a third packaged run: exact new source and
+harness pins, independent review and the full reboot/exact-retry acceptance remain pending. Docker implementation and
+owner rollout remain blocked until that gate passes; no production upload, ledger, TTL or service unit changes here.
