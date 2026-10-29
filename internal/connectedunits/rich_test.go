@@ -4,11 +4,39 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
 )
+
+func TestRichCollectorMasksBothProfilesPrivateState(t *testing.T) {
+	u, err := RenderRichProcessesUnits(richFixture())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var actual []string
+	properties := 0
+	for _, line := range strings.Split(string(u.Collector), "\n") {
+		if paths, ok := strings.CutPrefix(line, "InaccessiblePaths="); ok {
+			properties++
+			actual = strings.Fields(paths)
+		}
+	}
+	var expected []string
+	for _, root := range []string{"home-lab-observer-connected", "home-lab-observer-connected-rich"} {
+		expected = append(expected, "-/etc/"+root+"/credentials")
+		for _, name := range []string{"ledger", "uploader-root", "enrollment", "uploader-status"} {
+			expected = append(expected, "-/var/lib/"+root+"/"+name)
+		}
+	}
+	slices.Sort(actual)
+	slices.Sort(expected)
+	if properties != 1 || !slices.Equal(actual, expected) {
+		t.Fatal("rich collector does not mask both profiles' private state")
+	}
+}
 
 func richFixture() connectedprofile.RichProcessesConfig {
 	policy := connectedprofile.RichProcessesPolicy{Version: "observer-connected-rich-policy/v1", Profile: connectedprofile.RichProcessesProfile, ServerID: "srv_" + strings.Repeat("a", 32), ConnectorID: "agent_" + strings.Repeat("b", 32), CollectorUID: 62001, UploaderUID: 62002, UploaderGID: 62003, SharedGID: 62004, DefinitionSHA256: connectedprofile.RichProcessesDefinitionSHA256, ProcessesEnabled: true}

@@ -1,6 +1,6 @@
 # Disposable first-install and activation acceptance
 
-## Separate process-only proof (not yet executed)
+## Separate process-only proof (first run failed; acceptance pending)
 
 `--scope rich-processes` is an explicit opt-in; neither the default nor `--scope all`
 includes it. It installs the separately pinned numeric primary bundle stopped,
@@ -27,11 +27,17 @@ guest stops both rich workers, verifies the exact pending row and policy-tamper
 refusal, then reboots. The next boot must retain the same pending bytes and
 identity, keep both workers disabled/inactive until explicit start, and deliver
 the byte-identical retry before a fresh acknowledgement. It also checks the
-actual collector credential denial, uploader process-view exclusion, fixed
+actual collector credential and coexisting numeric uploader-scaffold denial,
+all ten installed/effective collector path masks, uploader process-view exclusion, fixed
 process policy and 2 MiB ledger envelope. Schema validation rejects unapproved
 Docker data and forbidden process fields. This does not replace the separate
 SQLite crash/ENOSPC tests or prove Docker support or owner-host readiness.
 
+The first packaged run failed during activation; its disk was preserved and
+offline diagnosis found a missing numeric-scaffold mask in the rich collector.
+See [the failed-run evidence and pending gate](../../../specs/013-connected-inventory/installable-process-proof.md#first-packaged-run-failed-acceptance-still-pending-2026-10-29).
+Known start refusals now retain only their allowlisted phase; unknown output,
+raw errors, observations and credentials never enter serial evidence.
 No rich proof has passed merely because these fixture tests pass. Record the
 exact frozen package/receiver/harness/image pins and independently review them
 before starting a VM; retain failure disks and only closed diagnostic output.

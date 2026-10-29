@@ -60,6 +60,17 @@ On a fresh Ubuntu 24.04/systemd255 fixture, use synthetic enrollment and a bound
 1. Numeric and rich packages coexist without modifying numeric hashes/configuration/units/ledger/status.
 2. Distinct real principals and effective manager policy enforce credential, network, process and Docker isolation.
    A foreign-UID synthetic process is visible to the collector; no arguments/environment are collected.
+   The rich collector masks all five private numeric paths as well as its own five private paths. Compare the exact
+   installed fragment and normalized effective `InaccessiblePaths` entries, rejecting missing/duplicate entries.
+   Inside the actual collector mount namespace, at the collector UID/GID, prove refusal of both its credential file
+   and the known-existing numeric uploader scaffold (root-owned 0755 outside the namespace). Retain the runtime
+   visibility guard; filesystem readability is not permission to share another profile's private scaffold.
+   Start the fixed Python probe outside that namespace, load its libraries before `setns`, then close the namespace
+   descriptor, clear supplementary groups and drop all real/effective/saved IDs. Verify those IDs and no-new-privileges
+   before fixed-path opens. Do not execute another binary after entry: the collector's existing `NoExecPaths=/`
+   intentionally permits only its own binary and must not be relaxed for fixture convenience.
+   Capture the active collector's MainPID and InvocationID before the probe and require the same active pair afterward;
+   a stopped or substituted invocation cannot count as a successful namespace proof.
 3. A valid process body larger than 16 KiB persists in the rich ledger; response loss/restart retries identical sequence,
    bytes and digest, then acknowledgement advances state. Real SQLite crash/storage tests remain separate mandatory proof.
 4. Tampered installed policy fails closed and preserves pending bytes. No Docker role, group, helper, unit or socket
@@ -80,3 +91,27 @@ cross-platform checks normally. No additional Spring context, disabled required 
 Source/tests are not acceptance. Before this slice is complete, record exact reviewed revision, packaged hashes, native
 fixture evidence and independent code/security review. Before owner rollout, implement and prove the separate Docker
 profile, compatible receiver/read model and safe installation transition; publish immutable checksummed artifacts.
+
+## First packaged run: failed, acceptance still pending (2026-10-29)
+
+The first exact-package `rich-processes` run, source `aa4d5d27ae4581ed7d17c7b5fbe41021f893e457`, reached numeric
+preflight and rich installation, then reported the closed
+`RICH_UNKNOWN` failure. Its failed overlay is preserved. Read-only offline diagnosis used a derived raw partition and
+journal-only replay on a second disposable copy, never the original disk. The original overlay SHA-256 remained
+`04cc493fb312d1f193e684a018b414b43cd2300e6f258a3774a6505fa08abfe9` before/after diagnosis.
+
+Recovered metadata proves rich installation and the uploader's `PASS` activation response existed; uploader status
+ended `STOPPED` and collector status was empty. The installed rich collector fragment masked only its own five private
+paths, while the existing numeric state ancestor and uploader scaffold were root-owned 0755. The unchanged
+`CheckRichProcessesView(true)` calls `CheckView(true)`, which refuses readable numeric private paths. This is a concrete
+coexistence mismatch between the unit and its retained runtime guard. The recovered journal contains no rich-unit
+records, so an actual collector exit code was not recovered and is not claimed.
+
+The correction only adds missing numeric denials. It changes neither collection scope nor the immutable definition
+`438442e2675b19fc7f1f181e7eaef80d45f6c87b807710970664affbbc6e1150`; new package/manifest hashes bind the corrected
+resource. Focused TDD checks cover all ten paths, installed/effective expectations and closed startup-phase diagnostics.
+Systemd255 exposes `InaccessiblePaths` as a string array in
+[its D-Bus execution properties](https://github.com/systemd/systemd/blob/v255/src/core/dbus-execute.c#L993);
+the fixture compares entries without treating display order as authority.
+They do not constitute another VM run. New exact-source package/receiver/harness pins, independent review and an actual
+packaged VM pass remain mandatory before acceptance; no owner installation or public rich release is authorized here.

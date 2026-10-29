@@ -190,7 +190,12 @@ def wait_counts(predicate):
 
 
 def isolation(config):
-    collector = int(assert_guest.unit_properties(UNITS[0], ("MainPID",))["MainPID"])
+    collector_masks()
+    fields = ("ActiveState", "MainPID", "InvocationID")
+    collector_state = assert_guest.unit_properties(UNITS[0], fields)
+    collector = int(collector_state["MainPID"])
+    invocation = collector_state["InvocationID"]
+    need(collector_state["ActiveState"] == "active" and str(collector) == collector_state["MainPID"] and len(invocation) == 32 and all(v in "0123456789abcdef" for v in invocation), "ISOLATION")
     uploader = int(assert_guest.unit_properties(UNITS[1], ("MainPID",))["MainPID"])
     need(collector > 1 and uploader > 1, "ISOLATION")
     need(not list(Path(f"/proc/{uploader}/root/proc").iterdir()), "ISOLATION")
@@ -199,9 +204,49 @@ def isolation(config):
     need(props == {"PrivateNetwork": "yes", "ProtectProc": "default", "CapabilityBoundingSet": "", "AmbientCapabilities": "", "NoNewPrivileges": "yes"}, "ISOLATION")
     # Execute a fixed metadata/read refusal inside the actual collector mount
     # namespace, dropped to the real collector UID/GID. No payload is printed.
-    code = "import os; p='/etc/home-lab-observer-connected-rich/credentials/connector.json';\ntry: os.open(p,os.O_RDONLY)\nexcept (PermissionError,FileNotFoundError): raise SystemExit(0)\nraise SystemExit(1)"
-    run("/usr/bin/nsenter", "--target", str(collector), "--mount", "--", "/usr/bin/setpriv", "--reuid", str(config["collector_uid"]), "--regid", str(config["shared_gid"]), "--clear-groups", "/usr/bin/python3", "-I", "-c", code)
+    # The numeric scaffold is intentionally readable outside the collector's
+    # namespace. Its actual denial therefore proves the mask, not just DAC.
+    assert_guest.plain(Path("/var/lib/home-lab-observer-connected/uploader-root"), 0o755, 0, 0, True)
+    # Start Python before entering the mount namespace: NoExecPaths deliberately
+    # permits only the collector binary there. Never relax it to run a probe.
+    code = """import ctypes, os, sys
+if len(sys.argv) != 4: raise SystemExit(1)
+pid, uid, gid = map(int, sys.argv[1:])
+if pid < 2 or not 0 < uid < 4294967295 or not 0 < gid < 4294967295: raise SystemExit(1)
+libc = ctypes.CDLL(None, use_errno=True)
+setns, prctl = libc.setns, libc.prctl
+if prctl(38, 1, 0, 0, 0) != 0: raise SystemExit(1)
+fd = os.open('/proc/%d/ns/mnt' % pid, os.O_RDONLY | os.O_CLOEXEC)
+try:
+ if setns(fd, 0x20000) != 0: raise SystemExit(1)
+finally: os.close(fd)
+os.setgroups([])
+os.setresgid(gid, gid, gid)
+os.setresuid(uid, uid, uid)
+if os.getresuid() != (uid, uid, uid) or os.getresgid() != (gid, gid, gid) or os.getgroups() != [] or prctl(39, 0, 0, 0, 0) != 1: raise SystemExit(1)
+for p in ('/etc/home-lab-observer-connected-rich/credentials/connector.json','/var/lib/home-lab-observer-connected/uploader-root'):
+ try: fd = os.open(p, os.O_RDONLY)
+ except (PermissionError, FileNotFoundError): continue
+ os.close(fd)
+ raise SystemExit(1)
+"""
+    run("/usr/bin/python3", "-I", "-c", code, str(collector), str(config["collector_uid"]), str(config["shared_gid"]))
+    need(assert_guest.unit_properties(UNITS[0], fields) == collector_state, "ISOLATION")
     verify_numeric()
+
+
+def collector_masks():
+    expected = sorted("-/etc/" + root + "/credentials" if name == "credentials" else "-/var/lib/" + root + "/" + name
+                      for root in ("home-lab-observer-connected", "home-lab-observer-connected-rich")
+                      for name in ("credentials", "ledger", "uploader-root", "enrollment", "uploader-status"))
+    installed = Path("/etc/systemd/system") / UNITS[0]
+    lines = [line.removeprefix("InaccessiblePaths=") for line in installed.read_text().splitlines() if line.startswith("InaccessiblePaths=")]
+    need(len(lines) == 1 and sorted(lines[0].split()) == expected, "ISOLATION")
+    # systemd255 exposes these string-array entries with the '-' ignore-missing
+    # prefix intact. Display order is not authority; duplicates/missing entries
+    # are still refused rather than normalized away.
+    effective = assert_guest.unit_properties(UNITS[0], ("InaccessiblePaths",))
+    need(sorted(effective["InaccessiblePaths"].split()) == expected, "ISOLATION")
 
 
 def exercise(mode):
@@ -292,7 +337,11 @@ def main():
         exercise(sys.argv[1])
         return 0
     except (OSError, ValueError, KeyError, TypeError, AttributeError, AssertionError, sqlite3.Error, tarfile.TarError, subprocess.SubprocessError, activation_guest.Refused, preflight_probe.Refused) as error:
-        code = str(error) if isinstance(error, AssertionError) and str(error) in FAILURES else "UNKNOWN"
+        code = "UNKNOWN"
+        if isinstance(error, AssertionError) and str(error) in FAILURES:
+            code = str(error)
+        elif isinstance(error, activation_guest.Refused) and str(error) in activation_guest.FAILURES and str(error).startswith("START_"):
+            code = str(error)
         print("HLO_VM_FAIL_RICH_" + code, file=sys.stderr)
         return 1
 
