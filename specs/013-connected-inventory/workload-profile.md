@@ -52,9 +52,8 @@ the defensive patterns. No action, target authority or grant is present.
   `LIFETIME_SINGLE_CORE`: pinned gopsutil computes total CPU time / process age *100,
   not a recent sample or a fraction of whole-host capacity. Docker uses
   `ENGINE_HOST_CAPACITY`: valid CPU/system counter deltas *100. Do not compare these
-  as equivalent percentages or infer `top` parity. The existing process normalizer
-  rejects values above 100 although multicore processes can exceed 100 on this basis;
-  therefore busy processes can be omitted and coverage degraded. The new contract
+  as equivalent percentages or infer `top` parity. PR 129 corrected the process normalizer's
+  rejection of legitimate multicore values above 100; the installed numeric canary remains unchanged. The new contract
   correctly admits finite process CPU 0..409600 (a bounded 4096-logical-core maximum),
   allowing that acquisition bug to be fixed without another wire version. Container
   CPU remains 0..100. No value is silently renormalized. Changing measurement basis,

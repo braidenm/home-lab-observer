@@ -25,6 +25,8 @@ field cannot establish that host data is visible or that the richer runtime is i
 4. **Delivery and migration:** apply profile-aware limits throughout handoff, ledger, transport and receiver; preserve
    exact retries and monotonic sequence. Implement and rehearse the supported profile-changing install/upgrade or
    separately enrolled coexistence path. Do not bypass current installed admission to accelerate the canary.
+   First define the unused [combined envelope contract](delivery-envelope.md), so host and workloads share one cycle
+   and pending upload instead of introducing independent streams. This contract does not increase runtime limits.
 5. **Useful dashboard:** host overview plus searchable/bounded Containers, Processes and Storage views. Keep empty,
    disabled, failed, truncated and stale explicit. Add Services and aggregate trends as separately coherent changes;
    don't make container visibility wait for an entire log/history implementation.
