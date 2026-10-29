@@ -30,7 +30,10 @@ def finish(signum, frame):
     sys.exit(0)
 signal.signal(signal.SIGTERM, finish)
 signal.signal(signal.SIGINT, finish)
-(root / "child-pid").write_text(str(os.getpid()))
+# Publish readiness only after the complete PID is closed. Opening the final
+# name first lets the parent signal us between create and write, leaving it empty.
+(root / "child-pid.pending").write_text(str(os.getpid()))
+(root / "child-pid.pending").replace(root / "child-pid")
 while True: time.sleep(0.02)
 '''
 

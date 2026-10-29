@@ -115,6 +115,11 @@ extraction and installer phases, require no surviving child and cleanup-after-jo
 ordering, and prove terminal preservation. Test subprocess deadlines bound CI;
 failure cleanup kills/joins only fixture-owned processes.
 
+The fixture publishes its readiness PID only by renaming a completed private temporary file. File existence before
+the PID write is not readiness: an early signal can interrupt that write and make the fixture's later PID check fail.
+The 2026-10-29 Linux race CI failure was reproduced by pausing that test-only publication window, then corrected
+without changing the production supervisor or disabling lifecycle assertions. Keep full native/race CI required.
+
 ## Proof and operation
 
 Render tests reject invalid/noncanonical versions, commits, unknown contracts,
