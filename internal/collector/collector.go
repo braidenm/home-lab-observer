@@ -127,7 +127,11 @@ func (c *Collector) processes(ctx context.Context) observation.Section[[]observa
 	if len(result.Processes) == 0 && result.Scanned > 0 {
 		q := sq(c.clock.Now().Sub(start), 0, result.PermissionDenied+result.Unsupported+result.Failed)
 		q.Total = result.Discovered
+		q.Truncated = result.ScanTruncated
 		switch {
+		case result.ScanTruncated:
+			items := []observation.Process{}
+			return observation.Section[[]observation.Process]{State: observation.Degraded, ReasonCode: observation.ReasonPartialCollection, Quality: q, Data: &items}
 		case result.PermissionDenied == result.Scanned:
 			return observation.Section[[]observation.Process]{State: observation.PermissionDenied, ReasonCode: observation.ReasonPermissionDenied, Quality: q}
 		case result.Unsupported == result.Scanned:
@@ -172,7 +176,7 @@ func (c *Collector) processes(ctx context.Context) observation.Section[[]observa
 		out = out[:c.config.MaxProcesses]
 	}
 	st, r := observation.Available, observation.ReasonCode("")
-	if errs > 0 {
+	if errs > 0 || result.ScanTruncated {
 		st = observation.Degraded
 		r = observation.ReasonPartialCollection
 	}

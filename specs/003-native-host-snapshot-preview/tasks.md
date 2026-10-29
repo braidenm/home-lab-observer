@@ -13,3 +13,6 @@
 - [x] Add HTTP, storage and the embedded UI in [Spec 005](../005-local-data-plane/tasks.md).
 - [x] Add optional containers in [Spec 006](../006-container-observations/tasks.md).
 - [ ] Add OS services and opt-in logs only in later accepted specifications.
+- [x] Cap native provider detail acquisition before process construction, and verify cancellation/failure accounting.
+- [x] Independently review cutoff/cancellation behavior; local Go 1.27.3 Windows full suite and focused vet pass.
+- [ ] Prove scan-budget truncation stays partial through the existing snapshot projection; run native CI before merge.
