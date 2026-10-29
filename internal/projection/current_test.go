@@ -12,6 +12,18 @@ import (
 	"github.com/braidenm/home-lab-observer/internal/observation"
 )
 
+func TestEmptyPartialProcessScanRetainsCoverage(t *testing.T) {
+	items := []observation.Process{}
+	raw := observation.Snapshot{ObservedAt: time.Unix(0, 0).UTC(), Processes: observation.Section[[]observation.Process]{
+		State: observation.Degraded, ReasonCode: observation.ReasonPartialCollection,
+		Quality: observation.SectionQuality{Total: 4097, Truncated: true, Errors: 4096}, Data: &items,
+	}}
+	section := Current(raw, SystemInfo{}).Sections.Processes
+	if section.SupportState != "SUPPORTED" || section.CollectionState != "PARTIAL" || section.TotalCount != 4097 || section.ReturnedCount != 0 || !section.Truncated || len(section.Items) != 0 {
+		t.Fatal("unscanned processes were represented as healthy empty or machine-wide denial")
+	}
+}
+
 func TestCurrentMatchesSchemaValidatedFixture(t *testing.T) {
 	at := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
 	cpu := observation.CPU{LogicalCPUs: 8, UsagePercent: 12.5}

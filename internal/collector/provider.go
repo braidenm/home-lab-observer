@@ -35,6 +35,7 @@ type ProcessResult struct {
 	PermissionDenied int
 	Unsupported      int
 	Failed           int
+	ScanTruncated    bool
 }
 
 type SystemProvider interface {

@@ -19,6 +19,11 @@ conforms exactly to `observer-current-snapshot/v1` without starting a listener o
 - **R5 Portability:** The runtime MUST test on GitHub-hosted Windows, macOS, and Linux and cross-build amd64 and arm64 binaries for all three systems with pinned actions in less than 15 minutes. Linux CI MUST run the race detector.
 - **R6 Lockstep:** A deterministic Go projection fixture MUST be validated by both Go tests and the canonical AJV contract suite.
 - **R7 CLI semantics:** Help MUST exit 0. Invalid usage MUST exit 2. The command MUST emit a schema-valid snapshot and exit 1 when all implemented visible sections fail; `OK` and `PARTIAL` snapshots exit 0.
+- **R8 Acquisition budget:** Enumerate process IDs through the maintained OS adapter, but attempt details for at most
+  4096 IDs per collection, including failed attempts. Check cancellation before discovery and between detail reads.
+  Bound result allocation to that limit and preserve discovered/scanned/error counts. A scan-budget cutoff is partial
+  coverage, not a complete machine-wide top-N list or a collection error. OS ID enumeration itself is not claimed
+  constant-memory; the cap applies before process construction and metadata reads.
 
 ## Boundaries
 

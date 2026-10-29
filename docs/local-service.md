@@ -44,6 +44,10 @@ system's user configuration directory. To choose a location, use a dedicated wri
 
 CPU utilization appears in Trends; the original current-snapshot contract exposes CPU capacity. Windows process status
 is explicitly `unknown` where the OS adapter cannot provide it; other available process readings remain useful.
+
+Process metadata acquisition attempts at most 4096 discovered IDs per collection, including denied/failed reads,
+before selecting the bounded displayed rows. A cutoff is partial coverage with explicit counts/truncation, not proof
+that the listed processes are the largest on the whole machine. OS process-ID enumeration itself remains platform-owned.
 The legacy host snapshot still reports services, containers, hardware sensors and native log sources as unsupported;
 that contract is not expanded by the dedicated views. Docker containers have a separate opt-in Workloads view; see
 [container observations](container-observations.md). Preview 3 also has a separate, opt-in
