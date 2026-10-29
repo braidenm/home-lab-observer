@@ -11,8 +11,6 @@ import (
 	"regexp"
 	"sync"
 	"time"
-
-	"github.com/braidenm/home-lab-observer/internal/remoteprojection"
 )
 
 var (
@@ -54,6 +52,7 @@ type Pending struct {
 }
 type Record struct {
 	Binding   Binding
+	Profile   ProfileBinding
 	Watermark int64
 	HasAck    bool
 	LastAck   [32]byte
@@ -91,6 +90,7 @@ type Ledger interface {
 type Machine struct {
 	mu        sync.Mutex
 	binding   Binding
+	profile   ProfileBinding
 	source    Source
 	clock     Clock
 	transport Transport
@@ -100,10 +100,16 @@ type Machine struct {
 }
 
 func New(binding Binding, source Source, clock Clock, transport Transport, ledger Ledger) (*Machine, error) {
-	if !validBinding(binding) || source == nil || clock == nil || transport == nil || ledger == nil {
+	return NewForProfile(binding, ProfileBinding{}, source, clock, transport, ledger)
+}
+
+// NewForProfile selects a fixed pure validation profile. It does not enroll,
+// authenticate local consent, widen a transport/ledger, or activate a worker.
+func NewForProfile(binding Binding, profile ProfileBinding, source Source, clock Clock, transport Transport, ledger Ledger) (*Machine, error) {
+	if !validBinding(binding) || !validProfile(profile) || source == nil || clock == nil || transport == nil || ledger == nil {
 		return nil, ErrConfig
 	}
-	return &Machine{binding: binding, source: source, clock: clock, transport: transport, ledger: ledger}, nil
+	return &Machine{binding: binding, profile: profile, source: source, clock: clock, transport: transport, ledger: ledger}, nil
 }
 
 // Step has no internal retry loop. Concurrent callers fail quickly; scheduling
@@ -121,12 +127,15 @@ func (m *Machine) Step(ctx context.Context) (Outcome, error) {
 	}
 	if m.record == nil {
 		r, err := m.ledger.Load(ctx)
-		if err != nil || ValidateRecord(r, m.binding) != nil {
+		if err != nil || ValidateRecordForProfile(r, m.binding, m.profile) != nil {
 			m.recovery = true
 			return "", ErrRecovery
 		}
 		r = clone(r)
 		m.record = &r
+	} else if ValidateRecordForProfile(*m.record, m.binding, m.profile) != nil {
+		m.recovery = true
+		return "", ErrRecovery
 	}
 	if m.record.Stopped != "" {
 		return m.record.Stopped, nil
@@ -163,7 +172,7 @@ func (m *Machine) Step(ctx context.Context) (Outcome, error) {
 			}
 			return SourceUnavailable, nil
 		}
-		if len(body) > remoteprojection.MaxBytes {
+		if len(body) > maxBodyBytes(m.profile) {
 			return "", ErrSnapshot
 		}
 		body = bytes.Clone(body)
@@ -171,7 +180,7 @@ func (m *Machine) Step(ctx context.Context) (Outcome, error) {
 		if now.IsZero() || now.Year() < 1 || now.Year() > 9999 {
 			return ClockSkew, nil
 		}
-		at, ok := collectionTime(body, m.binding.ServerID)
+		at, ok := collectionTime(body, m.binding.ServerID, m.profile)
 		if !ok {
 			return "", ErrSnapshot
 		}
@@ -197,6 +206,10 @@ func (m *Machine) Step(ctx context.Context) (Outcome, error) {
 	}
 	if ctx.Err() != nil {
 		return "", ErrCanceled
+	}
+	if ValidateRecordForProfile(*m.record, m.binding, m.profile) != nil {
+		m.recovery = true
+		return "", ErrRecovery
 	}
 	p := m.record.Pending
 	now = m.clock.Now().UTC()
@@ -250,6 +263,10 @@ func (m *Machine) commit(ctx context.Context, next Record) error {
 	if ctx.Err() != nil {
 		return ErrCanceled
 	}
+	if ValidateRecordForProfile(*m.record, m.binding, m.profile) != nil || ValidateRecordForProfile(next, m.binding, m.profile) != nil {
+		m.recovery = true
+		return ErrRecovery
+	}
 	if m.ledger.Commit(ctx, clone(*m.record), clone(next)) != nil {
 		m.recovery = true
 		return ErrRecovery
@@ -261,15 +278,17 @@ func (m *Machine) commit(ctx context.Context, next Record) error {
 func validBinding(b Binding) bool {
 	return serverPattern.MatchString(b.ServerID) && connectorPattern.MatchString(b.ConnectorID)
 }
-func collectionTime(body []byte, server string) (time.Time, bool) {
-	at, err := remoteprojection.UploadCollectionTime(body, server)
-	return at, err == nil
-}
 
 // ValidateRecord checks the complete logical ledger invariants against a trusted
 // expected binding. It does not authenticate state or detect restored backups.
 func ValidateRecord(r Record, expected Binding) error {
-	if !validBinding(expected) || !validRecord(r, expected) {
+	return ValidateRecordForProfile(r, expected, ProfileBinding{})
+}
+
+// ValidateRecordForProfile also binds empty/terminal state to an exact trusted
+// expected profile/policy. Default ValidateRecord remains strictly numeric.
+func ValidateRecordForProfile(r Record, expected Binding, profile ProfileBinding) error {
+	if !validBinding(expected) || !validProfile(profile) || r.Profile != profile || !validRecord(r, expected, profile) {
 		return ErrRecovery
 	}
 	return nil
@@ -279,7 +298,7 @@ func ValidateRecord(r Record, expected Binding) error {
 // untrusted records before copying them.
 func CloneRecord(r Record) Record { return clone(r) }
 
-func validRecord(r Record, b Binding) bool {
+func validRecord(r Record, b Binding, profile ProfileBinding) bool {
 	if r.Binding != b || r.Watermark < 0 || (!r.HasAck && r.LastAck != [32]byte{}) || (r.HasAck && r.Watermark == 0) {
 		return false
 	}
@@ -290,7 +309,7 @@ func validRecord(r Record, b Binding) bool {
 		return false
 	}
 	if p := r.Pending; p != nil {
-		at, ok := collectionTime(p.Body, b.ServerID)
+		at, ok := collectionTime(p.Body, b.ServerID, profile)
 		if !ok || p.Sequence <= 0 || p.Sequence != r.Watermark || !at.Equal(p.CollectedAt) || sha256.Sum256(p.Body) != p.Digest {
 			return false
 		}
