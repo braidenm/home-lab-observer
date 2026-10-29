@@ -1,6 +1,6 @@
 # Docker observation data plane — source layer 1 of 3
 
-Date: 2026-10-30. Status: implemented locally; independent exact-layer review and exact-head CI pending.
+Date: 2026-10-29. Status: implemented and independently reviewed GO; exact-head CI pending.
 
 ## Scope and delivery sequence
 
@@ -59,3 +59,7 @@ Public activation and the owner installation remain off. Spec 011 controls and K
 
 Earlier full-composition build/review evidence is not this smaller layer's independent review, exact-head CI or packaged
 acceptance. Docker installed/VM/release/hosted/owner gates remain open.
+
+Independent review of the isolated layer verified all22 non-document source/test
+blobs match the reviewed composition, with no P0–P2. Focused tests were repeated;
+the final Linux race run, including the real SQLite ledger, also passed.
