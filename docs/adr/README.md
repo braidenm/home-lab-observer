@@ -26,5 +26,6 @@
 | [022](022-compatible-connected-code-transitions.md) | Proposed | Explicit verified code selection, used-ledger compatibility and one transition journal |
 | [023](023-opt-in-connected-inventory.md) | Proposed | Versioned opt-in workload egress and reviewed rich acquisition profile; numeric canary unchanged |
 | [024](024-immutable-rich-installation-profiles.md) | Accepted for unused pure state machine | Immutable separately enrolled rich policy; profile-bound ledger and installed activation remain gated |
+| [025](025-isolated-installed-docker-observation.md) | Accepted for engineering design only | Fixed credential-free Docker reader, immutable separately enrolled process-and-Docker profile; implementation/activation gated |
 
 Accepted ADRs are immutable except for status and supersession links. Material changes require a new ADR.

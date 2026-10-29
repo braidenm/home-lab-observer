@@ -34,6 +34,10 @@ field cannot establish that host data is visible or that the richer runtime is i
    enrollment/policy, bounded handoff/transport and receiver; no current worker silently selects the rich profile.
    The next coherent runtime slice is the [VM-installable fixed process package](installable-process-proof.md), not another
    standalone contract. Its process-only profile is staging evidence, not an intermediate owner-host installation.
+   After that exact packaged VM proof passes, deliver the [coherent process-and-Docker installation](installable-docker-observation.md)
+   under [ADR 025](../../docs/adr/025-isolated-installed-docker-observation.md): fixed credential-free file-producing
+   Docker reader, distinct immutable profile/kind/schema-v3, reader-first hosted integration and one complete artifact
+   acceptance target. This design adds no implemented helper, socket access or owner rollout.
 5. **Useful dashboard:** host overview plus searchable/bounded Containers, Processes and Storage views. Keep empty,
    disabled, failed, truncated and stale explicit. Add Services and aggregate trends as separately coherent changes;
    don't make container visibility wait for an entire log/history implementation.
