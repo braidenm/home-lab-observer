@@ -9,7 +9,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/braidenm/home-lab-observer/internal/containerobs"
+	containerobs "github.com/braidenm/home-lab-observer/internal/containerobs/model"
 	"github.com/braidenm/home-lab-observer/internal/observation"
 )
 

@@ -68,6 +68,16 @@ expanding every existing installation's egress, granting delegates control, or m
   state, copy a credential into a different server identity, silently inherit grants, delete private state, or claim
   an upgrade/rollback works without its actual fixture. A profile-changing migration needs an explicit reviewed plan.
 
+## Adapter-free projection prerequisite
+
+Before profile-aware upload validation imports the combined projector, extract only the normalized container data
+types and constants into `internal/containerobs/model`. Keep the existing `containerobs` types as source-compatible
+aliases, retaining its helpers, JSON field order/tags, constants and collector behavior. Production workload projection
+must import the data-only package, not the Engine adapter. A Linux dependency-closure regression must prove that the
+combined projector has only the approved observation/projection/model packages and no `net/http`, Docker adapter or
+host collector. Existing synthetic fixtures and collector/projection tests remain unchanged; this prerequisite adds
+no upload admission, installed profile, socket access, process authority or runtime behavior.
+
 ## Completion evidence
 
 Schema/producer/receiver negatives; real backend owner/delegate denial and revocation; desktop/phone UI review; isolated
