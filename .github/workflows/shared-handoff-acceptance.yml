@@ -37,3 +37,10 @@ jobs:
           sudo env -i PATH=/usr/bin:/bin TMPDIR=/tmp OBSERVER_SHARED_ACCEPTANCE=1
           "$RUNNER_TEMP/shared-handoff.test"
           -test.run='^TestOwnedCrossPrincipalFixture$' -test.count=3 -test.timeout=120s -test.v
+      - name: Compile fixed-reader socket witness fixture
+        run: go test -c ./internal/dockerreader -o "$RUNNER_TEMP/docker-reader.test"
+      - name: Prove fixed-reader socket replacement refusal
+        run: >-
+          sudo env -i PATH=/usr/bin:/bin TMPDIR=/tmp OBSERVER_SHARED_ACCEPTANCE=1
+          "$RUNNER_TEMP/docker-reader.test"
+          -test.run='^TestOwnedSocketWitnessRejectsReplacementAndPermissionDrift$' -test.count=3 -test.timeout=30s -test.v

@@ -34,6 +34,7 @@ type EnrollmentTransport struct {
 	origin url.URL
 	client *http.Client
 	rich   bool
+	docker bool
 }
 
 var _ enrollmentcoord.Exchanger = (*EnrollmentTransport)(nil)
@@ -49,6 +50,17 @@ func NewEnrollment(origin string) (*EnrollmentTransport, error) {
 // fields is ambiguous, never an accepted rich enrollment.
 func NewRichProcessesEnrollment(origin string) (*EnrollmentTransport, error) {
 	return newEnrollmentTransport(origin, nil, true)
+}
+
+// NewRichProcessesDockerEnrollment admits only the separate immutable Docker
+// approval. An old server's successful numeric/process response is insufficient.
+func NewRichProcessesDockerEnrollment(origin string) (*EnrollmentTransport, error) {
+	t, err := newEnrollmentTransport(origin, nil, false)
+	if err != nil {
+		return nil, err
+	}
+	t.docker = true
+	return t, nil
 }
 
 // newEnrollmentTransport differs only by accepting an owned test-server root.
@@ -68,7 +80,17 @@ func (t *EnrollmentTransport) Exchange(
 		return enrollmentcoord.ExchangeResponse{}, ErrRequest
 	}
 
-	requestBody := newOneShotBody(enrollmentRequestBody(request, t.rich))
+	profile, definition := "", ""
+	if t.rich {
+		profile, definition = connectedprofile.RichProcessesProfile, connectedprofile.RichProcessesDefinitionSHA256
+	}
+	if t.docker {
+		if t.rich {
+			return enrollmentcoord.ExchangeResponse{}, ErrConfig
+		}
+		profile, definition = connectedprofile.RichProcessesDockerProfile, connectedprofile.RichProcessesDockerDefinitionSHA256
+	}
+	requestBody := newOneShotBody(enrollmentRequestBodyFor(request, profile, definition))
 	defer requestBody.Close()
 	requestContext, cancel := context.WithTimeout(ctx, SendTimeout)
 	defer cancel()
@@ -110,7 +132,7 @@ func (t *EnrollmentTransport) Exchange(
 		!jsonContentType(response.Header) {
 		return enrollmentcoord.ExchangeResponse{Outcome: enrollmentcoord.ExchangeAmbiguous}, nil
 	}
-	serverID, credential, ok := decodeEnrollmentResponse(body, request.Binding.ServerID, t.rich)
+	serverID, credential, ok := decodeEnrollmentResponseFor(body, request.Binding.ServerID, profile, definition)
 	if !ok {
 		clear(credential)
 		return enrollmentcoord.ExchangeResponse{Outcome: enrollmentcoord.ExchangeAmbiguous}, nil
@@ -140,22 +162,37 @@ func validEnrollmentRequest(request enrollmentcoord.ExchangeRequest) bool {
 }
 
 func enrollmentRequestBody(request enrollmentcoord.ExchangeRequest, rich bool) []byte {
+	if rich {
+		return enrollmentRequestBodyFor(request, connectedprofile.RichProcessesProfile, connectedprofile.RichProcessesDefinitionSHA256)
+	}
+	return enrollmentRequestBodyFor(request, "", "")
+}
+
+func enrollmentRequestBodyFor(request enrollmentcoord.ExchangeRequest, profile, definition string) []byte {
 	body := make([]byte, 0, 128)
 	body = append(body, `{"enrollment_secret":"`...)
 	body = append(body, request.EnrollmentGrant...)
 	body = append(body, `","connector_instance_id":"`...)
 	body = append(body, request.Binding.ConnectorID...)
-	if rich {
+	if profile != "" {
 		body = append(body, `","collection_profile":"`...)
-		body = append(body, connectedprofile.RichProcessesProfile...)
+		body = append(body, profile...)
 		body = append(body, `","collection_definition_sha256":"`...)
-		body = append(body, connectedprofile.RichProcessesDefinitionSHA256...)
+		body = append(body, definition...)
 	}
 	body = append(body, `"}`...)
 	return body
 }
 
 func decodeEnrollmentResponse(body []byte, expectedServerID string, rich bool) (string, []byte, bool) {
+	if rich {
+		return decodeEnrollmentResponseFor(body, expectedServerID, connectedprofile.RichProcessesProfile, connectedprofile.RichProcessesDefinitionSHA256)
+	}
+	return decodeEnrollmentResponseFor(body, expectedServerID, "", "")
+}
+
+func decodeEnrollmentResponseFor(body []byte, expectedServerID, expectedProfile, expectedDefinition string) (string, []byte, bool) {
+	rich := expectedProfile != ""
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	start, err := decoder.Token()
 	if err != nil || start != json.Delim('{') {
@@ -210,7 +247,7 @@ func decodeEnrollmentResponse(body []byte, expectedServerID string, rich bool) (
 	if !hasServer || !hasCredential || len(serverID) != serverIDLength || serverID != expectedServerID ||
 		!serverPattern.MatchString(serverID) || len(credential) != credentialLength ||
 		!credentialPattern.MatchString(credential) ||
-		(rich && (!hasProfile || !hasDefinition || profile != connectedprofile.RichProcessesProfile || definition != connectedprofile.RichProcessesDefinitionSHA256)) {
+		(rich && (!hasProfile || !hasDefinition || profile != expectedProfile || definition != expectedDefinition)) {
 		return "", nil, false
 	}
 	return serverID, []byte(credential), true

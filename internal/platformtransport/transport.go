@@ -54,6 +54,7 @@ type Transport struct {
 	credentials CredentialProvider
 	client      *http.Client
 	rich        bool
+	docker      bool
 }
 
 // New constructs the production transport. Trust roots and all HTTP behavior
@@ -66,6 +67,21 @@ func New(origin string, credentials CredentialProvider) (*Transport, error) {
 // infer consent from a valid combined body and cannot enable container data.
 func NewRichProcesses(origin string, credentials CredentialProvider) (*Transport, error) {
 	return newTransport(origin, credentials, nil, true)
+}
+
+// NewRichProcessesDocker requires the separately enrolled process-and-Docker
+// profile. Valid combined syntax alone cannot authorize either data group.
+func NewRichProcessesDocker(origin string, credentials CredentialProvider) (*Transport, error) {
+	return newRichProcessesDockerTransport(origin, credentials, nil)
+}
+
+func newRichProcessesDockerTransport(origin string, credentials CredentialProvider, roots *x509.CertPool) (*Transport, error) {
+	transport, err := newTransport(origin, credentials, roots, true)
+	if err != nil {
+		return nil, err
+	}
+	transport.docker = true
+	return transport, nil
 }
 
 // newTransport differs from New only by accepting owned test-server roots.
@@ -118,7 +134,7 @@ func (t *Transport) Send(ctx context.Context, request uploadstate.Request) (uplo
 	}
 	request.Body = bytes.Clone(request.Body)
 	if (!t.rich && remoteprojection.ValidateUpload(request.Body, request.Binding.ServerID) != nil) ||
-		(t.rich && !validRichProcessesBody(request.Body, request.Binding.ServerID)) {
+		(t.rich && !validRichBody(request.Body, request.Binding.ServerID, t.docker)) {
 		return uploadstate.Response{}, ErrRequest
 	}
 	requestContext, cancel := context.WithTimeout(ctx, SendTimeout)
@@ -180,6 +196,10 @@ func validRequestEnvelope(request uploadstate.Request, rich bool) bool {
 }
 
 func validRichProcessesBody(body []byte, serverID string) bool {
+	return validRichBody(body, serverID, false)
+}
+
+func validRichBody(body []byte, serverID string, docker bool) bool {
 	if combinedprojection.Validate(body, serverID) != nil {
 		return false
 	}
@@ -191,7 +211,7 @@ func validRichProcessesBody(body []byte, serverID string) bool {
 			} `json:"policy"`
 		} `json:"workload_inventory"`
 	}
-	return json.Unmarshal(body, &claims) == nil && claims.Workloads.Policy.Processes && !claims.Workloads.Policy.Containers
+	return json.Unmarshal(body, &claims) == nil && claims.Workloads.Policy.Processes && claims.Workloads.Policy.Containers == docker
 }
 
 func statusOutcome(status int) uploadstate.Outcome {

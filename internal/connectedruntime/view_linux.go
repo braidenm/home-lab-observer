@@ -84,8 +84,12 @@ func CheckInstalledRichProcessesUploaderScaffold() error {
 }
 
 func checkPhysicalScaffold(root string, uid, gid uint32) error {
-	d, err := readViewDirectoryLimit(root, len(uploaderRootChildren)+1)
-	if err != nil || !safeScaffold(d, scaffoldDirectory{"", 0755, uploaderRootChildren}, uid, gid, false) {
+	return checkPhysicalScaffoldChildren(root, uid, gid, uploaderRootChildren, true)
+}
+
+func checkPhysicalScaffoldChildren(root string, uid, gid uint32, children []string, credentialParent bool) error {
+	d, err := readViewDirectoryLimit(root, len(children)+1)
+	if err != nil || !safeScaffold(d, scaffoldDirectory{"", 0755, children}, uid, gid, false) {
 		return ErrUnsafe
 	}
 	for _, spec := range uploaderScaffold {
@@ -93,7 +97,7 @@ func checkPhysicalScaffold(root string, uid, gid uint32) error {
 		// LoadCredential creates this inert parent in RootDirectory. The live
 		// per-unit credential mount is separate; never accept credential bytes,
 		// aliases, writable metadata or unknown children in the physical tree.
-		if spec.name == "run" && slices.Equal(d.entries, []string{"credentials", "systemd"}) {
+		if credentialParent && spec.name == "run" && slices.Equal(d.entries, []string{"credentials", "systemd"}) {
 			credentials, readErr := readViewDirectory(root + "/run/credentials")
 			if readErr != nil || !safeScaffold(credentials, scaffoldDirectory{"run/credentials", 0755, nil}, uid, gid, false) {
 				return ErrUnsafe
@@ -172,6 +176,12 @@ func checkUploaderNamespace(pid int, root string, sources map[string]string, ric
 	if os.Geteuid() != 0 || pid < 2 || root != expectedRoot {
 		return ErrUnsafe
 	}
+	return checkNamespaceView(pid, root, sources, func(actual, physical func(string) (unix.Stat_t, error)) error {
+		return checkNamespaceBindingsForProfile(root, sources, rich, actual, physical)
+	})
+}
+
+func checkNamespaceView(pid int, root string, sources map[string]string, bindings func(func(string) (unix.Stat_t, error), func(string) (unix.Stat_t, error)) error) error {
 	proc := "/proc/" + strconv.Itoa(pid) + "/root"
 	// Follow this one procfs magic link intentionally, then pin the namespace
 	// root. All subsequent worker paths are traversed relative to this handle.
@@ -180,7 +190,7 @@ func checkUploaderNamespace(pid int, root string, sources map[string]string, ric
 		return ErrUnsafe
 	}
 	defer unix.Close(fd)
-	if checkNamespaceBindingsForProfile(root, sources, rich, func(name string) (unix.Stat_t, error) { return viewObjectAt(fd, name) }, func(path string) (unix.Stat_t, error) {
+	if bindings(func(name string) (unix.Stat_t, error) { return viewObjectAt(fd, name) }, func(path string) (unix.Stat_t, error) {
 		var s unix.Stat_t
 		err := unix.Lstat(path, &s)
 		return s, err
@@ -226,6 +236,10 @@ func checkNamespaceBindingsForProfile(root string, sources map[string]string, ri
 	if rich {
 		targets = []string{"/bin/observer-connected-rich-uploader", "/etc/home-lab-observer-connected-rich/installed.json", "/etc/home-lab-observer-connected-rich/collection-policy.json", "/handoff", "/activation", "/state/ledger", "/state/status"}
 	}
+	return checkNamespaceBindingsTargets(root, sources, targets, actual, physical)
+}
+
+func checkNamespaceBindingsTargets(root string, sources map[string]string, targets []string, actual, physical func(string) (unix.Stat_t, error)) error {
 	if len(sources) != len(targets) {
 		return ErrUnsafe
 	}

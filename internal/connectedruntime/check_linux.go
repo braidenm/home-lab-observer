@@ -34,10 +34,15 @@ type primitiveCalls struct {
 }
 
 func checkPrimitives(collector bool, p primitiveCalls) error {
-	for _, domain := range []int{unix.AF_UNIX, unix.AF_INET, unix.AF_INET6} {
-		if !collector && domain != unix.AF_UNIX {
-			continue
-		}
+	domains := []int{unix.AF_UNIX}
+	if collector {
+		domains = []int{unix.AF_UNIX, unix.AF_INET, unix.AF_INET6}
+	}
+	return checkDeniedPrimitives(domains, p)
+}
+
+func checkDeniedPrimitives(domains []int, p primitiveCalls) error {
+	for _, domain := range domains {
 		fd, err := p.socket(domain, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
 		if err == nil {
 			p.close(fd)

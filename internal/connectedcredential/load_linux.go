@@ -24,6 +24,12 @@ func LoadRichProcesses(server, connector string) (CredentialRecord, error) {
 	return loadCredential(server, connector, true)
 }
 
+// LoadRichProcessesDocker accepts only the separate Docker uploader's manager
+// credential mount, retaining all exact file, owner and per-UID ACL checks.
+func LoadRichProcessesDocker(server, connector string) (CredentialRecord, error) {
+	return loadCredentialForUnit(server, connector, "home-lab-observer-connected-rich-docker-uploader.service")
+}
+
 func credentialUnit(rich bool) string {
 	if rich {
 		return "home-lab-observer-connected-rich-uploader.service"
@@ -32,7 +38,10 @@ func credentialUnit(rich bool) string {
 }
 
 func loadCredential(server, connector string, rich bool) (CredentialRecord, error) {
-	unit := credentialUnit(rich)
+	return loadCredentialForUnit(server, connector, credentialUnit(rich))
+}
+
+func loadCredentialForUnit(server, connector, unit string) (CredentialRecord, error) {
 	if os.Geteuid() == 0 || os.Getenv("CREDENTIALS_DIRECTORY") != "/run/credentials/"+unit {
 		return CredentialRecord{}, ErrUnsafe
 	}
