@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/observer/schemas/remote/workload-inventory-v1.schema.json",
+  "title": "Explicit opt-in process/container egress profile; not admitted by current uploads",
+  "$comment": "Producer validation additionally enforces encoded byte budgets, canonical bytes, source binding, identity uniqueness, count equality, ordering and UTF-8 byte limits.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version","projection_profile","source_id","collector_version","collected_at","policy","processes","containers"],
+  "properties": {
+    "schema_version": {"const":"home-lab-workload-inventory/v1"},
+    "projection_profile": {"const":"process-container/v1"},
+    "source_id": {"type":"string","pattern":"^srv_[a-f0-9]{32}$"},
+    "collector_version": {"type":"string","maxLength":40,"pattern":"^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[A-Za-z0-9.-]+)?$"},
+    "collected_at": {"$ref":"#/$defs/utc"},
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["data_classification","read_only","processes_enabled","containers_enabled"],
+      "properties": {
+        "data_classification": {"const":"SENSITIVE"},
+        "read_only": {"const":true},
+        "processes_enabled": {"type":"boolean"},
+        "containers_enabled": {"type":"boolean"}
+      }
+    },
+    "processes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["quality","cpu_measurement_basis","observed_at","returned_count","total_count","truncated","items"],
+      "properties": {
+        "quality": {"$ref":"#/$defs/quality"},
+        "cpu_measurement_basis": {"const":"LIFETIME_SINGLE_CORE"},
+        "observed_at": {"$ref":"#/$defs/nullableUtc"},
+        "returned_count": {"type":"integer","minimum":0,"maximum":200},
+        "total_count": {"$ref":"#/$defs/nullableInteger"},
+        "truncated": {"type":"boolean"},
+        "items": {"type":"array","maxItems":200,"items":{"$ref":"#/$defs/process"}}
+      },
+      "allOf": [{"$ref":"#/$defs/sectionState"}]
+    },
+    "containers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["quality","cpu_measurement_basis","observed_at","returned_count","total_count","truncated","items"],
+      "properties": {
+        "quality": {"$ref":"#/$defs/quality"},
+        "cpu_measurement_basis": {"const":"ENGINE_HOST_CAPACITY"},
+        "observed_at": {"$ref":"#/$defs/nullableUtc"},
+        "returned_count": {"type":"integer","minimum":0,"maximum":500},
+        "total_count": {"$ref":"#/$defs/nullableInteger"},
+        "truncated": {"type":"boolean"},
+        "items": {"type":"array","maxItems":500,"items":{"$ref":"#/$defs/container"}}
+      },
+      "allOf": [{"$ref":"#/$defs/sectionState"}]
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties":{"policy":{"properties":{"processes_enabled":{"const":false}},"type":"object"}},"type":"object"},
+      "then": {
+        "properties": {"processes":{"properties":{"quality":{"properties":{"state":{"const":"DISABLED"}},"type":"object"}},"type":"object"}},
+        "type": "object"
+      }
+    },
+    {
+      "if": {"properties":{"policy":{"properties":{"containers_enabled":{"const":false}},"type":"object"}},"type":"object"},
+      "then": {
+        "properties": {"containers":{"properties":{"quality":{"properties":{"state":{"const":"DISABLED"}},"type":"object"}},"type":"object"}},
+        "type": "object"
+      }
+    }
+  ],
+  "$defs": {
+    "utc": {"type":"string","format":"date-time","pattern":"Z$"},
+    "nullableUtc": {"anyOf":[{"$ref":"#/$defs/utc"},{"type":"null"}]},
+    "integer": {"type":"integer","minimum":0,"maximum":9007199254740991},
+    "nullableInteger": {"anyOf":[{"$ref":"#/$defs/integer"},{"type":"null"}]},
+    "percent": {"type":["number","null"],"minimum":0,"maximum":100},
+    "name": {"type":"string","minLength":1,"maxLength":128,"pattern":"^[^\\p{Cc}\\p{Cf}]+$"},
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state","reason_code"],
+      "properties": {"state":{"type":"string"},"reason_code":{"type":["string","null"]}},
+      "oneOf": [
+        {"properties":{"state":{"const":"AVAILABLE"},"reason_code":{"const":null}},"type":"object"},
+        {"properties":{"state":{"const":"DEGRADED"},"reason_code":{"const":"PARTIAL_COLLECTION"}},"type":"object"},
+        {"properties":{"state":{"const":"DISABLED"},"reason_code":{"const":"DISABLED_BY_CONFIGURATION"}},"type":"object"},
+        {"properties":{"state":{"const":"PERMISSION_DENIED"},"reason_code":{"const":"PERMISSION_DENIED"}},"type":"object"},
+        {"properties":{"state":{"const":"UNSUPPORTED"},"reason_code":{"const":"UNSUPPORTED"}},"type":"object"},
+        {"properties":{"state":{"const":"UNKNOWN"},"reason_code":{"const":"NOT_YET_OBSERVED"}},"type":"object"},
+        {
+          "properties": {"state":{"const":"UNAVAILABLE"},"reason_code":{"enum":["COLLECTION_FAILED","DEADLINE_EXCEEDED","COLLECTION_CANCELED","NO_DATA"]}},
+          "type": "object"
+        }
+      ]
+    },
+    "sectionState": {
+      "type": "object",
+      "allOf": [
+        {
+          "if": {"properties":{"quality":{"properties":{"state":{"const":"AVAILABLE"}},"type":"object"}},"type":"object"},
+          "then": {
+            "properties": {"observed_at":{"$ref":"#/$defs/utc"},"total_count":{"$ref":"#/$defs/integer"},"truncated":{"const":false}},
+            "type": "object"
+          }
+        },
+        {
+          "if": {"properties":{"quality":{"properties":{"state":{"const":"DEGRADED"}},"type":"object"}},"type":"object"},
+          "then": {"properties":{"observed_at":{"$ref":"#/$defs/utc"}},"type":"object"}
+        },
+        {
+          "if": {"properties":{"quality":{"properties":{"state":{"not":{"enum":["AVAILABLE","DEGRADED"]}}},"type":"object"}},"type":"object"},
+          "then": {
+            "properties": {"returned_count":{"const":0},"total_count":{"const":null},"truncated":{"const":false},"items":{"type":"array","maxItems":0}},
+            "type": "object"
+          }
+        },
+        {
+          "if": {"properties":{"quality":{"properties":{"state":{"enum":["DISABLED","UNKNOWN"]}},"type":"object"}},"type":"object"},
+          "then": {"properties":{"observed_at":{"const":null}},"type":"object"}
+        }
+      ]
+    },
+    "process": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pid","name","state","cpu_percent","memory_rss_bytes","elapsed_seconds"],
+      "properties": {
+        "pid": {"type":"integer","minimum":1,"maximum":2147483647},
+        "name": {"allOf":[{"$ref":"#/$defs/name"},{"pattern":"^[^/\\\\]+$","type":"string"}]},
+        "state": {"enum":["running","sleeping","stopped","zombie","idle","waiting","unknown"]},
+        "cpu_percent": {"type":"number","minimum":0,"maximum":409600},
+        "memory_rss_bytes": {"$ref":"#/$defs/integer"},
+        "elapsed_seconds": {"anyOf":[{"type":"integer","minimum":1,"maximum":9007199254740991},{"type":"null"}]}
+      }
+    },
+    "container": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id_alias","name","image","state","cpu_percent","memory_bytes","metrics_state","reason_code"],
+      "properties": {
+        "id_alias": {"type":"string","pattern":"^ctr_[a-f0-9]{16}$"},
+        "name": {"$ref":"#/$defs/name"},
+        "image": {"type":"string","minLength":1,"maxLength":240,"pattern":"^[^\\p{Cc}\\p{Cf}]+$"},
+        "state": {"enum":["unknown","created","running","paused","restarting","removing","exited","dead"]},
+        "cpu_percent": {"$ref":"#/$defs/percent"},
+        "memory_bytes": {"$ref":"#/$defs/nullableInteger"},
+        "metrics_state": {"enum":["AVAILABLE","PARTIAL","UNAVAILABLE","NOT_RUNNING"]},
+        "reason_code": {
+          "enum": [
+            null,
+            "NOT_RUNNING",
+            "INVALID_COUNTER",
+            "METRIC_UNAVAILABLE",
+            "PERMISSION_DENIED",
+            "UNSUPPORTED",
+            "DEADLINE_EXCEEDED",
+            "COLLECTION_CANCELED"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties":{"state":{"not":{"const":"running"}}},"type":"object"},
+          "then": {"properties":{"metrics_state":{"const":"NOT_RUNNING"}},"type":"object"},
+          "else": {"properties":{"metrics_state":{"not":{"const":"NOT_RUNNING"}}},"type":"object"}
+        },
+        {
+          "if": {"properties":{"metrics_state":{"const":"AVAILABLE"}},"type":"object"},
+          "then": {"properties":{"cpu_percent":{"type":"number"},"memory_bytes":{"type":"integer"},"reason_code":{"const":null}},"type":"object"}
+        },
+        {
+          "if": {"properties":{"metrics_state":{"const":"PARTIAL"}},"type":"object"},
+          "then": {
+            "properties": {"reason_code":{"const":"INVALID_COUNTER"}},
+            "oneOf": [
+              {"properties":{"cpu_percent":{"type":"number"},"memory_bytes":{"type":"null"}},"type":"object"},
+              {"properties":{"cpu_percent":{"type":"null"},"memory_bytes":{"type":"integer"}},"type":"object"}
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "if": {"properties":{"metrics_state":{"const":"UNAVAILABLE"}},"type":"object"},
+          "then": {
+            "properties": {
+              "cpu_percent": {"const":null},
+              "memory_bytes": {"const":null},
+              "reason_code": {"enum":["INVALID_COUNTER","METRIC_UNAVAILABLE","PERMISSION_DENIED","UNSUPPORTED","DEADLINE_EXCEEDED","COLLECTION_CANCELED"]}
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {"properties":{"metrics_state":{"const":"NOT_RUNNING"}},"type":"object"},
+          "then": {"properties":{"cpu_percent":{"const":null},"memory_bytes":{"const":null},"reason_code":{"const":"NOT_RUNNING"}},"type":"object"}
+        }
+      ]
+    }
+  }
+}
