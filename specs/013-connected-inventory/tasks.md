@@ -50,6 +50,9 @@
   exact old profiles/resources and actual source/artifact/VM/hosted/owner gates before release or enrollment exposure.
   Source and mechanical publication reviews passed; this layer still requires its own exact-head CI before merge.
 
+The next manual artifact gate follows the dated [Docker-rich VM proof plan](docker-vm-proof.md). Its signed input
+verification, fixture implementation and two independent overlay results remain pending until recorded there.
+
 - [x] Record delegated engineering decision and [concrete installation plan](installable-docker-observation.md);
   independently reviewed and merged in PR 138; Docker implementation/activation retain their remaining gates.
 - [x] Pass exact packaged process-only VM proof before Docker runtime implementation (exact source and evidence above).
