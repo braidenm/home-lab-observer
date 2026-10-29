@@ -21,7 +21,9 @@
   migration. Real-SQLite/crash/ENOSPC proof, independent review and exact-head CI pass (PR 135 merged).
 - [ ] Complete the coherent VM-installable process-only package, following [its acceptance scope](installable-process-proof.md).
   Source composition and focused tests are in progress; no owner-host installation or rich release is accepted yet.
-- [ ] Implement/rehearse supported profile-changing migration or separately enrolled coexistence; preserve old connector.
+- [ ] Rehearse fresh Docker-rich installation alongside numeric with no existing rich root; preserve numeric bytes/state.
+  Separately prove pre-mutation refusal and byte-for-byte preservation of an existing process-only rich root.
+  Rich-to-rich replacement and simultaneous rich installations are not implemented by this slice.
 - [ ] Wire profile-aware bounded handoff/ledger/transport and receiver; no broad cap-only activation.
 - [ ] Add useful searchable workload/storage views and owner/delegate denial/revocation coverage.
 - [ ] Run exact packaged Ubuntu/disposable Docker isolation/failure/resource acceptance.
@@ -32,6 +34,25 @@
   (PR 129 merged after native CI). This source correction is not yet packaged on the connected owner host.
 - [ ] Add read-only systemd adapter; separately specify opt-in remote safe-log metadata.
 - [ ] Continue separately permissioned Spec 011 start/stop/restart; never infer control from observation.
+
+## Coherent installed process-and-Docker delivery (ADR 025)
+
+- [x] Record delegated engineering decision and [concrete installation plan](installable-docker-observation.md);
+  documentation only, implementation and activation gated. Independent review of this documentation remains pending.
+- [ ] Pass exact packaged process-only VM proof before Docker runtime implementation.
+- [ ] Freeze helper file/freshness/socket/layout/resources and new immutable collection definition with independent review.
+- [ ] Deploy new-profile/event/feature readers and record rollback floors before any new writer/feature event.
+- [ ] Deliver fixed Docker reader, typed file, kind2/schema-v3 state, installer/units and complete four-executable
+  artifact verification as one coherent implementation/acceptance target; preserve old profiles and byte budgets.
+- [ ] Integrate nullable authorized container views and independently approved enrollment/definition echo, gated off
+  until exact release acceptance; retain same-row revocation locking and atomic same-sequence reads.
+- [ ] Pass synthetic/privacy/race/storage tests and actual packaged Ubuntu/disposable Docker isolation/fault/resource proof.
+  Keep successful numeric-plus-Docker-rich coexistence separate from existing-process-only-rich refusal/preservation;
+  do not claim a second rich root or rich-to-rich migration.
+- [ ] Publish exact immutable artifacts with provenance/SBOM and honest install/manage/partial-state instructions.
+- [ ] Verify actual owner/delegate/outsider/revoke and responsive hosted dashboard; separately authorize owner-host install.
+
+No helper, profile-kind support, schema-v3 ledger, enrollment writer or Docker release is implemented by this checklist.
 
 ## Local contract evidence (2026-10-29)
 
