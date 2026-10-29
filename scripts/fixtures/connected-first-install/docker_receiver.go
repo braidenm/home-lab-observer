@@ -35,6 +35,7 @@ type dockerCounts struct {
 	Warmed           bool   `json:"warmed_metrics"`
 	Unavailable      bool   `json:"unavailable"`
 	UnavailableCount uint64 `json:"unavailable_count"`
+	HealthySequence  int64  `json:"healthy_sequence"`
 }
 
 type dockerReceiver struct {
@@ -46,6 +47,9 @@ type dockerReceiver struct {
 
 func validDockerCounts(s dockerCounts) bool {
 	if !connectedprofile.ValidConnectorID(s.Connector) || s.Sequence < 0 || s.Accepted > 10000 || s.Duplicates > 10000 || s.UnavailableCount > s.Accepted || s.Unavailable != (s.UnavailableCount > 0) {
+		return false
+	}
+	if s.HealthySequence < 0 || s.HealthySequence > s.Sequence || s.HealthySequence > 0 && (s.HealthySequence != s.Sequence || !s.Running || !s.ExitedNull || !s.Warmed || !s.Foreign || !s.Large) {
 		return false
 	}
 	if s.Sequence == 0 {
@@ -187,9 +191,11 @@ func (a *dockerReceiver) snapshot(w http.ResponseWriter, r *http.Request) {
 
 func recordDockerObservations(next *dockerCounts, d dockerObservations, size int) {
 	next.Large = next.Large || size > 16*1024
+	foreign, running, exited, warmed := false, false, false, false
 	for _, row := range d.Workload.Processes.Items {
-		next.Foreign = next.Foreign || strings.HasPrefix(row.Name, "hlofixture")
+		foreign = foreign || strings.HasPrefix(row.Name, "hlofixture")
 	}
+	next.Foreign = next.Foreign || foreign
 	switch d.Workload.Containers.Quality.State {
 	case "UNAVAILABLE", "PERMISSION_DENIED", "UNSUPPORTED":
 		next.UnavailableCount++
@@ -197,11 +203,18 @@ func recordDockerObservations(next *dockerCounts, d dockerObservations, size int
 	}
 	for _, row := range d.Workload.Containers.Items {
 		if row.Name == "hlo-fixture-running" && row.State == "running" {
-			next.Running = true
-			next.Warmed = next.Warmed || row.CPU != nil && row.Memory != nil && row.Metrics == "AVAILABLE"
+			running = true
+			warmed = row.CPU != nil && row.Memory != nil && row.Metrics == "AVAILABLE"
 		}
 		if row.Name == "hlo-fixture-exited" && row.State == "exited" && row.CPU == nil && row.Memory == nil && row.Metrics == "NOT_RUNNING" {
-			next.ExitedNull = true
+			exited = true
 		}
+	}
+	next.Running, next.ExitedNull, next.Warmed = next.Running || running, next.ExitedNull || exited, next.Warmed || warmed
+	// Current-body proof, unlike the historical counters. A later unavailable,
+	// cold or small sample must not inherit a prior healthy recovery decision.
+	next.HealthySequence = 0
+	if foreign && size > 16*1024 && running && exited && warmed && d.Workload.Containers.Quality.State == "AVAILABLE" {
+		next.HealthySequence = next.Sequence
 	}
 }

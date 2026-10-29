@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -54,10 +55,17 @@ func TestDockerFixtureExchangeApprovesOnlyExactIndependentKindAndDefinition(t *t
 }
 
 func dockerSnapshot(t *testing.T, unavailable, containersEnabled bool) []byte {
+	return dockerSnapshotWithRows(t, unavailable, containersEnabled, 1)
+}
+
+func dockerSnapshotWithRows(t *testing.T, unavailable, containersEnabled bool, count int) []byte {
 	t.Helper()
-	rows := []observation.Process{{PID: 42, Name: "hlofixture000001", State: "sleeping", MemoryBytes: 4096}}
+	var rows []observation.Process
+	for i := 0; i < count; i++ {
+		rows = append(rows, observation.Process{PID: int32(42 + i), Name: fmt.Sprintf("hlofixture%06d%s", i, strings.Repeat("n", 64)), State: "sleeping", MemoryBytes: 4096})
+	}
 	at := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
-	raw := observation.Snapshot{SchemaVersion: observation.SchemaVersion, ObservedAt: at, Processes: observation.Section[[]observation.Process]{State: observation.Available, Data: &rows, Quality: observation.SectionQuality{Samples: 1, Total: 1}}}
+	raw := observation.Snapshot{SchemaVersion: observation.SchemaVersion, ObservedAt: at, Processes: observation.Section[[]observation.Process]{State: observation.Available, Data: &rows, Quality: observation.SectionQuality{Samples: 1, Total: count}}}
 	zero, memory := float64(0), uint64(4096)
 	engine := model.Inventory{SchemaVersion: model.SchemaVersion, ObservedAt: &at, SupportState: model.SupportSupported, CollectionState: model.CollectionOK, Freshness: model.FreshnessCurrent, ReturnedCount: 2, TotalCount: 2, Items: []model.Container{
 		{IDAlias: "ctr_0000000000000001", Name: "hlo-fixture-running", Image: "fixture:local", State: model.StateRunning, CPUPercent: &zero, MemoryBytes: &memory, MetricsState: model.MetricsAvailable},
@@ -141,6 +149,26 @@ func TestDockerFixturePersistFailureNeverAcknowledgesOrChangesState(t *testing.T
 	}
 }
 
+func TestDockerFixtureRecoveryRequiresCurrentHealthySequenceNotHistoricalFlags(t *testing.T) {
+	a := &dockerReceiver{state: dockerCounts{Connector: "agent_" + strings.Repeat("e", 32)}, save: func(dockerCounts) error { return nil }}
+	healthy := dockerSnapshotWithRows(t, false, true, 200)
+	if len(healthy) <= 16*1024 || dockerPut(a, healthy, "1") != 503 || a.state.HealthySequence != 1 {
+		t.Fatal("full current-body proof missing")
+	}
+	if dockerPut(a, dockerSnapshotWithRows(t, true, true, 200), "2") != 200 || a.state.HealthySequence != 0 {
+		t.Fatal("historical booleans hid new unavailable frame")
+	}
+	if !a.state.Running || !a.state.ExitedNull || !a.state.Warmed || !a.state.Foreign || !a.state.Large {
+		t.Fatal("historical evidence unexpectedly erased")
+	}
+	if dockerPut(a, dockerSnapshot(t, false, true), "3") != 200 || a.state.HealthySequence != 0 {
+		t.Fatal("small new body reused historical large flag")
+	}
+	if dockerPut(a, healthy, "4") != 200 || a.state.HealthySequence != a.state.Sequence || a.state.HealthySequence != 4 {
+		t.Fatal("actual recovered sequence not recognized")
+	}
+}
+
 func TestDockerFixtureStateIsClosedBoundedMetadataWithoutBodies(t *testing.T) {
 	valid := dockerCounts{Connector: "agent_" + strings.Repeat("e", 32), Sequence: 1, Digest: strings.Repeat("a", 64), Accepted: 1, Lost: true}
 	if !validDockerCounts(valid) {
@@ -162,7 +190,7 @@ func TestDockerFixtureStateIsClosedBoundedMetadataWithoutBodies(t *testing.T) {
 		t.Fatal("unbounded or secret durable state")
 	}
 	var keys map[string]json.RawMessage
-	if json.Unmarshal(b, &keys) != nil || len(keys) != 13 {
+	if json.Unmarshal(b, &keys) != nil || len(keys) != 14 {
 		t.Fatal("durable shape changed")
 	}
 	for _, key := range []string{"snapshot", "body", "name", "image", "items", "token", "credential"} {
