@@ -103,6 +103,13 @@ func (s *slot) checkDirectory() error {
 	if err != nil && !errors.Is(err, io.EOF) {
 		return ErrUnavailable
 	}
+	return s.checkEntries(entries)
+}
+
+// Directory enumeration is not an atomic snapshot of concurrent publication.
+// Keep its existing metadata validation separate so that disappearance of a
+// captured staging entry can be exercised deterministically.
+func (s *slot) checkEntries(entries []os.DirEntry) error {
 	if len(entries) > 3 {
 		return ErrUnsafe
 	}

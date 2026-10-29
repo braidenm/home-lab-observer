@@ -125,3 +125,25 @@ The `Shared handoff acceptance` workflow compiles the static fixture on a GitHub
 enables the privileged test three times with a five-minute job limit. It runs for relevant implementation/dependency/policy
 changes and manual dispatch. No private runner or secret is used. This exercises the opted-in failure/concurrency tests;
 the ordinary runtime suite alone skips them. Hosted execution evidence is pending until the workflow runs successfully.
+
+## Concurrent fixture construction (2026-10-29)
+
+Directory enumeration is not an atomic view of publication. A staged entry captured by `ReadDir` can be renamed or
+removed before its metadata lookup; the existing fixed result is unavailable, with no returned bytes. The constructor
+also performs this check, so beginning its construction only after the writer starts mutating creates an unrelated
+startup race in a fixture intended to exercise already-open concurrent reads.
+The [Go directory-entry contract](https://pkg.go.dev/io/fs#DirEntry) explicitly permits a later metadata lookup to fail
+after the entry is removed or renamed; a recorded name is not a pinned file handle.
+
+The fixture now establishes its reader first, receives its fixed readiness marker, then starts the writer and releases
+the reader through one fixed stdin byte. Both children remain deadline-bounded and are joined on success or failure.
+Read-time unavailable remains permitted; unsafe metadata, ACLs, invalid documents and other failures are not ignored.
+Private `checkEntries` extraction leaves production checks unchanged and permits a deterministic real-file test:
+capture the safe stage entry, remove only that owned file, and verify unavailable. Applying that boundary to the old
+writer-before-reader ordering failed deterministically; reader-first ordering passes. Existing mode/link/ACL negatives
+remain in force. Child failure diagnostics expose only closed error categories, never child output or rejected values.
+
+PR 136's first hosted repetition failed while two later repetitions passed. Its original error category was not captured,
+and 150 bounded local pre-fix repetitions did not reproduce it. The deterministic proof establishes and removes a real
+fixture-construction race; it does not retroactively prove that the hosted failure had that exact cause. Fresh exact-head
+hosted acceptance is still required, and the finite diagnostics distinguish any remaining constructor/read failure.
