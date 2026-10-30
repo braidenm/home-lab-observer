@@ -1,5 +1,8 @@
 # Rich connected inventory implementation plan
 
+PR-B's approved [fixed receipt/publisher plan](docker-promotion.md) and
+[owner runbook](docker-owner-promotion.md) follow merged PR148. No release execution is part of that source slice.
+
 ## Boundaries
 
 Reuse `internal/collector` and `internal/containerobs` for normalized read-only observations, with their existing

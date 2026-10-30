@@ -179,10 +179,11 @@ The generated helper is compared with the fixed bootstrap template/extractor/coo
 neither assets nor those source templates are executed by the Python verifier.
 
 - [x] Review fixed Docker preset factoring, aggregate archive bounds and independent-builder plan before PR-A implementation; receipt vocabulary remains PR B.
-- [ ] PR A: add the protected fixed Docker candidate, two isolated builder comparison with distinct IDs/names/output mappings, archive-only four-role SPDX plus five-file provenance and tests; preserve numeric v1.
-  Local source is implemented; Linux 66 candidate/promotion tests, real old-archive/helper and actual four-ELF Syft
-  fixture guards pass. Complete independent source review and exact-head CI remain open; no candidate dispatch.
-- [ ] Read the registered Docker workflow ID after PR A merges; do not dispatch yet.
+- [x] PR A: add the protected fixed Docker candidate, two isolated builder comparison with distinct IDs/names/output mappings, archive-only four-role SPDX plus five-file provenance and tests; preserve numeric v1.
+  PR148 merged as `7fa9afdb6a31e36da52134088d049545183d8710` after all16 checks passed. Local66-test,
+  archive/helper and actual four-ELF Syft evidence is source validation, not a dispatched protected candidate.
+- [x] Read the registered Docker workflow ID after PR A merges: `401377430`, exact active canonical path; no dispatch.
+- [x] Root and peer approve the exact [PR-B receipt and factoring plan](docker-promotion.md) before production edits.
 - [ ] PR B: pin that ID and complete fixed Docker prepare/promotion, canonical receipt and operator/tests documentation.
 - [ ] Freeze final clean merged source S, dispatch exact protected candidate and build the complete same-S local baseline.
 - [ ] Verify independent public-byte equality and exact provenance, then run both complete same-source VM cases with no diagnostic overlay.
