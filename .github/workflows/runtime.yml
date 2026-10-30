@@ -31,12 +31,19 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify runtime coverage and bounded workflow
+        run: node --test scripts/runtime-workflow.test.mjs
       - run: go test ./...
+        if: runner.os != 'Linux'
       - name: Stress bounded handoff publication races
+        if: runner.os != 'Linux'
         run: go test ./internal/handoff -run TestConcurrentReaderNeverReturnsPartialDocument -count=25
       - name: Run race detector
         if: runner.os == 'Linux'
         run: go test -race ./...
+      - name: Stress bounded handoff publication with race detection
+        if: runner.os == 'Linux'
+        run: go test -race ./internal/handoff -run TestConcurrentReaderNeverReturnsPartialDocument -count=25
       - run: go vet ./...
       - name: Validate real native snapshot against JSON Schema
         run: node scripts/validate-runtime-snapshot.mjs
