@@ -15,8 +15,9 @@ Keep [ADR025](../../docs/adr/025-isolated-installed-docker-observation.md) and
    (EACCES or EROFS). Reject0755, other modes/ownership, ACLs, successful read/access, malformed/unknown errors and
    observed procfs/sysfs. The other live paths retain their current exact checks.
 3. Root independently proves the one code-owned source
-   `/run/systemd/propagate/home-lab-observer-connected-rich-docker-reader.service`. Use the compiled
-   `connectedunits.RichProcessesDockerReaderUnit`, not a supplied name or directory. Validate trusted ancestors,
+   `/run/systemd/propagate/home-lab-observer-connected-rich-docker-reader.service`. Use a private compiled literal,
+   with test-only equality to `connectedunits.RichProcessesDockerReaderUnit`, never a supplied name or directory.
+   The worker dependency closure must not import the unit-rendering/installation package. Validate trusted ancestors,
    no symlink traversal, exact root:root0600 source, absent access/default ACL, bounded empty directory and non-API
    filesystem. Walk/pin every fixed parent component no-follow, requiring root-owned directories without group/world
    writes, not an assumed exact parent mode. Open the unit child relative to the pinned parent; compare the parent
@@ -35,8 +36,9 @@ Keep [ADR025](../../docs/adr/025-isolated-installed-docker-observation.md) and
 - `internal/connectedruntime/docker_view_linux.go`: Docker-reader-only runtime distinction. Leave the generic
   physical and old uploader guards untouched; no accepted-mode OR fallback.
 - `internal/connectedruntime/docker_namespace_linux.go`: private fixed-source descriptor audit through the existing
-  pinned-root callback; a closed reader-specific result carries Dev/Ino. A `connectedunits` import is acyclic;
-  confirm dependency closure instead of duplicating or accepting a unit string. Old namespace entry points stay strict.
+  pinned-root callback; a closed reader-specific result carries Dev/Ino. An acyclic `connectedunits` import still
+  violates worker authority/dependency closures. Keep the exact unit literal private in runtime and bind it to the
+  unit package only in a test; do not relax any command dependency test. Old namespace entry points stay strict.
 - `internal/connectedinstall/docker_reader_activation_linux.go`: existing Docker-only audit seam captures the first
   identity and compares the second before commit, preserving all lifecycle phases and conservative cleanup.
 - Focused runtime/namespace/lifecycle tests and the existing disposable Docker fixture assertions where needed.
@@ -81,3 +83,8 @@ their ownership normalization is test-only, not privileged host proof. Synthetic
 API filesystems, read/access errors, zero identity, both paused audit comparisons and unchanged closed failure phases.
 Old units/resources, numeric/process definitions, SQL and fixtures are unchanged. Independent final source review,
 current-head CI, new protected exact-source bytes and the full no-overlay packaged VM remain pending.
+
+PR150 CI subsequently rejected the production `connectedunits` dependency in the worker command closures. The
+correction removes that production import, retains a fixed literal with test-only cross-package equality, and
+requires all command dependency tests plus affected runtime/install race/vet to pass. An acyclic import alone was
+not evidence of least-authority compatibility; no closure allowlist, sandbox or guard is weakened.

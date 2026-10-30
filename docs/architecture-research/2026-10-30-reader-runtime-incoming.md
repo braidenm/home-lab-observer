@@ -45,8 +45,11 @@ unit-specific source identity. This does not turn a denied listing into proof of
 
 ## Security and implementation boundary
 
-Reuse the existing root-only `checkNamespaceView` pinned-root callback. Bind the source to the compiled exact reader
-unit, never a caller-supplied unit/path. Walk/pin each fixed parent no-follow and reject group/world-writable or
+Reuse the existing root-only `checkNamespaceView` pinned-root callback. Bind the source to a private compiled exact
+reader-unit literal, with test-only equality to `connectedunits.RichProcessesDockerReaderUnit`, never a caller-supplied
+unit/path. Acyclic imports are not necessarily approved authority dependencies: PR150 CI rejected the initial
+production unit-package import in the worker command closures. Keep that package test-only and retain all strict
+command closure tests, rather than expanding their allowlists. Walk/pin each fixed parent no-follow and reject group/world-writable or
 non-root-owned ancestors without assuming their exact modes. Open the unit relative to that pinned parent; check exact metadata,
 ACL absence via its descriptor, bounded empty contents and non-procfs/non-sysfs. Compare source path to the pinned FD
 before and after the namespace audit (including each parent path/object), and compare the callback's `run/systemd/incoming` to that source.
