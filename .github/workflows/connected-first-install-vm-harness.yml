@@ -31,7 +31,7 @@ jobs:
       - name: Check Python fixture syntax
         env:
           PYTHONDONTWRITEBYTECODE: '1'
-        run: python3 -m py_compile scripts/fixtures/connected-first-install/run_vm.py scripts/fixtures/connected-first-install/drive_pty.py scripts/fixtures/connected-first-install/assert_guest.py scripts/fixtures/connected-first-install/preflight_probe.py scripts/fixtures/connected-first-install/activation_guest.py scripts/fixtures/connected-first-install/bootstrap_guest.py scripts/fixtures/connected-first-install/rich_scope.py scripts/fixtures/connected-first-install/rich_guest.py
+        run: python3 -m py_compile scripts/fixtures/connected-first-install/run_vm.py scripts/fixtures/connected-first-install/drive_pty.py scripts/fixtures/connected-first-install/assert_guest.py scripts/fixtures/connected-first-install/preflight_probe.py scripts/fixtures/connected-first-install/activation_guest.py scripts/fixtures/connected-first-install/bootstrap_guest.py scripts/fixtures/connected-first-install/rich_scope.py scripts/fixtures/connected-first-install/rich_guest.py scripts/fixtures/connected-first-install/docker_scope.py scripts/fixtures/connected-first-install/docker_engine.py scripts/fixtures/connected-first-install/docker_guest.py
       - name: Check bounded fixture tests
         env:
           PYTHONDONTWRITEBYTECODE: '1'

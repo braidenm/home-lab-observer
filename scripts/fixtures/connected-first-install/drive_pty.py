@@ -53,7 +53,7 @@ def failure_marker(output: bytes, code: int, prompted: bool) -> str:
 def main() -> int:
     if (
         len(sys.argv) != 4
-        or sys.argv[1] not in ("install", "interrupt", "install-rich")
+        or sys.argv[1] not in ("install", "interrupt", "install-rich", "install-rich-docker")
         or not re.fullmatch(r"[a-f0-9]{64}", sys.argv[3])
     ):
         print("FIXTURE_DRIVER_ARGS_REFUSED", flush=True)
@@ -63,10 +63,12 @@ def main() -> int:
         print("FIXTURE_DRIVER_BUNDLE_REFUSED", flush=True)
         return 22
     rich = sys.argv[1] == "install-rich"
-    binary = os.path.join(bundle, "observer-connected-rich-install" if rich else "observer-connected-install")
+    docker = sys.argv[1] == "install-rich-docker"
+    binary = os.path.join(bundle, "observer-connected-rich-docker-install" if docker else ("observer-connected-rich-install" if rich else "observer-connected-install"))
     child, terminal = pty.fork()
     if child == 0:
-        os.execv(binary, [binary, "install", bundle, digest, "srv_" + "b" * 32 if rich else SERVER])
+        server = "srv_" + "c" * 32 if docker else ("srv_" + "b" * 32 if rich else SERVER)
+        os.execv(binary, [binary, "install", bundle, digest, server])
 
     prompted = False
     child_running = True
@@ -109,7 +111,8 @@ def main() -> int:
                         return 1
                     if not prompted and b"One-use enrollment grant" in output:
                         prompted = True
-                        os.write(terminal, b"hle_" + b"C" * 43 + b"\n" if rich else GRANT)
+                        token = b"hle_" + b"E" * 43 + b"\n" if docker else (b"hle_" + b"C" * 43 + b"\n" if rich else GRANT)
+                        os.write(terminal, token)
             finished, status = os.waitpid(child, os.WNOHANG)
             if finished:
                 child_running = False

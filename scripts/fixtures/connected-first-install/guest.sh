@@ -152,7 +152,7 @@ EOF
 }
 
 case "${1:-}" in
-  success|success-cut|interrupt|activation|bootstrap|rich-processes)
+  success|success-cut|interrupt|activation|bootstrap|rich-processes|rich-docker|rich-docker-refusal)
     baseline
     prepare_guest "$1"
     bundle="$(cat "$fixture_root/bundle-path")"
@@ -218,6 +218,14 @@ case "${1:-}" in
         systemctl reboot
         exit 0
       fi
+      if [ "$1" = rich-docker ] || [ "$1" = rich-docker-refusal ]; then
+        kill "$receiver_pid"
+        wait "$receiver_pid" || true
+        python3 "$payload/docker_guest.py" "$1" first || fail DOCKER
+        if [ "$1" = rich-docker ]; then emit DOCKER_FIRST_BOOT; else emit DOCKER_REFUSAL_FIRST_BOOT; fi
+        systemctl reboot
+        exit 0
+      fi
       sync
       if [ "$1" = success-cut ]; then
         emit SUCCESS_READY_FOR_CUT
@@ -233,7 +241,13 @@ case "${1:-}" in
   postboot)
     baseline
     mode="$(cat "$fixture_root/postboot-mode")"
-    if [ "$mode" = rich-processes ]; then
+    if [ "$mode" = rich-docker ] || [ "$mode" = rich-docker-refusal ]; then
+      installed_assertions
+      python3 "$payload/assert_guest.py" verify || fail NUMERIC_MUTATED
+      ip addr add "$alias_ip/32" dev lo || fail LOOPBACK_ALIAS
+      python3 "$payload/docker_guest.py" "$mode" reboot || fail DOCKER_REBOOT
+      if [ "$mode" = rich-docker ]; then emit DOCKER_REBOOT_PASS; else emit DOCKER_REFUSAL_REBOOT_PASS; fi
+    elif [ "$mode" = rich-processes ]; then
       installed_assertions
       python3 "$payload/assert_guest.py" verify || fail NUMERIC_MUTATED
       ip addr add "$alias_ip/32" dev lo || fail LOOPBACK_ALIAS

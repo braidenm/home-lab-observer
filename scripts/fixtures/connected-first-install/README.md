@@ -1,5 +1,56 @@
 # Disposable first-install and activation acceptance
 
+## Separate real-Docker proof (implementation; not executed)
+
+`--scope rich-docker` is a manual, independently reviewed gate. It never runs as
+part of the default or `all` scopes. It uses the same no-NIC 2-vCPU/3-GiB VM budget
+and creates two independent overlays: numeric + Docker-rich coexistence, and a
+stopped process-only rich installation that must refuse Docker-rich replacement
+without changing its files, principals or services. No owner/CI host Docker daemon
+is touched. This is observation only, not permission to run container controls.
+
+In addition to the existing numeric inputs and separately pinned process-only
+`--rich-archive` inputs, supply `--docker-archive`,
+`--expected-docker-archive-sha256`, `--expected-docker-manifest-sha256`,
+`--docker-input-directory`, `--expected-docker-rootfs-sha256` and
+`--expected-docker-fixture-sha256`. All three Observer bundles must have the exact
+same reviewed source commit. The Docker bundle must contain exactly the known
+four executable roles and its own profile; a three-role package is not equivalent.
+The Docker helper `install-connected-rich-processes-docker-linux.sh` is verified
+through the closed three-line checksum file but is not executed by this scope.
+
+The input directory holds only the three exact Docker `.deb` files listed in
+[the signed input record](../../../specs/013-connected-inventory/docker-vm-inputs.md),
+`fixture` and `fixture-rootfs.tar`. Build the existing
+`scripts/fixtures/docker-observation` Go sleeper from the reviewed source with
+Go1.27.3, `CGO_ENABLED=0`, `GOOS=linux`, `GOARCH=amd64`, `-trimpath`,
+`-buildvcs=false` and `-ldflags=-buildid=`. Construct the tar using the reviewed
+`docker_scope.rootfs_bytes`: one regular `fixture` member, root ownership,
+mode0555, zero timestamp, no extensions or additional members. Independently pin
+both binary and tar SHA-256. This pins an import input, not a reproducible Docker
+registry image digest. The guest imports it locally with fixed nonroot USER and
+ENTRYPOINT; no registry/pull/build network or arbitrary image is admitted.
+
+For this scope only the canonical harness manifest extends the existing seven
+files with `rich_scope.py rich_guest.py docker_scope.py docker_engine.py
+docker_guest.py`, in that order. Pin the compiled receiver independently too.
+The receiver verifies the current combined body, profile/definition, real foreign
+process and running/exited container rows, nullable stopped/warmed metrics and
+private metadata canaries. It persists only closed receipt counters/hashes.
+Historical booleans cannot prove recovery: `healthy_sequence` must equal the
+current sequence and advance beyond the receipt of each unavailable fault.
+
+The guest extracts signature/hash-verified packages without maintainer scripts,
+checks exact preinstalled dependencies, retains AppArmor/seccomp, and starts only
+its own bounded daemon with one Unix socket and no bridge/firewall/forwarding.
+Synthetic containers have no network, mounts, capabilities, writable root,
+privilege escalation, restart policy or logs. The journey checks actual namespace
+denials for all three roles, stale frames, a real daemon/socket replacement and
+explicit Observer Stop/Start, then byte-identical pending retry within the real
+two-minute TTL across reboot before a new healthy observation/acknowledgement.
+Only allowlisted failure markers reach serial output; raw Docker output, rows,
+credentials and keys do not. See [the complete pending proof plan](../../../specs/013-connected-inventory/docker-vm-proof.md).
+
 ## Separate process-only proof (packaged staging VM passed)
 
 The exact first-boot/reboot run at source `24153fa278eea907cb0987ae96c26137c9aae909` passed with independent
