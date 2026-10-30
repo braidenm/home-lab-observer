@@ -30,6 +30,8 @@ func TestDockerReaderFailurePhasesAreClosedAndSanitized(t *testing.T) {
 		}},
 		{"uncertain-start", "READER_SERVICE_START", true, nil},
 		{"audit-before", "READER_AUDIT_BEFORE_REQUEST", false, nil},
+		{"source-zero-device", "READER_AUDIT_BEFORE_REQUEST", false, nil},
+		{"source-zero-inode", "READER_AUDIT_BEFORE_REQUEST", false, nil},
 		{"entropy", "READER_REQUEST_BUILD", false, func(o *dockerReaderOperations, _ context.CancelFunc) {
 			o.random = func([]byte) (int, error) { return 0, private }
 		}},
@@ -43,6 +45,8 @@ func TestDockerReaderFailurePhasesAreClosedAndSanitized(t *testing.T) {
 		{"missing-response", "READER_RESPONSE_WAIT", false, nil},
 		{"stale-response", "READER_RESPONSE_MATCH", false, nil},
 		{"audit-response", "READER_AUDIT_AFTER_RESPONSE", false, nil},
+		{"source-replaced", "READER_AUDIT_AFTER_RESPONSE", false, nil},
+		{"source-device", "READER_AUDIT_AFTER_RESPONSE", false, nil},
 		{"commit.json", "READER_COMMIT_PUBLICATION", true, nil},
 		{"status-error", "READER_STATUS_WAIT", false, func(o *dockerReaderOperations, _ context.CancelFunc) {
 			o.status = func() (connectedstatus.Record, error) { return connectedstatus.Record{}, private }

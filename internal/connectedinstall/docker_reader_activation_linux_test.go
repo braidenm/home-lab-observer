@@ -15,6 +15,7 @@ import (
 
 	"github.com/braidenm/home-lab-observer/internal/connectedactivation"
 	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
+	"github.com/braidenm/home-lab-observer/internal/connectedruntime"
 	"github.com/braidenm/home-lab-observer/internal/connectedstatus"
 	"github.com/braidenm/home-lab-observer/internal/connectedunits"
 )
@@ -111,13 +112,29 @@ func (f *readerFixture) operations() dockerReaderOperations {
 			}
 			return r, nil
 		},
-		audit: func(context.Context, workerInstance) error {
+		audit: func(context.Context, workerInstance) (connectedruntime.DockerReaderNamespaceIdentity, error) {
 			f.audits++
 			f.events = append(f.events, "audit")
 			if f.fail == "audit-before" && f.audits == 1 || f.fail == "audit-response" && f.audits == 2 {
-				return ErrUnsafe
+				return connectedruntime.DockerReaderNamespaceIdentity{}, ErrUnsafe
 			}
-			return nil
+			identity := connectedruntime.DockerReaderNamespaceIdentity{Dev: 2, Ino: 14}
+			if f.fail == "source-replaced" && f.audits == 2 {
+				identity.Ino++
+			}
+			if f.fail == "source-device" && f.audits == 2 {
+				identity.Dev++
+			}
+			if f.fail == "source-zero" {
+				identity = connectedruntime.DockerReaderNamespaceIdentity{}
+			}
+			if f.fail == "source-zero-device" {
+				identity.Dev = 0
+			}
+			if f.fail == "source-zero-inode" {
+				identity.Ino = 0
+			}
+			return identity, nil
 		},
 		status: func() (connectedstatus.Record, error) {
 			if !f.committed {
@@ -151,7 +168,7 @@ func dockerLifecycleConfig(t *testing.T) connectedprofile.RichProcessesDockerCon
 	return c
 }
 func TestDockerReaderActivationAuditsBothPausedBoundariesAndCleansFailures(t *testing.T) {
-	for _, failure := range []string{"", "audit-before", "request.json", "missing-response", "stale-response", "audit-response", "commit.json", "stale-status", "changed-after-commit", "uncertain-start", "cancelled", "replaced"} {
+	for _, failure := range []string{"", "audit-before", "request.json", "missing-response", "stale-response", "audit-response", "commit.json", "stale-status", "changed-after-commit", "uncertain-start", "cancelled", "replaced", "source-replaced", "source-device", "source-zero", "source-zero-device", "source-zero-inode"} {
 		t.Run(failure, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -180,7 +197,7 @@ func TestDockerReaderActivationAuditsBothPausedBoundariesAndCleansFailures(t *te
 				if err == nil || f.active || !slices.Contains(f.events, "stop") {
 					t.Fatal("failed reader handshake not joined")
 				}
-				if strings.HasPrefix(failure, "audit-") && f.committed {
+				if (strings.HasPrefix(failure, "audit-") || strings.HasPrefix(failure, "source-")) && f.committed {
 					t.Fatal("audit failure released Engine I/O")
 				}
 			}

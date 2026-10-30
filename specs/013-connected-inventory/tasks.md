@@ -184,11 +184,25 @@ neither assets nor those source templates are executed by the Python verifier.
   archive/helper and actual four-ELF Syft evidence is source validation, not a dispatched protected candidate.
 - [x] Read the registered Docker workflow ID after PR A merges: `401377430`, exact active canonical path; no dispatch.
 - [x] Root and peer approve the exact [PR-B receipt and factoring plan](docker-promotion.md) before production edits.
-- [ ] PR B: pin that ID and complete fixed Docker prepare/promotion, canonical receipt and operator/tests documentation.
-  Local implementation passes all100 connected Python tests with no skips, including unchanged numeric golden/API
-  regressions; source review and exact-head CI remain pending. Existing Contracts discovery includes both new suites
+- [x] PR B: pin that ID and complete fixed Docker prepare/promotion, canonical receipt and operator/tests documentation.
+  At pre-merge implementation review, all100 connected Python tests passed with no skips, including unchanged numeric golden/API
+  regressions; source review and exact-head CI were then pending. Existing Contracts discovery includes both new suites
   once, without builds, provider mutations or a VM. See [the implementation evidence](docker-promotion.md#local-pr-b-implementation-evidence-2026-10-30).
+  PR149 subsequently passed all triggered checks and merged as `04666e181ffbffce82788c4ce10f759f43d1d509`. Its protected candidate verification succeeded,
+  but complete packaged VM startup failed; this is not accepted Docker VM evidence or a published release.
 - [ ] Freeze final clean merged source S, dispatch exact protected candidate and build the complete same-S local baseline.
 - [ ] Verify independent public-byte equality and exact provenance, then run both complete same-source VM cases with no diagnostic overlay.
 - [ ] Merge only the canonical acceptance JSON addition between S and promotion; publish unchanged bytes after all guards pass.
 - [ ] Separately deliver catalog/readers/writer/consent and owner/viewer acceptance; no container controls or Kubernetes here.
+
+## Docker reader native incoming boundary (2026-10-30)
+
+- [x] Research native systemd255 propagation versus physical scaffold; record the limited retained-sandbox MODE result
+  and compare current0755, native0600 plus root audit, and explicit denial in [the research](../../docs/architecture-research/2026-10-30-reader-runtime-incoming.md).
+- [x] Independently review [spec/plan](reader-incoming-runtime.md) before source implementation.
+- [x] TDD exact Docker-reader0600 denial plus fixed source descriptor/namespace audit; old physical/numeric/process
+  behavior, units, definition, caps and schemas unchanged.
+- [x] Compare captured source identity before request and after response under the same existing worker/socket fences.
+- [ ] Independently review source; pass focused runtime/lifecycle race/vet and all required exact-head CI.
+- [ ] Freeze new complete source/candidate/baselines and pass both same-source packaged Docker VM cases; no overlays.
+- [ ] Canonical acceptance, immutable release and separately authorized owner/viewer acceptance remain later gates.

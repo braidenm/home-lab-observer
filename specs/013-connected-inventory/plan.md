@@ -66,6 +66,11 @@ counts, durations and drop/truncation metrics, not raw names/IDs/rejected values
 
 ## Tests and rollback
 
+The next production correction is the [Docker-reader native incoming-directory boundary](reader-incoming-runtime.md),
+with [systemd255 source research](../../docs/architecture-research/2026-10-30-reader-runtime-incoming.md). Keep physical0755
+separate from live native0600 denial and pin the exact manager source in both existing paused audits. This plan is
+not implementation or acceptance; no old numeric/process guard, unit/resource, definition or budget is broadened.
+
 The proposed [closed Docker release sequence](docker-release.md) completes two bounded source PRs before freezing
 the release source, then compares independently built protected bytes and runs one full same-source two-case VM
 proof. It preserves numeric release v1 and defers all dispatch/build/VM/publication/owner activation until approval.

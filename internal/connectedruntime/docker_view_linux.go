@@ -70,8 +70,22 @@ func checkDockerReaderView(c connectedprofile.RichProcessesDockerConfig, read fu
 	}
 	for _, spec := range uploaderScaffold[7:] {
 		d, err := read("/"+spec.name, len(spec.children)+1)
-		if err != nil || !safeScaffold(d, spec, 0, 0, false) {
+		incoming := spec.name == "run/systemd/incoming"
+		if incoming {
+			// systemd binds its native, root-only propagation source here.
+			// Denial is not an emptiness proof: root audits the pinned source.
+			spec.mode = 0600
+		}
+		if err != nil || !safeScaffold(d, spec, 0, 0, incoming) {
 			return ErrUnsafe
+		}
+		if incoming {
+			if access("/"+spec.name, unix.R_OK) != unix.EACCES || access("/"+spec.name, unix.X_OK) != unix.EACCES {
+				return ErrUnsafe
+			}
+			if err := access("/"+spec.name, unix.W_OK); err != unix.EACCES && err != unix.EROFS {
+				return ErrUnsafe
+			}
 		}
 	}
 	activation, err := read("/activation", 4)
