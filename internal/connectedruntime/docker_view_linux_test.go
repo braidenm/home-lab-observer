@@ -26,7 +26,7 @@ func dockerViewConfig(t *testing.T) connectedprofile.RichProcessesDockerConfig {
 
 func TestDockerReaderViewRejectsExtraAuthorityAndPermissionDrift(t *testing.T) {
 	c := dockerViewConfig(t)
-	for _, change := range []string{"valid", "root-extra", "credential", "network-config", "procfs", "sysfs", "sys-extra", "sys-mode", "frame-owner", "frame-setgid", "frame-group", "frame-acl", "frame-readonly", "status-group", "root-writable", "run-credential", "home", "read-error", "activation-owner", "activation-group", "activation-mode", "activation-acl", "activation-writable"} {
+	for _, change := range []string{"valid", "root-extra", "credential", "network-config", "procfs", "sysfs", "sys-extra", "sys-mode", "frame-owner", "frame-setgid", "frame-group", "frame-acl", "frame-readonly", "status-group", "root-writable", "run-credential", "home", "read-error", "activation-owner", "activation-group", "activation-mode", "activation-acl", "activation-writable", "incoming-readable", "incoming-mode", "incoming-owner", "incoming-group", "incoming-acl", "incoming-entry", "incoming-procfs", "incoming-sysfs", "incoming-read-error", "incoming-read-access", "incoming-traverse-access", "incoming-write-access", "incoming-access-unknown"} {
 		t.Run(change, func(t *testing.T) {
 			dirs := map[string]viewDirectory{}
 			add := func(path string, mode, uid, gid uint32, children []string, denied bool) {
@@ -35,6 +35,7 @@ func TestDockerReaderViewRejectsExtraAuthorityAndPermissionDrift(t *testing.T) {
 			for _, spec := range uploaderScaffold {
 				add("/"+spec.name, spec.mode, 0, 0, spec.children, spec.name == "root")
 			}
+			add("/run/systemd/incoming", 0600, 0, 0, nil, true)
 			add("/", 0755, 0, 0, readerRootChildren, false)
 			add("/bin", 0755, 0, 0, []string{"observer-connected-rich-docker-reader"}, false)
 			add("/etc", 0755, 0, 0, []string{"home-lab-observer-connected-rich"}, false)
@@ -46,6 +47,22 @@ func TestDockerReaderViewRejectsExtraAuthorityAndPermissionDrift(t *testing.T) {
 			add("/activation", 0750, 0, c.FrameGID, []string{"request.json"}, false)
 			mutate := func(path string, fn func(*viewDirectory)) { d := dirs[path]; fn(&d); dirs[path] = d }
 			switch change {
+			case "incoming-readable":
+				mutate("/run/systemd/incoming", func(d *viewDirectory) { d.denied = false })
+			case "incoming-mode":
+				mutate("/run/systemd/incoming", func(d *viewDirectory) { d.stat.Mode = unix.S_IFDIR | 0755 })
+			case "incoming-owner":
+				mutate("/run/systemd/incoming", func(d *viewDirectory) { d.stat.Uid++ })
+			case "incoming-group":
+				mutate("/run/systemd/incoming", func(d *viewDirectory) { d.stat.Gid++ })
+			case "incoming-acl":
+				mutate("/run/systemd/incoming", func(d *viewDirectory) { d.noACL = false })
+			case "incoming-entry":
+				mutate("/run/systemd/incoming", func(d *viewDirectory) { d.entries = []string{"foreign"} })
+			case "incoming-procfs":
+				mutate("/run/systemd/incoming", func(d *viewDirectory) { d.filesystem = unix.PROC_SUPER_MAGIC })
+			case "incoming-sysfs":
+				mutate("/run/systemd/incoming", func(d *viewDirectory) { d.filesystem = unix.SYSFS_MAGIC })
 			case "root-extra":
 				mutate("/", func(d *viewDirectory) { d.entries = append(d.entries, "handoff") })
 			case "credential":
@@ -82,7 +99,7 @@ func TestDockerReaderViewRejectsExtraAuthorityAndPermissionDrift(t *testing.T) {
 				mutate("/activation", func(d *viewDirectory) { d.noACL = false })
 			}
 			read := func(path string, _ int) (viewDirectory, error) {
-				if change == "read-error" {
+				if change == "read-error" || (path == "/run/systemd/incoming" && change == "incoming-read-error") {
 					return viewDirectory{}, unix.EIO
 				}
 				d, ok := dirs[path]
@@ -92,6 +109,14 @@ func TestDockerReaderViewRejectsExtraAuthorityAndPermissionDrift(t *testing.T) {
 				return d, nil
 			}
 			access := func(path string, mode uint32) error {
+				if path == "/run/systemd/incoming" {
+					if (change == "incoming-read-access" && mode == unix.R_OK) || (change == "incoming-traverse-access" && mode == unix.X_OK) || (change == "incoming-write-access" && mode == unix.W_OK) {
+						return nil
+					}
+					if change == "incoming-access-unknown" {
+						return unix.EIO
+					}
+				}
 				if path == "/activation" && change == "activation-writable" {
 					return nil
 				}

@@ -39,7 +39,7 @@ type dockerReaderOperations struct {
 	pin           func(uint32) (activationRecords, error)
 	clearResponse func() error
 	response      func() (connectedactivation.Response, error)
-	audit         func(context.Context, workerInstance) error
+	audit         func(context.Context, workerInstance) (connectedruntime.DockerReaderNamespaceIdentity, error)
 	status        func() (connectedstatus.Record, error)
 	unchanged     func(context.Context, workerInstance) bool
 	random        func([]byte) (int, error)
@@ -57,7 +57,9 @@ func systemDockerReaderOperations(c connectedprofile.RichProcessesDockerConfig, 
 			return dockerReaderRecords{d, gid}, nil
 		},
 		clearResponse: func() error { return clearDockerReaderResponse(c) }, response: func() (connectedactivation.Response, error) { return readDockerReaderResponse(c) },
-		audit:  func(ctx context.Context, w workerInstance) error { return auditDockerReaderProcess(ctx, c, w, socket) },
+		audit: func(ctx context.Context, w workerInstance) (connectedruntime.DockerReaderNamespaceIdentity, error) {
+			return auditDockerReaderProcess(ctx, c, w, socket)
+		},
 		status: func() (connectedstatus.Record, error) { return readDockerStatusRecord(c, "reader-status", c.ReaderUID) },
 		unchanged: func(ctx context.Context, w workerInstance) bool {
 			return sameWorker(ctx, connectedunits.RichProcessesDockerReaderUnit, w) && sameDockerSocket(socket)
@@ -128,7 +130,8 @@ func startDockerReaderWith(parent context.Context, c connectedprofile.RichProces
 	owned = workers[unit]
 	// It is still waiting for request.json, before even the primitive checks.
 	phase = "READER_AUDIT_BEFORE_REQUEST"
-	if ops.audit(ctx, owned) != nil || !ops.unchanged(ctx, owned) {
+	incoming, err := ops.audit(ctx, owned)
+	if err != nil || incoming.Dev == 0 || incoming.Ino == 0 || !ops.unchanged(ctx, owned) {
 		return owned, ErrUnsafe
 	}
 	phase = "READER_REQUEST_BUILD"
@@ -171,7 +174,8 @@ func startDockerReaderWith(parent context.Context, c connectedprofile.RichProces
 	// The response retains the worker's fresh challenge; it cannot proceed to
 	// Engine I/O during the two descriptor passes and fixed namespace inspection.
 	phase = "READER_AUDIT_AFTER_RESPONSE"
-	if ops.audit(ctx, owned) != nil || !ops.unchanged(ctx, owned) {
+	currentIncoming, err := ops.audit(ctx, owned)
+	if err != nil || currentIncoming != incoming || !ops.unchanged(ctx, owned) {
 		return owned, ErrUnsafe
 	}
 	phase = "READER_COMMIT_PUBLICATION"
@@ -215,23 +219,24 @@ func (e *dockerReaderCleanupError) Error() string        { return "connected_rea
 func (e *dockerReaderCleanupError) Unwrap() error        { return e.primary }
 func (e *dockerReaderCleanupError) Is(target error) bool { return target == ErrRecovery }
 
-func auditDockerReaderProcess(ctx context.Context, c connectedprofile.RichProcessesDockerConfig, w workerInstance, socket dockerSocketIdentity) error {
+func auditDockerReaderProcess(ctx context.Context, c connectedprofile.RichProcessesDockerConfig, w workerInstance, socket dockerSocketIdentity) (identity connectedruntime.DockerReaderNamespaceIdentity, result error) {
 	executable := connectedprofile.RichProcessesDockerReleaseDirectory + "/" + c.ArtifactSHA256 + "/observer-connected-rich-docker-reader"
 	before, err := connectedprocess.Audit(ctx, w.PID, executable)
 	if err != nil || !sameWorker(ctx, connectedunits.RichProcessesDockerReaderUnit, w) || !sameDockerSocket(socket) {
-		return ErrUnsafe
+		return identity, ErrUnsafe
 	}
 	sources := map[string]string{"/bin/observer-connected-rich-docker-reader": executable, connectedprofile.RichProcessesDockerConfigPath: connectedprofile.RichProcessesDockerConfigPath, connectedprofile.RichProcessesDockerPolicyPath: connectedprofile.RichProcessesDockerPolicyPath, "/frame": connectedprofile.RichProcessesDockerFrameDirectory, "/state/status": connectedprofile.RichProcessesDockerReaderStatusDirectory, "/engine/docker.sock": "/run/docker.sock", "/activation": dockerReaderActivationPath}
-	if connectedruntime.CheckRichProcessesDockerReaderNamespace(w.PID, connectedprofile.RichProcessesDockerReaderRoot, sources) != nil {
-		return ErrUnsafe
+	incoming, err := connectedruntime.CheckRichProcessesDockerReaderNamespace(w.PID, connectedprofile.RichProcessesDockerReaderRoot, sources)
+	if err != nil {
+		return identity, ErrUnsafe
 	}
 	var mounted unix.Stat_t
 	if unix.Stat("/proc/"+strconv.Itoa(w.PID)+"/root/engine/docker.sock", &mounted) != nil || !validDockerSocket(mounted, c.SocketGID) || uint64(mounted.Dev) != socket.dev || mounted.Ino != socket.ino {
-		return ErrUnsafe
+		return identity, ErrUnsafe
 	}
 	after, err := connectedprocess.Audit(ctx, w.PID, executable)
 	if err != nil || before != after || !sameWorker(ctx, connectedunits.RichProcessesDockerReaderUnit, w) || !sameDockerSocket(socket) {
-		return ErrUnsafe
+		return identity, ErrUnsafe
 	}
-	return nil
+	return incoming, nil
 }

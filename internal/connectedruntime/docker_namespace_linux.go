@@ -30,8 +30,28 @@ func CheckRichProcessesDockerUploaderNamespace(pid int, root string, sources map
 	return checkDockerNamespace(pid, root, sources, false)
 }
 
-func CheckRichProcessesDockerReaderNamespace(pid int, root string, sources map[string]string) error {
-	return checkDockerNamespace(pid, root, sources, true)
+func CheckRichProcessesDockerReaderNamespace(pid int, root string, sources map[string]string) (identity DockerReaderNamespaceIdentity, result error) {
+	if os.Getuid() != 0 || os.Geteuid() != 0 || pid < 2 || root != connectedprofile.RichProcessesDockerReaderRoot {
+		return identity, ErrUnsafe
+	}
+	incoming, err := pinDockerReaderIncoming()
+	if err != nil {
+		return identity, ErrUnsafe
+	}
+	defer func() {
+		if incoming.close() != nil {
+			identity, result = DockerReaderNamespaceIdentity{}, ErrUnsafe
+		}
+	}()
+	if checkNamespaceView(pid, root, sources, func(actual, physical func(string) (unix.Stat_t, error)) error {
+		if checkNamespaceBindingsTargets(root, sources, dockerNamespaceTargets(true), actual, physical) != nil {
+			return ErrUnsafe
+		}
+		return checkDockerReaderIncomingBinding(incoming.stats[len(incoming.stats)-1], actual)
+	}) != nil || incoming.check() != nil {
+		return identity, ErrUnsafe
+	}
+	return incoming.identity(), nil
 }
 
 func checkDockerNamespace(pid int, root string, sources map[string]string, reader bool) error {

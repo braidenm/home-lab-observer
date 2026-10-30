@@ -199,10 +199,10 @@ neither assets nor those source templates are executed by the Python verifier.
 
 - [x] Research native systemd255 propagation versus physical scaffold; record the limited retained-sandbox MODE result
   and compare current0755, native0600 plus root audit, and explicit denial in [the research](../../docs/architecture-research/2026-10-30-reader-runtime-incoming.md).
-- [ ] Independently review [spec/plan](reader-incoming-runtime.md) before source implementation.
-- [ ] TDD exact Docker-reader0600 denial plus fixed source descriptor/namespace audit; old physical/numeric/process
+- [x] Independently review [spec/plan](reader-incoming-runtime.md) before source implementation.
+- [x] TDD exact Docker-reader0600 denial plus fixed source descriptor/namespace audit; old physical/numeric/process
   behavior, units, definition, caps and schemas unchanged.
-- [ ] Compare captured source identity before request and after response under the same existing worker/socket fences.
+- [x] Compare captured source identity before request and after response under the same existing worker/socket fences.
 - [ ] Independently review source; pass focused runtime/lifecycle race/vet and all required exact-head CI.
 - [ ] Freeze new complete source/candidate/baselines and pass both same-source packaged Docker VM cases; no overlays.
 - [ ] Canonical acceptance, immutable release and separately authorized owner/viewer acceptance remain later gates.

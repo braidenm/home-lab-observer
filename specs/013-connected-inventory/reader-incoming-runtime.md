@@ -1,6 +1,6 @@
 # Docker reader native incoming-directory boundary
 
-Status: spec/plan only, awaiting independent review before implementation. Date:2026-10-30.
+Status: approved plan; local implementation under source review, exact-package acceptance pending. Date:2026-10-30.
 Evidence/alternatives: [version-matched research](../../docs/architecture-research/2026-10-30-reader-runtime-incoming.md).
 Keep [ADR025](../../docs/adr/025-isolated-installed-docker-observation.md) and
 [ADR026](../../docs/adr/026-docker-reader-startup-barrier.md) unchanged.
@@ -70,3 +70,14 @@ boundaries; no automatic upgrade/uninstall/crash recovery is added.
 
 The current probe's `READ_RUN_INCOMING_MODE` with complete recovery is retained-sandbox evidence, not proof that this
 was the original startup failure. The root audit and complete exact-source packaged journey must establish the fix.
+
+## Local source evidence (2026-10-30)
+
+Root and peer approved the spec-first boundary before production edits. New focused tests first failed with the
+missing fixed-source audit/identity, then passed with the implementation. Linux runtime and install suites pass race
+and vet under an ordinary-user scope bounded to2CPU/1GiB/zero swap. Real owned temporary-directory adapter tests prove
+rewinding after EOF, late-entry refusal, no-follow parent/source link refusal, retained-path substitution and closure;
+their ownership normalization is test-only, not privileged host proof. Synthetic tests cover root ownership/ACL/mode,
+API filesystems, read/access errors, zero identity, both paused audit comparisons and unchanged closed failure phases.
+Old units/resources, numeric/process definitions, SQL and fixtures are unchanged. Independent final source review,
+current-head CI, new protected exact-source bytes and the full no-overlay packaged VM remain pending.
