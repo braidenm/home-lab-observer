@@ -1,7 +1,7 @@
 # Docker-rich packaged VM proof plan
 
 Date: 2026-10-29. Status: approved engineering scope; implementation/input verification in progress. No Docker-rich
-VM, public release or owner-host acceptance is claimed. The separately accepted process-only gate does not prove Docker.
+VM acceptance, public release or owner-host acceptance is claimed. The separately accepted process-only gate does not prove Docker.
 
 ## Closed scope and inputs
 
@@ -81,6 +81,25 @@ The receiver validates raw bodies only in memory and persists closed hashes/sequ
 
 Cheap fixture tests are not VM acceptance. A real Docker VM pass does not authorize owner installation, publishing,
 remote actions or Kubernetes, and is not a substitute for hosted owner/delegate authorization and responsive UI proof.
+
+## 2026-10-30 reader startup diagnostic correction
+
+The first exact-source packaged run failed closed before reader startup completed. A separately pinned diagnostic
+harness retained the installed artifacts unchanged and narrowed the result to `START_RECOVERY_READER_STARTUP`.
+Neither run is accepted; original failure disks and bounded evidence remain preserved. The coarse phase does not
+identify the cause, and teardown can remove causal runtime files. No safety assertion or sandbox is relaxed.
+
+The next bounded correction must expose only code-owned `READER_` startup phases: initial state, activation-directory
+pinning, response clearing, service start, both paused audits, request construction/publication, response wait/match,
+commit publication, status wait and final identity. Cleanup failure must preserve the original phase and sanitized
+primary sentinel while conservatively requiring recovery. Existing CLI format and exit22 remain unchanged; arbitrary
+OS/manager errors, paths and record contents must never become diagnostics. Fault-inject each operation, cancellation,
+replacement, malformed responses/status and cleanup failure before a fresh reviewed artifact/VM attempt.
+
+Local source proof: the new seam/cleanup tests failed against the preceding implementation, then passed with the
+diagnostic correction. Full Linux Go tests/vet, focused installer/command race checks, 75 Python fixture tests,
+Python syntax, guest Bash syntax and the 43-file repository foundation check passed. Independent review, exact-head
+CI and a new pinned packaged run remain required. This changes diagnostics, not the unknown underlying startup cause.
 
 Pre-launch independent review found five fixture correctness gaps, corrected before execution: the frame grant is
 service-only (collector NSS remains SharedGID-only and the persistent frame group is empty), actual live worker

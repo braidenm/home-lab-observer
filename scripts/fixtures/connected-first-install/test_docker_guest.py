@@ -160,6 +160,22 @@ class DockerGuestTest(unittest.TestCase):
                 docker_guest.emit_failure(reason)
             self.assertEqual(output.getvalue(), "HLO_VM_FAIL_DOCKER_" + expected + "\n")
 
+    def test_lifecycle_refusal_emits_only_known_phase_and_operation(self):
+        for reason, expected in (("START_COMMAND_READER_SOCKET", "START_COMMAND_READER_SOCKET"),
+                                 ("START_RECOVERY_READER_STARTUP", "START_RECOVERY_READER_STARTUP"),
+                                 ("STOP_COMMAND_READER_SOCKET", "STOP_COMMAND_READER_SOCKET"),
+                                 ("STATUS_RECOVERY_READER_STARTUP", "STATUS_RECOVERY_READER_STARTUP"),
+                                 ("START_COMMAND_READER_PRIVATE_TOKEN", "UNKNOWN"),
+                                 ("COMMAND_READER_SOCKET", "UNKNOWN"),
+                                 ("hlc_private", "UNKNOWN")):
+            output = io.StringIO()
+            with mock.patch.object(docker_guest.sys, "argv", ["docker_guest.py", "first", "bundle"]), \
+                 mock.patch.object(docker_guest, "exercise", side_effect=docker_guest.activation_guest.Refused(reason)), \
+                 mock.patch.object(Path, "open", side_effect=OSError()), \
+                 contextlib.redirect_stderr(output):
+                self.assertEqual(docker_guest.main(), 1)
+            self.assertEqual(output.getvalue(), "HLO_VM_FAIL_DOCKER_" + expected + "\n")
+
     def test_namespace_probe_never_executes_after_setns_and_binds_invocation(self):
         self.assertNotIn("exec(", docker_guest.NAMESPACE_PROBE)
         self.assertNotIn("subprocess", docker_guest.NAMESPACE_PROBE)

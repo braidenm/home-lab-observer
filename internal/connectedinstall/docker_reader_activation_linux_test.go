@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"os"
 	"slices"
 	"strings"
@@ -171,7 +172,7 @@ func TestDockerReaderActivationAuditsBothPausedBoundariesAndCleansFailures(t *te
 			}
 			if failure != "" {
 				if failure == "replaced" {
-					if err != ErrRecovery || !f.active || slices.Contains(f.events, "stop") {
+					if !errors.Is(err, ErrRecovery) || !f.active || slices.Contains(f.events, "stop") {
 						t.Fatal("replacement invocation stopped or uncertainty hidden")
 					}
 					return
@@ -189,7 +190,7 @@ func TestDockerReaderActivationAuditsBothPausedBoundariesAndCleansFailures(t *te
 
 func TestDockerReaderPreexistingActiveInvocationIsNotAdopted(t *testing.T) {
 	f := &readerFixture{t: t, active: true}
-	if _, err := startDockerReaderWith(context.Background(), dockerLifecycleConfig(t), f.operations()); err != ErrUnsafe || len(f.events) != 0 || !f.active {
+	if _, err := startDockerReaderWith(context.Background(), dockerLifecycleConfig(t), f.operations()); !errors.Is(err, ErrUnsafe) || len(f.events) != 0 || !f.active {
 		t.Fatal("preexisting reader adopted or stopped")
 	}
 }
