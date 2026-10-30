@@ -186,8 +186,22 @@ unit fragments and their `.d` entries absent via direct NSS/lstat checks, in add
 These are fixed absence checks, not a new arbitrary filesystem reader or a claim that one generic message alone
 identifies the exact rejecting guard.
 
+Revalidate prerequisites immediately before the Docker attempt, after capturing the state and receiver receipt:
+the existing bounded container proof, root-owned mode0660 single-link GID22003 Unix socket, live receiver process,
+and existing bounded DNS/TLS and parent-policy probes. These checks send no enrollment/HTTP request and must not
+start a service as a health check. Any failure prevents the attempt. Check both fixed rich activation directories
+with lstat, without returning early after the first absent path. Preserve the primary closed failure if either
+daemon or receiver cleanup also fails; cleanup failure alone must still fail the journey, never imply acceptance.
+
 TDD must exercise the real refusal function with a correct stderr result and reject a stdout diagnostic, wrong exit,
 oversized/unknown stderr or extra stdout. Retain all before/after process-only file/inode/NSS/unit fingerprints,
 absent Docker principals/units, no enrollment and numeric checks on both boots. Review the remaining refusal
 assertions against their actual source contracts before another run. Local tests/source review are not either
 packaged VM acceptance case; exact-source CI, both independently reviewed cases and release gates remain pending.
+
+Local TDD evidence: correct-stderr, wrong-channel and reboot-daemon cases failed against the old fixture; fixed
+user/group/path cases also exposed the missing absence seam. All83 fixture tests now pass, including receipt
+changes, every fixed absence target and manager field, primary-refusal preservation when daemon Stop also fails,
+and Stop-only failure remaining a failure. Python AST17, guest Bash syntax and foundation43 checks pass. No VM ran;
+independent review and fresh exact-source packaged proof remain pending. Static comparison found no other obvious
+refusal-contract contradiction; that review is not proof that all runtime prerequisites will succeed in a new guest.
