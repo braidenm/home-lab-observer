@@ -26,7 +26,7 @@ func dockerViewConfig(t *testing.T) connectedprofile.RichProcessesDockerConfig {
 
 func TestDockerReaderViewRejectsExtraAuthorityAndPermissionDrift(t *testing.T) {
 	c := dockerViewConfig(t)
-	for _, change := range []string{"valid", "root-extra", "credential", "network-config", "procfs", "frame-owner", "frame-setgid", "frame-group", "frame-acl", "frame-readonly", "status-group", "root-writable", "run-credential", "home", "read-error", "activation-owner", "activation-group", "activation-mode", "activation-acl", "activation-writable"} {
+	for _, change := range []string{"valid", "root-extra", "credential", "network-config", "procfs", "sysfs", "sys-extra", "sys-mode", "frame-owner", "frame-setgid", "frame-group", "frame-acl", "frame-readonly", "status-group", "root-writable", "run-credential", "home", "read-error", "activation-owner", "activation-group", "activation-mode", "activation-acl", "activation-writable"} {
 		t.Run(change, func(t *testing.T) {
 			dirs := map[string]viewDirectory{}
 			add := func(path string, mode, uid, gid uint32, children []string, denied bool) {
@@ -54,6 +54,12 @@ func TestDockerReaderViewRejectsExtraAuthorityAndPermissionDrift(t *testing.T) {
 				mutate("/etc", func(d *viewDirectory) { d.entries = append(d.entries, "resolv.conf") })
 			case "procfs":
 				mutate("/proc", func(d *viewDirectory) { d.filesystem = unix.PROC_SUPER_MAGIC })
+			case "sysfs":
+				mutate("/sys", func(d *viewDirectory) { d.filesystem = unix.SYSFS_MAGIC })
+			case "sys-extra":
+				mutate("/sys", func(d *viewDirectory) { d.entries = []string{"devices"} })
+			case "sys-mode":
+				mutate("/sys", func(d *viewDirectory) { d.stat.Mode = unix.S_IFDIR | 0755 })
 			case "frame-owner":
 				mutate("/frame", func(d *viewDirectory) { d.stat.Uid++ })
 			case "frame-setgid":

@@ -63,6 +63,12 @@ counts, durations and drop/truncation metrics, not raw names/IDs/rejected values
 
 ## Tests and rollback
 
+The unreleased Docker reader's systemd 255 `/sys` startup refusal has a
+[focused evidence and correction proposal](../../docs/architecture-research/2026-10-30-reader-private-network-sys.md).
+Preserve private networking and the exact empty physical scaffold/inode guard; prove the mandatory read-only bind
+through a failing rendering regression and exact-source packaged VM acceptance. No guard relaxation or owner-host
+workaround is permitted by that investigation.
+
 Use deterministic unit/contract tests for field allowlists, unavailable/partial/null/empty states, invalid numbers,
 hostile strings, oversized rows/documents, consent suppression and source mismatch. Use the real receiver and a small
 owner/delegate HTTP journey for integration. No second full Spring context, DirtiesContext or duplicate broad suite.

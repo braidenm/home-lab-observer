@@ -138,3 +138,13 @@ identify unexecuted native/OS proofs rather than substituting a fake or skipped 
 - Packaged first-boot/reboot acceptance and all 19 exact-head PR checks passed at source `24153fa278eea907cb0987ae96c26137c9aae909`;
   local immutable input evidence is [recorded separately](../../docs/acceptance/connected-rich-processes-2026-10-29.md), not publication provenance.
   This package remains VM-only; no owner-host install, production profile writer, public release, Docker observation or control is enabled.
+
+## Unreleased Docker reader `/sys` correction (2026-10-30)
+
+- [x] Narrow the isolated diagnostic refusal to the actual private view validator's fixed `/sys` operation; preserve
+  original failure and post-failure causality limits.
+- [x] Research systemd 255 private-network mount behavior and safe alternatives in
+  [the focused investigation](../../docs/architecture-research/2026-10-30-reader-private-network-sys.md).
+- [x] Independently review the minimal correction; add a failing exact-unit regression and retain namespace denials.
+- [x] Apply only the mandatory read-only physical-scaffold bind; pass focused source checks without changing guards.
+- [ ] Pass exact-source complete-package VM acceptance, then release/owner consent gates separately.

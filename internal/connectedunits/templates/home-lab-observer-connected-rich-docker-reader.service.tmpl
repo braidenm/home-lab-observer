@@ -41,6 +41,7 @@ BindReadOnlyPaths=/etc/home-lab-observer-connected-rich/installed.json:/etc/home
 BindReadOnlyPaths=/etc/home-lab-observer-connected-rich/collection-policy.json:/etc/home-lab-observer-connected-rich/collection-policy.json
 BindReadOnlyPaths=/run/docker.sock:/engine/docker.sock
 BindReadOnlyPaths=/run/home-lab-observer-connected-rich/reader-activation:/activation
+BindReadOnlyPaths=/var/lib/home-lab-observer-connected-rich/reader-root/sys:/sys:norbind
 BindPaths=/var/lib/home-lab-observer-connected-rich/docker-frame:/frame /var/lib/home-lab-observer-connected-rich/reader-status:/state/status
 ReadWritePaths=/frame /state/status
 LimitCORE=0

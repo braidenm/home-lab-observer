@@ -134,6 +134,12 @@ grants, credentials, broker and ambiguity audit; this package cannot receive sta
 
 ## Remaining engineering freeze points
 
+The unreleased reader's systemd 255 `/sys` refusal is narrowed to the existing private view check. Follow the
+[researched correction](../../docs/architecture-research/2026-10-30-reader-private-network-sys.md): preserve the exact
+empty physical scaffold using a mandatory nonrecursive read-only bind, without removing private networking or
+relaxing filesystem/inode guards. This restores the existing definition's intent; it is not a new collection scope.
+Source checks and mixed-source diagnostics do not replace complete exact-source packaged acceptance.
+
 Review exact helper frame, age/skew rule, rootful socket identity/replacement handling, principal/path layout and helper
 resource cap together with executable tests. Record the new definition digest only once those inputs are fixed. These
 are delegated engineering decisions, not a product blocker or permission to guess installed isolation. Do not begin

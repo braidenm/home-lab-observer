@@ -38,6 +38,22 @@ func TestDockerNamespacesRequireTheirOwnClosedBindings(t *testing.T) {
 		if checkNamespaceBindingsTargets(root, sources, targets, actual, physical) != nil {
 			t.Fatal("closed Docker binding refused")
 		}
+		if reader {
+			if checkNamespaceBindingsTargets(root, sources, targets, func(name string) (unix.Stat_t, error) {
+				s, err := actual(name)
+				if name == "sys" {
+					s.Ino++
+				}
+				return s, err
+			}, physical) != ErrUnsafe {
+				t.Fatal("reader accepted a substituted sys scaffold inode")
+			}
+			sources["/sys"] = "/sys"
+			if checkNamespaceBindingsTargets(root, sources, targets, actual, physical) != ErrUnsafe {
+				t.Fatal("reader accepted extra host sys authority")
+			}
+			delete(sources, "/sys")
+		}
 		if checkNamespaceBindingsForProfile(root, sources, true, actual, physical) != ErrUnsafe {
 			t.Fatal("old profile adopted Docker mount")
 		}

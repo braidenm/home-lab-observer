@@ -47,7 +47,7 @@ func TestDockerFixedResourceBoundaries(t *testing.T) {
 	if !strings.Contains(r, "BindReadOnlyPaths=/run/home-lab-observer-connected-rich/reader-activation:/activation\n") {
 		t.Fatal("reader startup barrier missing")
 	}
-	for _, forbidden := range []string{"LoadCredential=", "/handoff", "/ledger", "connected-rich/activation:", "AF_INET", "/proc", "/sys", "/bin/sh", "ProtectProc=", "ProtectKernelTunables=", "ProtectControlGroups="} {
+	for _, forbidden := range []string{"LoadCredential=", "/handoff", "/ledger", "connected-rich/activation:", "AF_INET", "/proc", "/bin/sh", "ProtectProc=", "ProtectKernelTunables=", "ProtectControlGroups="} {
 		if strings.Contains(r, forbidden) {
 			t.Fatal("reader gained unintended authority")
 		}
@@ -118,5 +118,38 @@ func TestDockerEnrollmentHasNoReaderAuthority(t *testing.T) {
 	c.SocketGID = c.SharedGID
 	if _, err := RenderRichProcessesDockerUnits(c); err != ErrInvalid {
 		t.Fatal("invalid socket group rendered")
+	}
+}
+
+func TestDockerReaderExplicitlyBindsOnlyItsInertSysScaffold(t *testing.T) {
+	u, err := RenderRichProcessesDockerUnits(dockerFixture(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := string(u.Reader)
+	for _, boundary := range []string{
+		"PrivateNetwork=yes\n", "RestrictAddressFamilies=AF_UNIX\n", "MountAPIVFS=no\n",
+		"NoNewPrivileges=yes\n", "CapabilityBoundingSet=\n", "AmbientCapabilities=\n",
+		"NoExecPaths=/\n", "ExecPaths=/bin/observer-connected-rich-docker-reader\n",
+		"MemoryMax=128M\n", "TasksMax=32\n", "CPUQuota=25%\n",
+		"Environment=GOMAXPROCS=2\n", "Environment=GOMEMLIMIT=64MiB\n",
+		"TimeoutStopSec=15s\n", "KillMode=control-group\n", "Restart=no\n",
+	} {
+		if !strings.Contains(reader, boundary) {
+			t.Fatal("reader lost a fixed isolation or resource boundary")
+		}
+	}
+	want := "BindReadOnlyPaths=" + connectedprofile.RichProcessesDockerReaderRoot + "/sys:/sys:norbind"
+	bindings := 0
+	for line := range strings.SplitSeq(reader, "\n") {
+		if (strings.HasPrefix(line, "BindReadOnlyPaths=") || strings.HasPrefix(line, "BindPaths=")) && strings.Contains(line, ":/sys") {
+			if line != want {
+				t.Fatal("reader sys binding is not its mandatory read-only inert scaffold")
+			}
+			bindings++
+		}
+	}
+	if bindings != 1 {
+		t.Fatal("reader requires exactly one explicit read-only inert sys binding")
 	}
 }
