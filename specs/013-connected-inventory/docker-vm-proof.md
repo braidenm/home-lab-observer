@@ -174,6 +174,18 @@ on stdout. Correct only the fixture: require exit22, empty stdout and the exact 
 the existing 1024-byte diagnostic bound. Never forward captured child output. Unknown, oversized, mixed-stream or
 otherwise unsuccessful results are not the expected refusal. Production installer output and preflight stay unchanged.
 
+The generic preflight line alone does not identify the conflicting rich root: an absent Docker socket or stopped
+guest TLS/DNS receiver would produce the same line if the target guard regressed. Prepare the existing pinned,
+offline Docker fixture before the process-only baseline, and retain its synthetic receiver through the attempt.
+Require unchanged receiver receipt bytes as well as the existing state fingerprint, then stop the fixture daemon
+in `finally` and terminate the receiver in the outer `finally`. On reboot require the fixture daemon already
+inactive/static/PID0 without starting or stopping it; do not hide unexpected boot activity. No new package, host
+daemon operation, production admission change or timeout extension is part of this correction.
+Before the attempt and after each boot, require all three Docker users, all five fixed Docker group names, all four
+unit fragments and their `.d` entries absent via direct NSS/lstat checks, in addition to the manager not-found tuples.
+These are fixed absence checks, not a new arbitrary filesystem reader or a claim that one generic message alone
+identifies the exact rejecting guard.
+
 TDD must exercise the real refusal function with a correct stderr result and reject a stdout diagnostic, wrong exit,
 oversized/unknown stderr or extra stdout. Retain all before/after process-only file/inode/NSS/unit fingerprints,
 absent Docker principals/units, no enrollment and numeric checks on both boots. Review the remaining refusal
