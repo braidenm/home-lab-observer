@@ -112,9 +112,10 @@ setns and before dropping identity. Focused positive/negative tests cover these 
 
 ## Socket replacement fixture correction (2026-10-30)
 
-The exact-source `df43ef6e8fb22df8ffd413dcbbc8e47d138792b6` packaged journey reached the fault exercise, then
-refused the fixture's same-active-reader assumption. Production requires the pinned socket's link count to remain1;
-unlinking its old pathname makes that pinned inode's count0. Preserve this guard and CLI exit22, not a surviving
+The exact-source `df43ef6e8fb22df8ffd413dcbbc8e47d138792b6` packaged journey reached the fault exercise and reported
+generic `FAULT`. Source review identified an inconsistent same-active-reader requirement; the exact failing subphase
+was not captured. Production requires the pinned socket's link count to remain 1; unlinking its old pathname makes
+that pinned inode's count 0. Preserve this guard and CLI exit22, not a surviving
 reader or automatic socket adoption. The retained failure is not complete VM/release acceptance.
 
 Before replacing the fixture daemon socket, capture the reader's same active PID/invocation and old bound inode,
@@ -136,7 +137,7 @@ Production Go, units, definition, budgets, profile admission and old numeric/pro
 Merge only after source review and exact-head CI; the next full proof needs fresh same-source protected/local bytes
 and both no-overlay cases. No VM/build/publication/owner operation is authorized by this correction.
 
-Primary sources checked2026-10-30: [systemd255 systemctl](https://www.freedesktop.org/software/systemd/man/255/systemctl.html)
+Primary sources checked 2026-10-30: [systemd 255 systemctl](https://www.freedesktop.org/software/systemd/man/255/systemctl.html)
 retains failed status for inspection; [v255 service.c](https://github.com/systemd/systemd/blob/v255/src/core/service.c)
 `service_enter_dead` preserves a failure state and `service_start` obtains a new invocation before resetting exit
 status; [v255 unit.c](https://github.com/systemd/systemd/blob/v255/src/core/unit.c) generates invocation IDs in
