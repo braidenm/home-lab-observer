@@ -11,6 +11,12 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+func TestDockerIncomingUnitMatchesRenderedUnitWithoutProductionDependency(t *testing.T) {
+	if dockerReaderIncomingUnit != connectedunits.RichProcessesDockerReaderUnit {
+		t.Fatal("fixed reader propagation source drifted from the rendered unit")
+	}
+}
+
 func TestDockerIncomingRealEmptyReadRewindsAndRemainsBounded(t *testing.T) {
 	directory := t.TempDir()
 	fd, err := unix.Open(directory, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)

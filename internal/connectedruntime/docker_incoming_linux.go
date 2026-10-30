@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 
-	"github.com/braidenm/home-lab-observer/internal/connectedunits"
 	"golang.org/x/sys/unix"
 )
 
@@ -14,7 +13,11 @@ import (
 // native propagation source. It is not an authority or a caller-selected path.
 type DockerReaderNamespaceIdentity struct{ Dev, Ino uint64 }
 
-var dockerIncomingParts = [...]string{"/", "run", "systemd", "propagate", connectedunits.RichProcessesDockerReaderUnit}
+// Kept private and fixed: importing the unit-rendering package would widen
+// every worker command's dependency closure. A test binds this exact name.
+const dockerReaderIncomingUnit = "home-lab-observer-connected-rich-docker-reader.service"
+
+var dockerIncomingParts = [...]string{"/", "run", "systemd", "propagate", dockerReaderIncomingUnit}
 
 // Fixed-path syscall seams only; no production caller can supply a source path.
 type dockerIncomingOperations struct {
