@@ -20,6 +20,207 @@ def reader_state(**changes):
 
 
 class DockerGuestTest(unittest.TestCase):
+    def test_existing_process_refusal_requires_exact_stderr_and_live_prerequisites(self):
+        diagnostic = b"PREFLIGHT_REFUSED: verify privileges, supported host and rich bundle before enrollment.\n"
+        cases = {
+            "correct": (22, b"", diagnostic),
+            "stdout-diagnostic": (22, diagnostic, b""),
+            "wrong-exit": (0, b"", diagnostic),
+            "unknown": (22, b"", b"private rejected output\n"),
+            "oversized": (22, b"", diagnostic + b"x" * 1024),
+            "extra-stdout": (22, b"unexpected", diagnostic),
+            "extra-stderr": (22, b"", diagnostic + b"unexpected\n"),
+            "changed-receipt": (22, b"", diagnostic),
+            "primary-and-stop-failure": (22, b"unexpected", diagnostic),
+            "stop-failure-only": (22, b"", diagnostic),
+            "primary-and-terminate-failure": (22, b"unexpected", diagnostic),
+            "primary-and-wait-failure": (22, b"unexpected", diagnostic),
+            "terminate-failure-only": (22, b"", diagnostic),
+            "wait-failure-only": (22, b"", diagnostic),
+        }
+        for prerequisite in ("containers", "socket", "receiver", "dns", "parent"):
+            cases["unhealthy-" + prerequisite] = (22, b"", diagnostic)
+        for name, (code, stdout, stderr) in cases.items():
+            events, process, before = [], mock.Mock(), {"fixed": [1, 2, 3]}
+            config = {"artifact_sha256": "a" * 64}
+            def attempt(*args, **kwargs):
+                events.append("attempt")
+                return types.SimpleNamespace(returncode=code, stdout=stdout, stderr=stderr)
+            def fingerprint():
+                events.append("fingerprint")
+                return before
+            def receipt(path, limit):
+                self.assertEqual((path, limit), (str(docker_guest.ROOT / "rich-receiver.json"), 1024))
+                events.append("receipt")
+                return b"changed" if name == "changed-receipt" and events.count("receipt") > 1 else b"fixed-receiver-receipt"
+            def stop_engine():
+                events.append("engine-stop")
+                if name in ("primary-and-stop-failure", "stop-failure-only"):
+                    raise AssertionError("ENGINE")
+            def check_prerequisite(which):
+                events.append(which)
+                if name == "unhealthy-" + which:
+                    raise AssertionError("ENGINE")
+            def lstat(path):
+                if path == Path("/run/docker.sock"):
+                    check_prerequisite("socket")
+                    return types.SimpleNamespace(st_mode=0o140660, st_uid=0, st_gid=22003, st_nlink=1)
+                raise FileNotFoundError()
+            def poll():
+                events.append("receiver")
+                return 22 if name == "unhealthy-receiver" else None
+            def terminate():
+                events.append("receiver-stop")
+                if name in ("primary-and-terminate-failure", "terminate-failure-only"):
+                    raise OSError("synthetic cleanup")
+            process.poll.side_effect = poll
+            if name in ("primary-and-wait-failure", "wait-failure-only"):
+                process.wait.side_effect = docker_guest.subprocess.TimeoutExpired("fixed receiver", 5)
+            with self.subTest(case=name), contextlib.ExitStack() as stack:
+                for attribute, value in {"prepare_reboot": lambda: None, "package": lambda: (Path("/fixed/process"), "process-digest"),
+                                         "receiver": lambda: process, "principals": lambda _: None, "stopped": lambda _: None,
+                                         "verify_numeric": lambda: events.append("numeric")}.items():
+                    stack.enter_context(mock.patch.object(docker_guest.rich_guest, attribute, side_effect=value))
+                stack.enter_context(mock.patch.object(docker_guest, "install", side_effect=lambda *unused: events.append("process-install")))
+                stack.enter_context(mock.patch.object(docker_guest, "package", return_value=(Path("/fixed/docker"), "digest")))
+                stack.enter_context(mock.patch.object(docker_guest, "record", return_value=config))
+                fingerprint_mock = stack.enter_context(mock.patch.object(docker_guest, "unchanged_process_state", side_effect=fingerprint))
+                stack.enter_context(mock.patch.object(docker_guest.docker_engine, "prepare", side_effect=lambda first: events.append(("engine-prepare", first))))
+                stack.enter_context(mock.patch.object(docker_guest.docker_engine, "prove_containers", side_effect=lambda: check_prerequisite("containers")))
+                stack.enter_context(mock.patch.object(docker_guest.preflight_probe, "dns_tls", side_effect=lambda: check_prerequisite("dns")))
+                stack.enter_context(mock.patch.object(docker_guest.preflight_probe, "parent_policy", side_effect=lambda: check_prerequisite("parent")))
+                stop = stack.enter_context(mock.patch.object(docker_guest.docker_engine, "stop", side_effect=stop_engine))
+                command = stack.enter_context(mock.patch.object(docker_guest.subprocess, "run", side_effect=attempt))
+                stack.enter_context(mock.patch.object(docker_guest.preflight_probe, "fixed_file", side_effect=receipt))
+                write = stack.enter_context(mock.patch.object(Path, "write_text"))
+                stack.enter_context(mock.patch.object(Path, "chmod"))
+                stack.enter_context(mock.patch.object(docker_guest.pwd, "getpwnam", side_effect=KeyError()))
+                stack.enter_context(mock.patch.object(docker_guest.grp, "getgrnam", side_effect=KeyError()))
+                stack.enter_context(mock.patch.object(Path, "lstat", autospec=True, side_effect=lstat))
+                stack.enter_context(mock.patch.object(docker_guest.assert_guest, "unit_properties", side_effect=lambda unit, fields: {"Id": unit, "LoadState": "not-found", "ActiveState": "inactive", "MainPID": "0", "Transient": "no", "FragmentPath": ""}))
+                process.terminate.side_effect = terminate
+                if name == "correct":
+                    docker_guest.refusal("first")
+                    self.assertEqual(fingerprint_mock.call_count, 2)
+                    self.assertEqual(events.count("receipt"), 2)
+                    write.assert_called_once()
+                    self.assertLess(events.index(("engine-prepare", True)), events.index("process-install"))
+                    self.assertLess(events.index(("engine-prepare", True)), events.index("fingerprint"))
+                    self.assertLess(events.index("fingerprint"), events.index("attempt"))
+                    self.assertLess(events.index("attempt"), events.index("engine-stop"))
+                    self.assertLess(events.index("engine-stop"), events.index("receiver-stop"))
+                    self.assertGreater(events.index("receiver-stop"), max(i for i, event in enumerate(events) if event == "receipt"))
+                    ordered = ["fingerprint", "receipt", "containers", "socket", "receiver", "dns", "parent", "attempt"]
+                    self.assertEqual([events.index(event) for event in ordered], sorted(events.index(event) for event in ordered))
+                    self.assertEqual(events[-1], "numeric")
+                elif name == "stop-failure-only":
+                    with self.assertRaisesRegex(AssertionError, "^ENGINE$"):
+                        docker_guest.refusal("first")
+                    write.assert_called_once()
+                    self.assertNotIn("numeric", events)
+                elif name in ("terminate-failure-only", "wait-failure-only"):
+                    with self.assertRaises((OSError, docker_guest.subprocess.TimeoutExpired)):
+                        docker_guest.refusal("first")
+                    write.assert_called_once()
+                    self.assertNotIn("numeric", events)
+                else:
+                    with self.assertRaisesRegex(AssertionError, "^REFUSAL$"):
+                        docker_guest.refusal("first")
+                    self.assertEqual(fingerprint_mock.call_count, 2 if name == "changed-receipt" else 1)
+                    write.assert_not_called()
+                    self.assertNotIn("numeric", events)
+                stop.assert_called_once_with()
+                process.terminate.assert_called_once_with()
+                process.wait.assert_called_once_with(timeout=5)
+                if name.startswith("unhealthy-"):
+                    command.assert_not_called()
+                else:
+                    self.assertEqual(command.call_args.args[0], ["/fixed/docker/observer-connected-rich-docker-install", "install", "/fixed/docker", "digest", docker_guest.SERVER])
+                    self.assertEqual(command.call_args.kwargs, {"stdin": docker_guest.subprocess.DEVNULL, "stdout": docker_guest.subprocess.PIPE,
+                                                               "stderr": docker_guest.subprocess.PIPE, "timeout": 20})
+
+    def test_refusal_reboot_checks_daemon_without_changing_it(self):
+        for changed in (None, "active", "pid", "enabled", "fingerprint"):
+            daemon = {"ActiveState": "inactive", "MainPID": "0", "UnitFileState": "static"}
+            if changed == "active": daemon["ActiveState"] = "active"
+            if changed == "pid": daemon["MainPID"] = "41"
+            if changed == "enabled": daemon["UnitFileState"] = "enabled"
+            def properties(unit, fields):
+                if unit == docker_guest.docker_engine.UNIT:
+                    self.assertEqual(fields, ("ActiveState", "MainPID", "UnitFileState"))
+                    return daemon
+                return {"Id": unit, "LoadState": "not-found", "ActiveState": "inactive", "MainPID": "0", "Transient": "no", "FragmentPath": ""}
+            def record(path, *unused):
+                return {"artifact_sha256": "a" * 64} if path.name == "installed.json" else {"fixed": "before"}
+            with self.subTest(changed=changed), mock.patch.object(docker_guest, "record", side_effect=record), \
+                 mock.patch.object(docker_guest, "unchanged_process_state", return_value={"fixed": "changed" if changed == "fingerprint" else "before"}), \
+                 mock.patch.object(docker_guest.rich_guest, "principals"), mock.patch.object(docker_guest.rich_guest, "stopped"), \
+                 mock.patch.object(docker_guest.rich_guest, "verify_numeric") as numeric, \
+                 mock.patch.object(docker_guest.pwd, "getpwnam", side_effect=KeyError()), \
+                 mock.patch.object(docker_guest.grp, "getgrnam", side_effect=KeyError()), \
+                 mock.patch.object(Path, "lstat", side_effect=FileNotFoundError()), \
+                 mock.patch.object(docker_guest.assert_guest, "unit_properties", side_effect=properties), \
+                 mock.patch.object(docker_guest.docker_engine, "prepare") as prepare, \
+                 mock.patch.object(docker_guest.docker_engine, "start") as start, \
+                 mock.patch.object(docker_guest.docker_engine, "stop") as stop:
+                if changed is None:
+                    docker_guest.refusal("reboot")
+                    numeric.assert_called_once_with()
+                else:
+                    with self.assertRaisesRegex(AssertionError, "^REFUSAL$"):
+                        docker_guest.refusal("reboot")
+                    numeric.assert_not_called()
+                prepare.assert_not_called(); start.assert_not_called(); stop.assert_not_called()
+
+    def test_refusal_requires_fixed_user_group_and_unloaded_unit_paths_absent(self):
+        groups = tuple("hlo-rich-docker-" + role for role in ("uploader", "read", "frame", "collector", "reader"))
+        users = tuple("hlo-rich-docker-" + role for role in ("reader", "collector", "uploader"))
+        unit_paths = [Path("/etc/systemd/system", unit + suffix) for unit in (*docker_guest.UNITS, docker_guest.ENROLLMENT) for suffix in ("", ".d")]
+        unit_paths += [Path("/run/home-lab-observer-connected-rich", name) for name in ("activation", "reader-activation")]
+        for kind, target in [(None, None), *(("group", group) for group in groups), *(("user", user) for user in users),
+                             *(("path", path) for path in unit_paths), *(("manager-" + field, docker_guest.ENROLLMENT) for field in ("Id", "LoadState", "ActiveState", "MainPID", "Transient", "FragmentPath"))]:
+            def lookup(which, name):
+                if kind == which and name == target:
+                    return object()
+                raise KeyError()
+            def lstat(path):
+                if kind == "path" and path == target:
+                    # Includes a dangling symlink; existence alone must refuse.
+                    return types.SimpleNamespace(st_mode=0o120777)
+                raise FileNotFoundError()
+            def properties(unit, fields):
+                self.assertEqual(fields, ("Id", "LoadState", "ActiveState", "MainPID", "Transient", "FragmentPath"))
+                result = {"Id": unit, "LoadState": "not-found", "ActiveState": "inactive", "MainPID": "0", "Transient": "no", "FragmentPath": ""}
+                if kind and kind.startswith("manager-") and target == unit:
+                    result[kind.removeprefix("manager-")] = "unexpected"
+                return result
+            with self.subTest(kind=kind, target=target), mock.patch.object(docker_guest.pwd, "getpwnam", side_effect=lambda name: lookup("user", name)) as user_check, \
+                 mock.patch.object(docker_guest.grp, "getgrnam", side_effect=lambda name: lookup("group", name)) as group_check, \
+                 mock.patch.object(Path, "lstat", autospec=True, side_effect=lstat) as path_check, \
+                 mock.patch.object(docker_guest.assert_guest, "unit_properties", side_effect=properties):
+                if kind is None:
+                    docker_guest.refusal_targets_absent()
+                    self.assertEqual({call.args[0] for call in user_check.call_args_list}, set(users))
+                    self.assertEqual({call.args[0] for call in group_check.call_args_list}, set(groups))
+                    self.assertEqual({call.args[0] for call in path_check.call_args_list}, set(unit_paths))
+                else:
+                    with self.assertRaisesRegex(AssertionError, "^REFUSAL$"):
+                        docker_guest.refusal_targets_absent()
+
+    def test_refusal_prerequisite_socket_metadata_is_exact(self):
+        expected = {"st_mode": 0o140660, "st_uid": 0, "st_gid": 22003, "st_nlink": 1}
+        for changed in ({}, {"st_mode": 0o100660}, {"st_mode": 0o140666}, {"st_uid": 1}, {"st_gid": 0}, {"st_gid": 22004}, {"st_nlink": 0}, {"st_nlink": 2}):
+            with self.subTest(changed=changed), mock.patch.object(Path, "lstat", return_value=types.SimpleNamespace(**(expected | changed))), \
+                 mock.patch.object(docker_guest.docker_engine, "prove_containers"), mock.patch.object(docker_guest.preflight_probe, "dns_tls"), \
+                 mock.patch.object(docker_guest.preflight_probe, "parent_policy"):
+                process = mock.Mock()
+                process.poll.return_value = None
+                if changed:
+                    with self.assertRaisesRegex(AssertionError, "^REFUSAL$"):
+                        docker_guest.refusal_prerequisites(process)
+                else:
+                    docker_guest.refusal_prerequisites(process)
+
     def test_stale_reader_fault_keeps_its_sequence_and_never_replaces_socket(self):
         events = []
         fault = {"sequence": 8, "unavailable_count": 2, "healthy_sequence": 0}

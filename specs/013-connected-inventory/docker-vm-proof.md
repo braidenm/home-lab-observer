@@ -165,3 +165,50 @@ remain required; balancing work is not permission to skip a gate, reuse old acce
 
 Local TDD evidence: the stale-fault/no-socket and executed reboot-order cases failed before the two-line move.
 All80 fixture tests then passed, including pending-then-acknowledged status before socket replacement; no VM ran.
+
+## Match the installed-root refusal diagnostic stream (2026-10-30)
+
+Source inspection found a deterministic refusal-fixture contradiction: the Docker installer writes its fixed
+pre-grant `PREFLIGHT_REFUSED` diagnostic to stderr, but the fixture discarded stderr and required that diagnostic
+on stdout. Correct only the fixture: require exit22, empty stdout and the exact known pre-grant stderr line within
+the existing 1024-byte diagnostic bound. Never forward captured child output. Unknown, oversized, mixed-stream or
+otherwise unsuccessful results are not the expected refusal. Production installer output and preflight stay unchanged.
+
+The generic preflight line alone does not identify the conflicting rich root: an absent Docker socket or stopped
+guest TLS/DNS receiver would produce the same line if the target guard regressed. Prepare the existing pinned,
+offline Docker fixture before the process-only baseline, and retain its synthetic receiver through the attempt.
+Require unchanged receiver receipt bytes as well as the existing state fingerprint, then stop the fixture daemon
+in `finally` and terminate the receiver in the outer `finally`. On reboot require the fixture daemon already
+inactive/static/PID0 without starting or stopping it; do not hide unexpected boot activity. No new package, host
+daemon operation, production admission change or timeout extension is part of this correction.
+Before the attempt and after each boot, require all three Docker users, all five fixed Docker group names, all four
+unit fragments and their `.d` entries absent via direct NSS/lstat checks, in addition to the manager not-found tuples.
+These are fixed absence checks, not a new arbitrary filesystem reader or a claim that one generic message alone
+identifies the exact rejecting guard.
+
+Revalidate prerequisites immediately before the Docker attempt, after capturing the state and receiver receipt:
+the existing bounded container proof, root-owned mode0660 single-link GID22003 Unix socket, live receiver process,
+and existing bounded DNS/TLS and parent-policy probes. These checks send no enrollment/HTTP request and must not
+start a service as a health check. Any failure prevents the attempt. Check both fixed rich activation directories
+with lstat, without returning early after the first absent path. Preserve the primary closed failure if either
+daemon or receiver cleanup also fails; cleanup failure alone must still fail the journey, never imply acceptance.
+
+Also cover the actual CLI producer in a Linux/amd64 subprocess test with a valid synthetic build identity and nil
+context. It must exit22 with empty stdout and the same exact early stderr line. Nil-context admission refuses
+before bundle, host, socket, DNS or account inspection; the child isolates secret-hardening syscalls. Bound it to
+five seconds with no root, candidate execution, test-only production seam or dependency addition.
+
+TDD must exercise the real refusal function with a correct stderr result and reject a stdout diagnostic, wrong exit,
+oversized/unknown stderr or extra stdout. Retain all before/after process-only file/inode/NSS/unit fingerprints,
+absent Docker principals/units, no enrollment and numeric checks on both boots. Review the remaining refusal
+assertions against their actual source contracts before another run. Local tests/source review are not either
+packaged VM acceptance case; exact-source CI, both independently reviewed cases and release gates remain pending.
+
+Final local source proof: correct-stderr, wrong-channel, reboot-daemon, fixed absence, immediate-prerequisite,
+common-activation and receiver-cleanup regressions failed before their corrections. All84 Python fixture tests then
+passed with zero skips, including receipt changes, every absence target/manager field, each unhealthy prerequisite
+preventing the attempt, exact socket metadata and primary-vs-cleanup failures. The real Linux/amd64 CLI subprocess
+test passed normally and under race detection; focused command vet, formatting, AST17, Bash syntax, foundation43
+and diff checks passed. No candidate build or VM execution was performed by this slice. Static comparison found
+no other obvious refusal-contract contradiction; that is not proof that all runtime prerequisites will succeed
+in a new guest. Independent exact-source review, actual CI and full packaged acceptance remain required.

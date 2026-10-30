@@ -355,32 +355,7 @@ def unchanged_process_state():
     return result
 
 
-def refusal(mode):
-    if mode == "first":
-        rich_guest.prepare_reboot()
-        target, digest = rich_guest.package()
-        process = rich_guest.receiver()
-        try:
-            install(target, digest, "install-rich")
-        finally:
-            process.terminate(); process.wait(timeout=5)
-        config = record(CONFIG / "installed.json")
-        rich_guest.principals(config)
-        binary = Path("/opt/home-lab-observer-connected-rich/releases") / config["artifact_sha256"] / "observer-connected-rich-install"
-        rich_guest.stopped(binary)
-        target, digest = package()
-        before = unchanged_process_state()
-        result = subprocess.run([str(target / "observer-connected-rich-docker-install"), "install", str(target), digest, SERVER], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=20)
-        need(result.returncode == 22 and result.stdout.startswith(b"PREFLIGHT_REFUSED:") and len(result.stdout) <= 1024, "REFUSAL")
-        need(unchanged_process_state() == before, "REFUSAL")
-        (ROOT / "docker-refusal.json").write_text(json.dumps(before, separators=(",", ":")))
-        (ROOT / "docker-refusal.json").chmod(0o600)
-    else:
-        need(unchanged_process_state() == record(ROOT / "docker-refusal.json", 1024 * 1024), "REFUSAL")
-        config = record(CONFIG / "installed.json")
-        rich_guest.principals(config)
-        binary = Path("/opt/home-lab-observer-connected-rich/releases") / config["artifact_sha256"] / "observer-connected-rich-install"
-        rich_guest.stopped(binary)
+def refusal_targets_absent():
     for name in ("hlo-rich-docker-reader", "hlo-rich-docker-collector", "hlo-rich-docker-uploader"):
         try:
             pwd.getpwnam(name)
@@ -388,8 +363,95 @@ def refusal(mode):
             pass
         else:
             raise AssertionError("REFUSAL")
+    for role in ("uploader", "read", "frame", "collector", "reader"):
+        try:
+            grp.getgrnam("hlo-rich-docker-" + role)
+        except KeyError:
+            pass
+        else:
+            raise AssertionError("REFUSAL")
     for unit in (*UNITS, ENROLLMENT):
-        need(assert_guest.unit_properties(unit, ("LoadState", "ActiveState", "MainPID")) == {"LoadState": "not-found", "ActiveState": "inactive", "MainPID": "0"}, "REFUSAL")
+        for suffix in ("", ".d"):
+            try:
+                Path("/etc/systemd/system", unit + suffix).lstat()
+            except FileNotFoundError:
+                continue
+            raise AssertionError("REFUSAL")
+        fields = ("Id", "LoadState", "ActiveState", "MainPID", "Transient", "FragmentPath")
+        need(assert_guest.unit_properties(unit, fields) == {"Id": unit, "LoadState": "not-found", "ActiveState": "inactive", "MainPID": "0", "Transient": "no", "FragmentPath": ""}, "REFUSAL")
+    for name in ("activation", "reader-activation"):
+        try:
+            Path("/run/home-lab-observer-connected-rich", name).lstat()
+        except FileNotFoundError:
+            continue
+        raise AssertionError("REFUSAL")
+
+
+def refusal_prerequisites(process):
+    try:
+        docker_engine.prove_containers()
+        info = Path("/run/docker.sock").lstat()
+        need(stat.S_ISSOCK(info.st_mode) and stat.S_IMODE(info.st_mode) == 0o660 and info.st_uid == 0 and info.st_gid == docker_engine.DAEMON_GID and info.st_nlink == 1, "REFUSAL")
+        need(process.poll() is None, "REFUSAL")
+        preflight_probe.dns_tls()
+        preflight_probe.parent_policy()
+    except (OSError, ValueError, AssertionError, subprocess.SubprocessError, preflight_probe.Refused):
+        raise AssertionError("REFUSAL") from None
+
+
+def refusal(mode):
+    if mode == "first":
+        rich_guest.prepare_reboot()
+        target, digest = rich_guest.package()
+        process = rich_guest.receiver()
+        try:
+            docker_engine.prepare(True)
+            try:
+                install(target, digest, "install-rich")
+                config = record(CONFIG / "installed.json")
+                rich_guest.principals(config)
+                binary = Path("/opt/home-lab-observer-connected-rich/releases") / config["artifact_sha256"] / "observer-connected-rich-install"
+                rich_guest.stopped(binary)
+                target, digest = package()
+                refusal_targets_absent()
+                before = unchanged_process_state()
+                receipt = preflight_probe.fixed_file(str(ROOT / "rich-receiver.json"), 1024)
+                refusal_prerequisites(process)
+                result = subprocess.run([str(target / "observer-connected-rich-docker-install"), "install", str(target), digest, SERVER], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20)
+                diagnostic = b"PREFLIGHT_REFUSED: verify privileges, supported host and rich bundle before enrollment.\n"
+                need(result.returncode == 22 and result.stdout == b"" and len(result.stderr) <= 1024 and result.stderr == diagnostic, "REFUSAL")
+                need(unchanged_process_state() == before, "REFUSAL")
+                need(preflight_probe.fixed_file(str(ROOT / "rich-receiver.json"), 1024) == receipt, "REFUSAL")
+                (ROOT / "docker-refusal.json").write_text(json.dumps(before, separators=(",", ":")))
+                (ROOT / "docker-refusal.json").chmod(0o600)
+            finally:
+                primary = sys.exception()
+                try:
+                    docker_engine.stop()
+                except (OSError, AssertionError, subprocess.SubprocessError, preflight_probe.Refused):
+                    # The journey remains failed; a cleanup error must not hide
+                    # its original closed refusal. Never claim cleanup passed.
+                    if primary is None:
+                        raise
+        finally:
+            primary = sys.exception()
+            try:
+                try:
+                    process.terminate()
+                finally:
+                    process.wait(timeout=5)
+            except (OSError, subprocess.SubprocessError):
+                if primary is None:
+                    raise
+    else:
+        fields = ("ActiveState", "MainPID", "UnitFileState")
+        need(assert_guest.unit_properties(docker_engine.UNIT, fields) == {"ActiveState": "inactive", "MainPID": "0", "UnitFileState": "static"}, "REFUSAL")
+        need(unchanged_process_state() == record(ROOT / "docker-refusal.json", 1024 * 1024), "REFUSAL")
+        config = record(CONFIG / "installed.json")
+        rich_guest.principals(config)
+        binary = Path("/opt/home-lab-observer-connected-rich/releases") / config["artifact_sha256"] / "observer-connected-rich-install"
+        rich_guest.stopped(binary)
+    refusal_targets_absent()
     rich_guest.verify_numeric()
 
 
