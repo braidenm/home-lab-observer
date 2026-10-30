@@ -162,3 +162,6 @@ nine-minute boot limit, two independent cases/four boots, no-NIC resource budget
 Socket recovery must still finish before final stopped-state, fingerprint, disk bounds and numeric checks.
 Add deterministic first/reboot call-order tests. Source review, exact-head CI and new exact-source packaged proof
 remain required; balancing work is not permission to skip a gate, reuse old acceptance or extend a timeout.
+
+Local TDD evidence: the stale-fault/no-socket and executed reboot-order cases failed before the two-line move.
+All80 fixture tests then passed, including pending-then-acknowledged status before socket replacement; no VM ran.

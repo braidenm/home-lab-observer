@@ -20,6 +20,108 @@ def reader_state(**changes):
 
 
 class DockerGuestTest(unittest.TestCase):
+    def test_stale_reader_fault_keeps_its_sequence_and_never_replaces_socket(self):
+        events = []
+        fault = {"sequence": 8, "unavailable_count": 2, "healthy_sequence": 0}
+        good = {"sequence": 9, "healthy_sequence": 9, **{name: True for name in ("large_body", "foreign_process", "running_container", "exited_null", "warmed_metrics")}}
+        values = iter((fault, good))
+        def wait(predicate):
+            value = next(values)
+            self.assertTrue(predicate(value))
+            events.append("unavailable" if value is fault else "healthy")
+            return value
+        with mock.patch.object(docker_guest, "counts", return_value={"unavailable_count": 1}), \
+             mock.patch.object(docker_guest, "run", side_effect=lambda *args: events.append(args)), \
+             mock.patch.object(docker_guest, "wait_counts", side_effect=wait), \
+             mock.patch.object(docker_guest.activation_guest, "command", side_effect=lambda _, operation: events.append(operation)), \
+             mock.patch.object(docker_guest, "stopped", side_effect=lambda _: events.append("stopped")), \
+             mock.patch.object(docker_guest, "socket_replacement") as replacement:
+            docker_guest.fault_journey(Path("/fixed"))
+        self.assertEqual(events, [("/usr/bin/systemctl", "stop", "--", docker_guest.UNITS[1]), "unavailable", "stop", "stopped", "start", "healthy"])
+        replacement.assert_not_called()
+
+    def test_socket_replacement_runs_only_after_reboot_retry_fresh_ack_and_isolation(self):
+        held = {"sequence": 5, "digest": "fixed-digest"}
+        config = {"collection_profile": "RICH_PROCESSES_DOCKER_V1", "server_id": docker_guest.SERVER, "artifact_sha256": "a" * 64}
+        identity = {"fixed": "identity"}
+        prior = {"identity": identity, "pending": held, "duplicates": 0}
+        healthy_fields = {name: True for name in ("large_body", "foreign_process", "running_container", "exited_null", "warmed_metrics")}
+        for mode in ("first", "reboot"):
+            events, starts, waits, status_checks, acknowledged = [], 0, 0, 0, False
+            process = mock.Mock()
+            def command(_, operation):
+                nonlocal starts, status_checks, acknowledged
+                if operation == "start":
+                    starts += 1
+                    if mode == "first" and starts == 3:
+                        events.append("tamper-refused")
+                        raise docker_guest.activation_guest.Refused("COMMAND")
+                events.append(operation)
+                if operation == "status":
+                    status_checks += 1
+                    if status_checks == 1:
+                        return b'{"state":"PENDING"}'
+                    acknowledged = True
+                    events.append("ack")
+                return b'{"state":"ACKNOWLEDGED_FRESH"}'
+            def replacement(_):
+                self.assertTrue(acknowledged)
+                events.append("socket-replacement")
+            def wait(predicate, pending=None):
+                nonlocal waits
+                waits += 1
+                sequence = 5 if mode == "first" or pending is not None else 6
+                value = {**healthy_fields, "sequence": sequence, "healthy_sequence": sequence,
+                         "sha256": held["digest"], "duplicates": 1}
+                self.assertTrue(predicate(value))
+                events.append("retry" if pending is not None else "held" if mode == "first" and waits == 2 else "fresh")
+                return value
+            replacements = {
+                "record": lambda path, *unused: config if path.name == "installed.json" else prior,
+                "package": lambda: (Path("/fixed/package"), "fixed-digest"), "install": lambda *unused: None,
+                "receiver": lambda: process, "principals": lambda _: None,
+                "fingerprint": lambda: identity, "stopped": lambda _: events.append("stopped"),
+                "pending": lambda: events.append("pending") or held,
+                "counts": lambda: {"sequence": 1}, "wait_counts": wait,
+                "isolation": lambda _: events.append("isolation"),
+                "fault_journey": lambda _: events.append("stale-fault"),
+                "socket_replacement": replacement,
+            }
+            with self.subTest(mode=mode), contextlib.ExitStack() as stack:
+                stack.enter_context(mock.patch.object(docker_guest.os, "geteuid", return_value=0))
+                stack.enter_context(mock.patch.object(docker_guest.time, "sleep"))
+                for name, value in replacements.items(): stack.enter_context(mock.patch.object(docker_guest, name, side_effect=value))
+                stack.enter_context(mock.patch.object(docker_guest.activation_guest, "command", side_effect=command))
+                for name, value in {"prepare_reboot": lambda: None, "verify_numeric": lambda: events.append("numeric"),
+                                    "sleepers": lambda _: [], "join_sleepers": lambda _: None,
+                                    "retry_window": lambda _: events.append("retry-window"),
+                                    "pending_fresh": lambda _: events.append("pending-fresh")}.items():
+                    stack.enter_context(mock.patch.object(docker_guest.rich_guest, name, side_effect=value))
+                stack.enter_context(mock.patch.object(docker_guest.docker_engine, "prepare"))
+                stack.enter_context(mock.patch.object(docker_guest.docker_engine, "stop", side_effect=lambda: events.append("engine-stop")))
+                stack.enter_context(mock.patch.object(Path, "read_bytes", return_value=b'{"containers_enabled":true}'))
+                for name in ("touch", "write_bytes", "write_text", "chmod"):
+                    stack.enter_context(mock.patch.object(Path, name))
+                stack.enter_context(mock.patch.object(Path, "unlink", side_effect=lambda: events.append("unhold")))
+                stack.enter_context(mock.patch.object(Path, "iterdir", side_effect=lambda: iter(())))
+                docker_guest.exercise("rich-docker", mode)
+            if mode == "first":
+                self.assertEqual(events.count("stale-fault"), 1)
+                self.assertNotIn("socket-replacement", events)
+                self.assertLess(events.index("stale-fault"), events.index("held"))
+                self.assertLess(events.index("held"), events.index("tamper-refused"))
+            else:
+                self.assertNotIn("stale-fault", events)
+                self.assertEqual(events.count("socket-replacement"), 1)
+                self.assertEqual(status_checks, 2)
+                ordered = ["retry-window", "unhold", "start", "retry", "pending-fresh", "fresh", "status", "ack", "isolation", "socket-replacement", "stop", "stopped", "engine-stop"]
+                indices = [events.index(name) for name in ordered]
+                # The initial stopped() precondition precedes startup; select the final one.
+                indices[-2] = events.index("stopped", events.index("stop"))
+                self.assertEqual(indices, sorted(indices))
+            process.terminate.assert_called_once_with()
+            process.wait.assert_called_once_with(timeout=5)
+
     def test_reader_binding_requires_socket_and_same_active_manager(self):
         import stat
         initial = {"ActiveState": "active", "MainPID": "100", "InvocationID": "a" * 32}

@@ -230,7 +230,6 @@ def fault_journey(binary):
     activation_guest.command(binary, "stop"); stopped(binary)
     activation_guest.command(binary, "start")
     wait_counts(lambda v: healthy(v) and v["sequence"] > fault["sequence"])
-    socket_replacement(binary)
 
 
 def reader_binding():
@@ -464,6 +463,7 @@ def exercise(scope, mode):
             while json.loads(activation_guest.command(binary, "status"))["state"] != "ACKNOWLEDGED_FRESH":
                 need(time.monotonic() < deadline, "RETRY"); time.sleep(0.5)
             isolation(config)
+            socket_replacement(binary)
             activation_guest.command(binary, "stop"); stopped(binary)
             need(fingerprint() == before, "IDENTITY")
             docker_engine.stop()
