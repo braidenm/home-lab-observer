@@ -148,3 +148,13 @@ identify unexecuted native/OS proofs rather than substituting a fake or skipped 
 - [x] Independently review the minimal correction; add a failing exact-unit regression and retain namespace denials.
 - [x] Apply only the mandatory read-only physical-scaffold bind; pass focused source checks without changing guards.
 - [ ] Pass exact-source complete-package VM acceptance, then release/owner consent gates separately.
+
+## Runtime-owned Go cache follow-up (2026-10-30)
+
+- [x] Record PR 146's successful bounded runtime timings and inspect the exact pinned action's cache behavior.
+- [x] Test-first exact runtime-only `go.mod`/`go.sum`/workflow cache inputs, retaining every existing coverage guard:
+  the old default and review-discovered field-order/chomping gaps failed their regressions, then all nine cheap
+  workflow/source tests passed locally.
+- [x] Independently review the small cache configuration change; no remaining P0-P2 findings.
+- [ ] Require fresh exact-head CI before merge.
+- [ ] Observe a successful cold save and later runtime restore; do not infer creator, contents or a warm speedup from size alone.
