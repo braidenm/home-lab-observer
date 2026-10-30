@@ -48,7 +48,8 @@
   PR142 merged after all18 exact-head checks passed; installed acceptance remains separate.
 - [x] Independently validate/review [source layer 3: complete privileged package](docker-package.md), preserving the
   exact old profiles/resources and actual source/artifact/VM/hosted/owner gates before release or enrollment exposure.
-  Source and mechanical publication reviews passed; this layer still requires its own exact-head CI before merge.
+  PR143 merged after independent source/publication reviews and all18 exact-head checks passed. Installed acceptance
+  and release gates remain separate.
 
 The next manual artifact gate follows the dated [Docker-rich VM proof plan](docker-vm-proof.md). Its signed input
 verification, fixture implementation and two independent overlay results remain pending until recorded there.

@@ -73,7 +73,9 @@ The receiver validates raw bodies only in memory and persists closed hashes/sequ
   actual guest loader/runtime validation remains required.
 - [x] Implement closed Docker scope, guest journey, receiver/state siblings and cheap negative tests; wire only
   explicit runner/guest/PTY modes and extend the independently pinned harness manifest.
-- [ ] Independently review source, exact four-binary package and all input/hash manifests before VM execution.
+- [x] Independently review fixture source and correct all pre-launch findings; 73 focused Python tests and real Linux
+  receiver race/vet checks pass. The separate artifact review below is still required before execution.
+- [ ] Independently review exact same-source four-binary package and all input/hash manifests before VM execution.
 - [ ] Run both fresh-overlay cases; record finite passes/failures and preserve any failure disk unchanged.
 - [ ] Record measured resource/disk/daemon/isolation/retry evidence and remaining public-release/owner rollout gates.
 
