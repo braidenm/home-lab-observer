@@ -14,7 +14,7 @@ GitHub account/PAT, Docker, Go or Node. The installer requires a sudo-authorized
 terminal, Bash/coreutils, curl 8.4 or newer and Python 3.12 on the supported host.
 It does not install prerequisite packages; ambient download proxies are unsupported.
 
-## Install, connect, check and share
+## Install, connect, check and share the numeric beta
 
 1. Sign in to the hosting app and open **My servers**. Choose **Connect a Linux
    server**, then the native Linux beta, name the server and **Create enrollment**.
@@ -91,8 +91,32 @@ This manual lifecycle does not yet enable boot startup, automatic crash recovery
 endpoint refresh, automated upgrade/code rollback or automatic uninstall. A crash
 does not automatically restart workers. Preserve uncertain state for explicit
 recovery; there is no supported automatic repair or removal command in this beta.
-Connected Windows/macOS, rich remote containers/processes/logs, Docker controls
-and Kubernetes remain separate future slices.
+Connected Windows/macOS, remote logs, Docker controls and Kubernetes remain separate future slices.
+
+## Separate process/Docker package
+
+[0.1.0-canary.3](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-canary.3)
+is an immutable, unsigned process/Docker prerelease for the same exact Ubuntu target.
+Its [acceptance record](acceptance/connected-linux-docker/0.1.0-canary.3.json) binds independent-builder equality,
+provenance/SBOM and both installation/refusal cases across four boots to the public files.
+Downloads require no GitHub token. Package publication is not hosted onboarding or owner-server acceptance.
+Unlike the numeric profile, this package requires a compatible local Docker Engine at `/run/docker.sock`;
+the installer does not install Docker or turn a remote/Desktop engine into a supported Ubuntu host.
+
+Use it only when the hosting app explicitly offers the process/Docker profile with its matching verified
+installer and independently approved enrollment. Do not substitute it into a numeric command, reuse an existing
+numeric credential, overwrite a process-only installation, or infer permission from a local feature switch.
+The site must separately deploy compatible readers, approval and upload/read admission before enabling setup.
+
+This package adds bounded process/container inventory and optional resource readings, not raw logs, command lines,
+environment values, shell access or container controls. Its dedicated Docker reader has root-equivalent socket
+authority: trusted GET-only code and process isolation reduce exposure but are not daemon-enforced least privilege.
+Explicit local consent and the profile-specific management commands remain required. Manual startup, uncertain-state
+preservation and no automatic upgrade/removal remain beta limitations. The numeric commands above are not Docker commands.
+
+The [technical publication guide](../specs/013-connected-inventory/docker-owner-promotion.md) explains exact-byte
+verification; the [hosted delivery roadmap](delivery-plan.md) keeps site setup, real owner/viewer acceptance and
+later separately permissioned controls distinct.
 
 See [Spec 012](../specs/012-connected-observation/activation-lifecycle.md) for the
 activation boundary. The earlier

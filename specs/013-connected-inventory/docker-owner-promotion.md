@@ -1,6 +1,10 @@
 # Owner-operated Docker connected publication
 
-Status: locally tested implementation; independent source review and exact-head CI pending, not a verified release or installation.
+Status (2026-10-30): `0.1.0-canary.3` is published as an immutable, non-latest prerelease after independent review,
+protected builder/provenance/SBOM verification, both packaged cases across four boots, receipt-only PR154 and all
+16 triggered CI checks. Anonymous downloads of all four public files matched the accepted bytes.
+The [canonical receipt](../../docs/acceptance/connected-linux-docker/0.1.0-canary.3.json) records the accepted source;
+this does not enable a site's catalog, enrollment/admission, owner-host collection or sharing.
 The code-owned workflow registration is `401377430`, independently read after PR148 merged.
 No CLI workflow override, generic profile selector or numeric-policy fallback is supported.
 The exact [receipt and publisher contract](docker-promotion.md) owns this operation.
