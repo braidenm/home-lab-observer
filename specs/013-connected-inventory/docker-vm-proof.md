@@ -204,9 +204,11 @@ absent Docker principals/units, no enrollment and numeric checks on both boots. 
 assertions against their actual source contracts before another run. Local tests/source review are not either
 packaged VM acceptance case; exact-source CI, both independently reviewed cases and release gates remain pending.
 
-Local TDD evidence: correct-stderr, wrong-channel and reboot-daemon cases failed against the old fixture; fixed
-user/group/path cases also exposed the missing absence seam. All83 fixture tests now pass, including receipt
-changes, every fixed absence target and manager field, primary-refusal preservation when daemon Stop also fails,
-and Stop-only failure remaining a failure. Python AST17, guest Bash syntax and foundation43 checks pass. No VM ran;
-independent review and fresh exact-source packaged proof remain pending. Static comparison found no other obvious
-refusal-contract contradiction; that review is not proof that all runtime prerequisites will succeed in a new guest.
+Final local source proof: correct-stderr, wrong-channel, reboot-daemon, fixed absence, immediate-prerequisite,
+common-activation and receiver-cleanup regressions failed before their corrections. All84 Python fixture tests then
+passed with zero skips, including receipt changes, every absence target/manager field, each unhealthy prerequisite
+preventing the attempt, exact socket metadata and primary-vs-cleanup failures. The real Linux/amd64 CLI subprocess
+test passed normally and under race detection; focused command vet, formatting, AST17, Bash syntax, foundation43
+and diff checks passed. No candidate build or VM execution was performed by this slice. Static comparison found
+no other obvious refusal-contract contradiction; that is not proof that all runtime prerequisites will succeed
+in a new guest. Independent exact-source review, actual CI and full packaged acceptance remain required.
