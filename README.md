@@ -1,6 +1,6 @@
 # Home Lab Observer
 
-Home Lab Observer is a cross-platform, headless-first observability service for a single machine. Its rich local preview collects host/process signals, optional Docker readings and Windows/Linux log metadata, keeps bounded local history, and serves an authenticated local dashboard. A separate Ubuntu connected beta uploads a deliberately smaller numeric-host profile to an owner-authorized hosted dashboard such as Platform Demo.
+Home Lab Observer is a cross-platform, headless-first observability service for a single machine. Its rich local preview collects host/process signals, optional Docker readings and Windows/Linux log metadata, keeps bounded local history, and serves an authenticated local dashboard. Separate Ubuntu connected packages support numeric host readings or explicitly approved process/Docker inventory for an owner-authorized hosted dashboard such as Platform Demo; each requires its own site rollout.
 
 The project is intentionally public and self-contained. It does not contain, build from, or grant access to the private home-lab infrastructure repository.
 
@@ -23,6 +23,12 @@ is published for Ubuntu 24.04/systemd 255/amd64, with immutable assets, provenan
 [exact-artifact bootstrap and activation VM evidence](docs/acceptance/connected-linux/0.1.0-canary.1.json).
 It is an unsigned, explicit-start beta, not GA or an unattended service. Application catalog rollout and real
 owner install/view/share acceptance remain separate work; publication does not prove either is enabled on a given site.
+
+[Connected process/Docker beta 0.1.0-canary.3](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-canary.3)
+is also published for that exact Ubuntu target. Independent builders produced identical public files, and both
+installation/refusal cases passed first boot and reboot; the [canonical acceptance record](docs/acceptance/connected-linux-docker/0.1.0-canary.3.json)
+binds those results to the released bytes. This is not an automatic numeric upgrade: hosted enrollment/admission,
+explicit consent, owner-host installation and richer sharing acceptance are still separate rollout gates.
 
 ## Try the local dashboard without development tools
 
@@ -60,6 +66,7 @@ Optional local Docker adapter -> current in-memory container inventory --------+
 Optional Windows/Linux log adapters -> safe current metadata + bounded rollups-+
 
 Connected Ubuntu beta: numeric-host collector -> private handoff -> scoped outbound uploader -> authorized hosted views
+Opt-in Ubuntu process/Docker package: isolated Docker reader -> policy-bound collector -> durable uploader -> gated hosted views
 ```
 
 Platform Demo is a separate consumer of the observer contract. It does not iframe the local dashboard or require this repository to know about Platform Demo's UI.
@@ -84,14 +91,16 @@ not rich local snapshots. The published Linux beta composes isolated enrollment,
 the [operator guide](docs/connected-linux.md) covers its narrow host profile and manual lifecycle.
 Local process, container and log details do not become upload-eligible through enrollment.
 
-The next [rich connected inventory slice](specs/013-connected-inventory/spec.md) expands hosted process/container and
-system views through explicit local opt-in and a separately reviewed installed profile. It reuses the local collectors,
+The [rich connected inventory slice](specs/013-connected-inventory/spec.md) expands hosted process/container and
+system views through explicit local opt-in and a separately reviewed installed profile. Its accepted package reuses the local collectors,
 does not silently widen the numeric beta, and keeps Docker actions separately permissioned under Spec 011.
-Its unreleased Docker reader retains a minimal filesystem and private networking; the
+Its isolated Docker reader retains a minimal filesystem and private networking; the
 [systemd 255 isolation investigation](docs/architecture-research/2026-10-30-reader-private-network-sys.md)
-explains the current startup correction and the packaged acceptance still required before release.
+records the startup correction, while the [packaged proof](specs/013-connected-inventory/docker-vm-proof.md)
+and versioned acceptance record describe the executed release gate. Docker socket access is root-equivalent authority;
+GET-only application code is not daemon-enforced least privilege. No raw logs or container controls are included.
 The pure [combined-envelope contract](specs/013-connected-inventory/delivery-envelope.md) binds host metrics and
-workloads to one upload cycle; it does not yet change the installed beta or receiver admission.
+workloads to one upload cycle; the separately scoped package does not by itself enable a site's receiver admission.
 The [process-only package proof](specs/013-connected-inventory/installable-process-proof.md) connects that contract to
 separate collector/uploader identities, policy-bound durable retries and an explicit installer. It is a disposable-VM
 acceptance slice, not a published upgrade or permission to collect processes on an existing numeric installation.
@@ -144,9 +153,9 @@ exits 1 but cannot guarantee a complete JSON document.
 | Windows amd64/arm64 | Downloadable preview | Signed-in user task; machine-wide service later | Embedded preview | Opt-in local named pipe; Desktop live validation pending | Opt-in System and Application event metadata |
 | Linux container amd64/arm64 | Planned | Container restart policy | Planned | Planned through a constrained proxy | Not supported |
 
-The separate connected beta currently supports only Ubuntu 24.04/systemd 255/amd64 and uploads numeric host
-readings. Connected Windows/macOS, richer remote Docker/process/log views, unattended lifecycle and management
-controls are not provided by those local-preview downloads.
+The separate connected packages support only Ubuntu 24.04/systemd 255/amd64. The numeric beta remains independent;
+the process/Docker package needs its own hosted rollout and consent. Connected Windows/macOS, remote logs,
+unattended lifecycle and management controls are not provided by those local-preview downloads.
 
 ## License
 

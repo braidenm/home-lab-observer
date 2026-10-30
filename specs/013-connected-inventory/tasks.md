@@ -8,10 +8,10 @@
 - [x] Implement pure process/container egress DTOs, strict schemas and synthetic compatibility/privacy fixtures
   ([first profile](workload-profile.md)); locally tested, not upload-admitted or released.
 - [ ] Implement actual receiver/parser contracts and nullable authorized read models; retain legacy fixtures.
-  Process-only receiver/read model is deployed in Platform Demo PR 470; nullable container views remain open.
+  Process-only receiver/read models and nullable container views are deployed; Docker combined upload admission remains open.
 - [x] Define and independently review the pure combined host/workload envelope without extending upload admission;
   Windows full Go tests/vet, focused coverage 92.3% and exact-head native/race CI pass (PR 131 merged).
-- [ ] Approve and implement host-local opt-in policy plus rich acquisition/isolation profile.
+- [x] Approve and implement host-local opt-in policy plus rich acquisition/isolation profile; hosted activation is separate.
 - [x] Independently review immutable separately enrolled rich policy and staged process-only proof (ADR 024); installed
   process-only composition/VM evidence is now recorded below; Docker approval and actual owner rollout remain pending.
 - [x] Separate normalized container model from Engine acquisition; preserve aliases/JSON and prove no-Docker combined
@@ -23,13 +23,15 @@
 - [x] Complete the coherent VM-installable process-only package, following [its acceptance scope](installable-process-proof.md).
   Exact source `24153fa278eea907cb0987ae96c26137c9aae909` passed the packaged first-boot/reboot gate and all 19 PR checks;
   [independent evidence](../../docs/acceptance/connected-rich-processes-2026-10-29.md). No owner-host install or rich release accepted.
-- [ ] Rehearse fresh Docker-rich installation alongside numeric with no existing rich root; preserve numeric bytes/state.
+- [x] Rehearse fresh Docker-rich installation alongside numeric with no existing rich root; preserve numeric bytes/state.
   Separately prove pre-mutation refusal and byte-for-byte preservation of an existing process-only rich root.
   Rich-to-rich replacement and simultaneous rich installations are not implemented by this slice.
-- [ ] Wire profile-aware bounded handoff/ledger/transport and receiver; no broad cap-only activation.
+- [x] Wire profile-aware bounded installed handoff/ledger/transport and disposable receiver proof.
+- [ ] Complete hosted Docker receiver admission with both feature gates; no broad cap-only activation.
 - [ ] Add useful searchable workload/storage views and owner/delegate denial/revocation coverage.
-- [ ] Run exact packaged Ubuntu/disposable Docker isolation/failure/resource acceptance.
-- [ ] Publish immutable reviewed artifacts and release instructions; verify clean install/rollback.
+- [x] Run exact packaged Ubuntu/disposable Docker isolation/failure/resource acceptance.
+- [x] Publish immutable reviewed artifacts/release instructions and verify clean install/refusal/recovery.
+- [ ] Separately design and verify installed-code upgrade/rollback; it is not supported by this explicit-start beta.
 - [ ] Opt in owner canary and prove actual hosted fresh process/container rows plus delegated viewing/revocation.
 - [ ] Add host namespace-aware network/disk-I/O and bounded gap-aware numeric trends.
 - [x] Correct process CPU acquisition/normalization with explicit lifetime-single-core sampling basis
@@ -51,22 +53,22 @@
   PR143 merged after independent source/publication reviews and all18 exact-head checks passed. Installed acceptance
   and release gates remain separate.
 
-The next manual artifact gate follows the dated [Docker-rich VM proof plan](docker-vm-proof.md). Its signed input
-verification, fixture implementation and two independent overlay results remain pending until recorded there.
+The completed manual artifact gate follows the [Docker-rich VM proof](docker-vm-proof.md). Signed inputs,
+fixture implementation and both independent overlay results are bound by the final canonical receipt below.
 
 - [x] Record delegated engineering decision and [concrete installation plan](installable-docker-observation.md);
   independently reviewed and merged in PR 138; Docker implementation/activation retain their remaining gates.
 - [x] Pass exact packaged process-only VM proof before Docker runtime implementation (exact source and evidence above).
-- [ ] Freeze helper file/freshness/socket/layout/resources and new immutable collection definition with independent review.
+- [x] Freeze helper file/freshness/socket/layout/resources and new immutable collection definition with independent review.
 - [ ] Deploy new-profile/event/feature readers and record rollback floors before any new writer/feature event.
-- [ ] Deliver fixed Docker reader, typed file, kind2/schema-v3 state, installer/units and complete four-executable
+- [x] Deliver fixed Docker reader, typed file, kind2/schema-v3 state, installer/units and complete four-executable
   artifact verification as one coherent implementation/acceptance target; preserve old profiles and byte budgets.
 - [ ] Integrate nullable authorized container views and independently approved enrollment/definition echo, gated off
   until exact release acceptance; retain same-row revocation locking and atomic same-sequence reads.
-- [ ] Pass synthetic/privacy/race/storage tests and actual packaged Ubuntu/disposable Docker isolation/fault/resource proof.
+- [x] Pass synthetic/privacy/race/storage tests and actual packaged Ubuntu/disposable Docker isolation/fault/resource proof.
   Keep successful numeric-plus-Docker-rich coexistence separate from existing-process-only-rich refusal/preservation;
   do not claim a second rich root or rich-to-rich migration.
-- [ ] Publish exact immutable artifacts with provenance/SBOM and honest install/manage/partial-state instructions.
+- [x] Publish exact immutable artifacts with provenance/SBOM and honest install/manage/partial-state instructions.
 - [ ] Verify actual owner/delegate/outsider/revoke and responsive hosted dashboard; separately authorize owner-host install.
 
 The checklist does not itself implement those delivery gates. The dated [source-layer record](docker-data-plane.md)
@@ -150,7 +152,8 @@ identity must include delivery tooling, rather than forcing another full VM mere
   [the focused investigation](../../docs/architecture-research/2026-10-30-reader-private-network-sys.md).
 - [x] Independently review the minimal correction; add a failing exact-unit regression and retain namespace denials.
 - [x] Apply only the mandatory read-only physical-scaffold bind; pass focused source checks without changing guards.
-- [ ] Pass exact-source complete-package VM acceptance, then release/owner consent gates separately.
+- [x] Pass exact-source complete-package VM acceptance; see the final package evidence below.
+- [ ] Complete the separately gated hosted rollout and owner consent/acceptance.
 
 ## Runtime-owned Go cache follow-up (2026-10-30)
 
@@ -190,9 +193,9 @@ neither assets nor those source templates are executed by the Python verifier.
   once, without builds, provider mutations or a VM. See [the implementation evidence](docker-promotion.md#local-pr-b-implementation-evidence-2026-10-30).
   PR149 subsequently passed all triggered checks and merged as `04666e181ffbffce82788c4ce10f759f43d1d509`. Its protected candidate verification succeeded,
   but complete packaged VM startup failed; this is not accepted Docker VM evidence or a published release.
-- [ ] Freeze final clean merged source S, dispatch exact protected candidate and build the complete same-S local baseline.
-- [ ] Verify independent public-byte equality and exact provenance, then run both complete same-source VM cases with no diagnostic overlay.
-- [ ] Merge only the canonical acceptance JSON addition between S and promotion; publish unchanged bytes after all guards pass.
+- [x] Freeze final clean merged source S, dispatch exact protected candidate and build the complete same-S local baseline.
+- [x] Verify independent public-byte equality and exact provenance, then run both complete same-source VM cases with no diagnostic overlay.
+- [x] Merge only the canonical acceptance JSON addition between S and promotion; publish unchanged bytes after all guards pass.
 - [ ] Separately deliver catalog/readers/writer/consent and owner/viewer acceptance; no container controls or Kubernetes here.
 
 ## Docker reader native incoming boundary (2026-10-30)
@@ -203,9 +206,10 @@ neither assets nor those source templates are executed by the Python verifier.
 - [x] TDD exact Docker-reader0600 denial plus fixed source descriptor/namespace audit; old physical/numeric/process
   behavior, units, definition, caps and schemas unchanged.
 - [x] Compare captured source identity before request and after response under the same existing worker/socket fences.
-- [ ] Independently review source; pass focused runtime/lifecycle race/vet and all required exact-head CI.
-- [ ] Freeze new complete source/candidate/baselines and pass both same-source packaged Docker VM cases; no overlays.
-- [ ] Canonical acceptance, immutable release and separately authorized owner/viewer acceptance remain later gates.
+- [x] Independently review source; pass focused runtime/lifecycle race/vet and all required exact-head CI.
+- [x] Freeze new complete source/candidate/baselines and pass both same-source packaged Docker VM cases; no overlays.
+- [x] Complete canonical acceptance and immutable release; see the final package evidence below.
+- [ ] Complete separately authorized owner/viewer acceptance.
 
 ## Docker socket replacement fixture correction (2026-10-30)
 
@@ -216,6 +220,30 @@ neither assets nor those source templates are executed by the Python verifier.
   Local78 fixture tests pass without skips, including the unmocked recovery-stop path that first failed when normal
   `stopped()` incorrectly required the reader inactive. Normal stopped assertions remain strict; source review and
   exact-head CI are separate gates, not a packaged VM pass.
-- [ ] Independent source review and all exact-head CI before merge.
-- [ ] Freeze fresh same-source protected/local artifacts and complete both no-overlay packaged cases; failed prior
+- [x] Independent source review and all exact-head CI before merge.
+- [x] Freeze fresh same-source protected/local artifacts and complete both no-overlay packaged cases; failed prior
   runs do not become acceptance or authorize release/owner use.
+
+## Accepted package and remaining hosted rollout (2026-10-30)
+
+The final source `0c7f8806224517f511292d342e361c11e404a887` passed protected run `41126989574`, attempt1:
+all five jobs, distinct independent-builder public-byte equality, five provenance subjects and archive SPDX.
+Its complete same-source local inputs matched all four released files. Both fresh no-NIC cases completed
+first boot and reboot with final `HLO_VM_ALL_PASS`; root and independent review verified all four markers,
+no failure markers and zero remaining owned QEMU/mount/loop resources. Failed earlier disks remain evidence,
+not substituted acceptance. This closes the packaged-run requirements above, not their separate owner gates.
+
+PR154 added only the [canonical receipt](../../docs/acceptance/connected-linux-docker/0.1.0-canary.3.json)
+between that source and promotion; all16 triggered checks passed. Release `429507859`,
+[`0.1.0-canary.3`](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-canary.3),
+is immutable/non-latest, with anonymous exact-byte verification. Focused Docker policy/operator tests passed
+all51 cases on Linux with zero skips. This is reviewed VM evidence, not cryptographic VM attestation or GA.
+
+- [x] Complete exact packaged Docker acceptance and immutable public distribution.
+- [ ] Complete the hosting app's compatible-reader rollback floor, approval/exchange and both-gate admission/setup.
+- [ ] Configure only the accepted catalog after those deployed gates; perform explicit owner consent/install and real data checks.
+- [ ] Verify ordinary-user richer read-sharing and revocation; no logs, shell or management grant is implied.
+
+The conservative pre-hold ACK race follow-up is tracked in
+[issue155](https://github.com/braidenm/home-lab-observer/issues/155). It can cause a false timeout;
+the accepted run passed the strict sequence/digest checks. No runtime or deadline change is part of this closeout.

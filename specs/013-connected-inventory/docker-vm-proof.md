@@ -1,7 +1,10 @@
 # Docker-rich packaged VM proof plan
 
-Date: 2026-10-29. Status: approved engineering scope; implementation/input verification in progress. No Docker-rich
-VM acceptance, public release or owner-host acceptance is claimed. The separately accepted process-only gate does not prove Docker.
+Originally approved 2026-10-29; final packaged proof completed 2026-10-30 at source
+`0c7f8806224517f511292d342e361c11e404a887`. Both cases below passed first boot and reboot;
+the [canonical receipt](../../docs/acceptance/connected-linux-docker/0.1.0-canary.3.json) binds the exact inputs.
+Immutable prerelease `0.1.0-canary.3` is published. Hosted rollout and owner-host acceptance remain open.
+The dated diagnostic sections retain earlier failures; none is substituted for this final proof.
 
 ## Closed scope and inputs
 
@@ -70,14 +73,15 @@ The receiver validates raw bodies only in memory and persists closed hashes/sequ
 - [x] Verify signed repository/key/Packages chain and the three exact package downloads in private staging
   ([input record](docker-vm-inputs.md)); no host package/runtime changes.
 - [x] Freeze researched guest dependency closure and separately pinned source-built synthetic image input;
-  actual guest loader/runtime validation remains required.
+  final guest loader/runtime validation passed in the exact packaged cases.
 - [x] Implement closed Docker scope, guest journey, receiver/state siblings and cheap negative tests; wire only
   explicit runner/guest/PTY modes and extend the independently pinned harness manifest.
 - [x] Independently review fixture source and correct all pre-launch findings; 73 focused Python tests and real Linux
-  receiver race/vet checks pass. The separate artifact review below is still required before execution.
-- [ ] Independently review exact same-source four-binary package and all input/hash manifests before VM execution.
-- [ ] Run both fresh-overlay cases; record finite passes/failures and preserve any failure disk unchanged.
-- [ ] Record measured resource/disk/daemon/isolation/retry evidence and remaining public-release/owner rollout gates.
+  receiver race/vet checks passed at that review; later corrections and their tests are recorded below.
+- [x] Independently review exact same-source four-binary package and all input/hash manifests before VM execution.
+- [x] Run both fresh-overlay cases; record finite passes/failures and preserve any failure disk unchanged.
+- [x] Record resource/disk/daemon/isolation/retry bound checks through the pinned harness and closed case markers;
+  keep public-release and owner rollout evidence separate. This is not a representative host-capacity benchmark.
 
 Cheap fixture tests are not VM acceptance. A real Docker VM pass does not authorize owner installation, publishing,
 remote actions or Kubernetes, and is not a substitute for hosted owner/delegate authorization and responsive UI proof.
@@ -212,3 +216,19 @@ test passed normally and under race detection; focused command vet, formatting, 
 and diff checks passed. No candidate build or VM execution was performed by this slice. Static comparison found
 no other obvious refusal-contract contradiction; that is not proof that all runtime prerequisites will succeed
 in a new guest. Independent exact-source review, actual CI and full packaged acceptance remain required.
+
+## Final executed proof (2026-10-30)
+
+The corrected source above passed protected candidate run `41126989574`, attempt1, and independent review of all
+same-source package/fixture inputs. Both fresh no-NIC overlays completed both boots, their exact four expected
+markers and final `HLO_VM_ALL_PASS`. Root and independent review verified zero owned QEMU, mount and loop resources
+afterward, retaining evidence disks privately. No diagnostic overlay or prior failed case was reused as acceptance.
+The canonical receipt records image, harness, helper, baseline, Docker-input and public-file bindings; the pinned
+harness defines the granular resource, disk, privacy, daemon, isolation, retry and refusal assertions behind PASS.
+
+PR154 merged only that receipt after all16 triggered checks passed, then the fixed publisher produced immutable,
+non-latest [release0.1.0-canary.3](https://github.com/braidenm/home-lab-observer/releases/tag/v0.1.0-canary.3)
+and verified anonymous exact-byte downloads. The receipt is reviewed evidence, not cryptographic VM attestation.
+No hosted catalog/feature activation, owner-host richer upload, delegated viewing, container control or Kubernetes
+acceptance is implied. The conservative fixture ACK-barrier follow-up is tracked separately in
+[issue155](https://github.com/braidenm/home-lab-observer/issues/155).
