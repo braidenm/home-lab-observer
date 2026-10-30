@@ -78,3 +78,8 @@
   - [x] Add closed none/legacy/new-format predecessor byte admission and pure phase classification; no installed legacy-file provenance is inferred.
   - [x] Independently anchor and compare installed legacy refresh files to a complete staged first predecessor; the lease, stopped workers and durable publication remain open.
 - [ ] Specify richer remote quality-aware read models; keep Kubernetes deferred and actions in Spec 011.
+
+- [ ] Complete the [Docker reader startup diagnostic correction](../013-connected-inventory/docker-vm-proof.md#2026-10-30-reader-startup-diagnostic-correction): preserve closed primary phases through cleanup, prove fault/redaction tests,
+  then independently review and rerun exact packaged artifacts. The failed and diagnostic VM runs are not acceptance.
+  - [x] Implement closed source diagnostics and prove local seam/cleanup/redaction and existing regression checks;
+    independent review, exact-head CI and packaged proof remain separate gates.

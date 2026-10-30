@@ -3,6 +3,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 import sys
@@ -19,6 +20,11 @@ import bootstrap_guest
 
 
 class HarnessAdmissionTest(unittest.TestCase):
+    def test_reader_diagnostic_phases_match_the_installer_closed_vocabulary(self):
+        source = Path(__file__).resolve().parents[3] / "internal/connectedinstall/lifecycle_error_linux.go"
+        phases = set(re.findall(r'"(READER_[A-Z_]+)"', source.read_text(encoding="utf-8")))
+        self.assertEqual(phases, {phase for phase in activation_guest.PHASES if phase.startswith("READER_")})
+
     def test_bootstrap_pidfd_acquisition_failure_joins_owned_receiver(self):
         child = mock.Mock()
         with mock.patch.object(bootstrap_guest.subprocess, "Popen", return_value=child), mock.patch.object(bootstrap_guest.os, "pidfd_open", side_effect=OSError("fixture acquisition")):
@@ -59,12 +65,18 @@ class HarnessAdmissionTest(unittest.TestCase):
 
     def test_activation_failure_phase_is_allowlisted_not_raw_output(self):
         self.assertEqual(activation_guest.command_failure(b"RECOVERY_REQUIRED: preserve installed state and inspect the owned services before retrying.\n"), "RECOVERY")
+        for phase in ("READER_SOCKET", "READER_STARTUP"):
+            recovery = f"RECOVERY_REQUIRED: {phase}. Preserve installed state and inspect the owned services before retrying.\n".encode("ascii")
+            for profile in ("", "rich "):
+                refused = f"OPERATION_REFUSED: {phase}. Verify the {profile}installed bundle, service state and policy.\n".encode("ascii")
+                self.assertEqual(activation_guest.command_failure(refused), "COMMAND_" + phase)
+            self.assertEqual(activation_guest.command_failure(recovery), "RECOVERY_" + phase)
         for phase in activation_guest.PHASES:
             data = f"OPERATION_REFUSED: {phase}. Verify the installed bundle, service state and policy.\n".encode("ascii")
             self.assertEqual(activation_guest.command_failure(data), "COMMAND_" + phase)
             recovery = f"RECOVERY_REQUIRED: {phase}. Preserve installed state and inspect the owned services before retrying.\n".encode("ascii")
             self.assertEqual(activation_guest.command_failure(recovery), "RECOVERY_" + phase)
-        for private in (b"hlc_private", b"OPERATION_REFUSED: SECRET. Verify the installed bundle, service state and policy.\n", b"OPERATION_REFUSED: LEASE. Verify the installed bundle, service state and policy.\nhlc_private"):
+        for private in (b"hlc_private", b"OPERATION_REFUSED: SECRET. Verify the installed bundle, service state and policy.\n", b"OPERATION_REFUSED: READER_PRIVATE_TOKEN. Verify the rich installed bundle, service state and policy.\n", b"OPERATION_REFUSED: READER_SOCKET. Verify the richer installed bundle, service state and policy.\n", b"OPERATION_REFUSED: READER_SOCKET. Verify the rich installed bundle, service state and policy.\nhlc_private", b"OPERATION_REFUSED: LEASE. Verify the installed bundle, service state and policy.\nhlc_private"):
             self.assertEqual(activation_guest.command_failure(private), "COMMAND")
 
     def test_activation_driver_refuses_unknown_operations_without_execution(self):

@@ -398,7 +398,7 @@ def exercise(scope, mode):
 
 
 def emit_failure(code):
-    if code not in FAILURES:
+    if code not in FAILURES and not (code in activation_guest.FAILURES and code.startswith(("START_", "STOP_", "STATUS_"))):
         code = "UNKNOWN"
     marker = "HLO_VM_FAIL_DOCKER_" + code + "\n"
     try:
@@ -414,7 +414,12 @@ def main():
         exercise(*sys.argv[1:])
         return 0
     except (OSError, ValueError, KeyError, TypeError, AttributeError, AssertionError, RuntimeError, sqlite3.Error, tarfile.TarError, subprocess.SubprocessError, activation_guest.Refused, preflight_probe.Refused) as error:
-        emit_failure(str(error) if isinstance(error, AssertionError) else "UNKNOWN")
+        code = "UNKNOWN"
+        if isinstance(error, AssertionError) and str(error) in FAILURES:
+            code = str(error)
+        elif isinstance(error, activation_guest.Refused) and str(error) in activation_guest.FAILURES and str(error).startswith(("START_", "STOP_", "STATUS_")):
+            code = str(error)
+        emit_failure(code)
         return 1
 
 

@@ -18,7 +18,11 @@ CONFIG = Path("/etc/home-lab-observer-connected/installed.json")
 SECRET = Path("/etc/home-lab-observer-connected/credentials/connector.json")
 LEDGER = Path("/var/lib/home-lab-observer-connected/ledger")
 UNITS = ("home-lab-observer-connected-collector.service", "home-lab-observer-connected-uploader.service")
-PHASES = frozenset(("REQUEST", "LEASE", "INSTALLED_STATE", "HOST_PROFILE", "PRINCIPALS", "SERVICE_STATE", "RUNTIME_GATE", "ACTIVATION_PREPARE", "ACTIVATION_CLEANUP", "UPLOADER_START", "UPLOADER_AUDIT", "REQUEST_PUBLICATION", "UPLOADER_RESPONSE", "COLLECTOR_START", "COLLECTOR_READY", "FINAL_AUDIT", "COMMIT_PUBLICATION", "UPLOADER_READY", "UNKNOWN"))
+PHASES = frozenset(("REQUEST", "LEASE", "INSTALLED_STATE", "HOST_PROFILE", "PRINCIPALS", "SERVICE_STATE", "RUNTIME_GATE", "ACTIVATION_PREPARE", "ACTIVATION_CLEANUP", "UPLOADER_START", "UPLOADER_AUDIT", "REQUEST_PUBLICATION", "UPLOADER_RESPONSE", "COLLECTOR_START", "COLLECTOR_READY", "READER_SOCKET", "READER_STARTUP", "FINAL_AUDIT", "COMMIT_PUBLICATION", "UPLOADER_READY", "UNKNOWN")) | frozenset((
+    "READER_REQUEST", "READER_STATE", "READER_ACTIVATION_PIN", "READER_RESPONSE_CLEAR", "READER_SERVICE_START",
+    "READER_AUDIT_BEFORE_REQUEST", "READER_REQUEST_BUILD", "READER_REQUEST_PUBLICATION", "READER_RESPONSE_WAIT",
+    "READER_RESPONSE_MATCH", "READER_AUDIT_AFTER_RESPONSE", "READER_COMMIT_PUBLICATION", "READER_STATUS_WAIT", "READER_FINAL_IDENTITY",
+))
 FAILURES = frozenset(("RECORD", "OPERATION", "COMMAND", "UPLOAD", "STOP", "PERSISTENCE", "BOUNDS", "INPUT", "BINDING")) | frozenset(operation + "_" + reason for operation in ("START", "STOP", "STATUS") for reason in ("COMMAND", "RECOVERY", *("COMMAND_" + phase for phase in PHASES), *("RECOVERY_" + phase for phase in PHASES)))
 
 
@@ -43,7 +47,7 @@ def command_failure(data: bytes) -> str:
     match = re.fullmatch(rb"RECOVERY_REQUIRED: ([A-Z_]+)\. Preserve installed state and inspect the owned services before retrying\.\n", data)
     if match and match[1].decode("ascii") in PHASES:
         return "RECOVERY_" + match[1].decode("ascii")
-    match = re.fullmatch(rb"OPERATION_REFUSED: ([A-Z_]+)\. Verify the installed bundle, service state and policy\.\n", data)
+    match = re.fullmatch(rb"OPERATION_REFUSED: ([A-Z_]+)\. Verify the (?:rich )?installed bundle, service state and policy\.\n", data)
     if match and match[1].decode("ascii") in PHASES:
         return "COMMAND_" + match[1].decode("ascii")
     return "COMMAND"
