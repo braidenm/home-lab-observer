@@ -1,6 +1,6 @@
 # Owner-operated Docker connected publication
 
-Status: approved implementation plan, not a verified release or installation.
+Status: locally tested implementation; independent source review and exact-head CI pending, not a verified release or installation.
 The code-owned workflow registration is `401377430`, independently read after PR148 merged.
 No CLI workflow override, generic profile selector or numeric-policy fallback is supported.
 The exact [receipt and publisher contract](docker-promotion.md) owns this operation.
@@ -15,6 +15,9 @@ The account's stored release authority and workstation remain trusted; this prog
 Read both upload artifact IDs from the fixed candidate workflow's primary and independent jobs.
 These illustrative IDs are synthetic; the program verifies their provider records, names, current run/attempt,
 exact source and bytes. Use a new directory, not a failed prior output:
+
+Both external artifact envelopes, the latest successful run/attempt, all five successful jobs and the exact fixed
+primary/independent names are checked before either ZIP download. A partial rerun is not a successful candidate.
 
 ```text
 python -B scripts/connected_docker_promote.py --prepare --run-id 123456789 --artifact-id 987654321 --independent-artifact-id 987654322 --output docker-candidate-check

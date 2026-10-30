@@ -123,6 +123,11 @@ The pure-policy slice owns only `_connected_promotion_core.py`, the existing num
 The Docker facade retains the same helper names and primary `validate_artifact`/`unpack_candidate`, adding only
 `validate_independent_artifact(info,record)`, `unpack_independent_candidate(bytes,record)`,
 `validate_attempt_jobs(response,record)` and `validate_archive_spdx(results,candidate,manifest_bytes,required_modules)`.
+Before ZIP metadata exists, fixed Docker `validate_prepare_run(run,workflow,run_id,source)` returns the independently
+validated current attempt and `validate_prepare_jobs(response,run_id,source)` validates its complete five-job result.
+These reuse the same run/job policy without fabricating candidate assets. The operator derives a bounded version from
+the primary fixed artifact-name grammar, checks both exact names for that run/attempt before either download, then
+cross-checks version/attempt against the canonical downloaded metadata and repeats full run/artifact validation.
 Generic Docker `validate_provenance` admits SLSA only; the dedicated archive-SPDX function is its only SPDX path,
 returns None on success and validates the predicate of that same matched sole-archive statement. Numeric generic
 provenance keeps its existing two-predicate behavior and None return. Export a fixed SPDX predicate constant if needed.
@@ -139,6 +144,22 @@ counter, Windows stored-auth prepare, anonymous postcheck and CLI wiring tests.
 No new Spring/Go runtime context, external-state mutation or expensive PR VM test.
 After B and ALL source prerequisites merge, freeze final S; only then candidate,
 same-S baseline comparison, both VM cases, canonical receipt and promotion.
+
+### Local PR-B implementation evidence (2026-10-30)
+
+The shared private operator/policy cores admit only the two actual immutable preset objects; public numeric wrappers
+retain their old signatures, CLI defaults, Provider seams and release-body golden. Docker has fixed named wrappers,
+registered workflow `401377430`, both provider artifact records and current-attempt job checks before download,
+literal five-file equality, five SLSA checks and one same-statement archive-SPDX check. Canonical receipt publication
+uses the existing common version lock and closed retry states. It never executes downloaded assets.
+
+All 100 connected Python tests pass locally on Linux with no skips, including the unchanged 21 numeric operator and
+eight numeric policy tests, 14 new Docker policy and 20 Docker operator tests. The latter cover actual isolated CLI
+imports from a hostile unrelated directory, fixed native stored-auth argv, early no-download refusals, artifact/job
+races, draft telemetry/recovery and anonymous byte failure. Contracts CI's existing `test_connected_docker*.py`
+discovery includes both new suites once; no extra build, signing, VM or provider-write CI work is added.
+Independent source review and exact-head CI remain gates. None of these synthetic tests constitutes candidate,
+independent protected-builder, packaged VM, publication or owner-host acceptance.
 
 ## PRIMARY SOURCES CHECKED (2026-10-30)
 https://cli.github.com/manual/gh_attestation_verify

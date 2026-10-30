@@ -185,6 +185,9 @@ neither assets nor those source templates are executed by the Python verifier.
 - [x] Read the registered Docker workflow ID after PR A merges: `401377430`, exact active canonical path; no dispatch.
 - [x] Root and peer approve the exact [PR-B receipt and factoring plan](docker-promotion.md) before production edits.
 - [ ] PR B: pin that ID and complete fixed Docker prepare/promotion, canonical receipt and operator/tests documentation.
+  Local implementation passes all100 connected Python tests with no skips, including unchanged numeric golden/API
+  regressions; source review and exact-head CI remain pending. Existing Contracts discovery includes both new suites
+  once, without builds, provider mutations or a VM. See [the implementation evidence](docker-promotion.md#local-pr-b-implementation-evidence-2026-10-30).
 - [ ] Freeze final clean merged source S, dispatch exact protected candidate and build the complete same-S local baseline.
 - [ ] Verify independent public-byte equality and exact provenance, then run both complete same-source VM cases with no diagnostic overlay.
 - [ ] Merge only the canonical acceptance JSON addition between S and promotion; publish unchanged bytes after all guards pass.
