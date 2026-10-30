@@ -63,6 +63,10 @@ counts, durations and drop/truncation metrics, not raw names/IDs/rejected values
 
 ## Tests and rollback
 
+The proposed [closed Docker release sequence](docker-release.md) completes two bounded source PRs before freezing
+the release source, then compares independently built protected bytes and runs one full same-source two-case VM
+proof. It preserves numeric release v1 and defers all dispatch/build/VM/publication/owner activation until approval.
+
 The unreleased Docker reader's systemd 255 `/sys` startup refusal has a
 [focused evidence and correction proposal](../../docs/architecture-research/2026-10-30-reader-private-network-sys.md).
 Preserve private networking and the exact empty physical scaffold/inode guard; prove the mandatory read-only bind

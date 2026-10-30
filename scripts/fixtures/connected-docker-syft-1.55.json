@@ -1,0 +1,311 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "files": [
+    {
+      "fileName": "observer-connected-rich-docker-collector",
+      "checksums": [
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "59476cab3ffd503794f00d041871eff82284a9d4"
+        },
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "e3253f4bd9b28eff767140b826fb01876a87b051462f63bbb2a26c9324500706"
+        }
+      ]
+    },
+    {
+      "fileName": "observer-connected-rich-docker-install",
+      "checksums": [
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "56103334ab77285d9448e5285b356a8dae209108"
+        },
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "4ff41ba6b400bbdde18ea6a6fa22c19546ab853eda6f5b7db615cba76ed002af"
+        }
+      ]
+    },
+    {
+      "fileName": "observer-connected-rich-docker-reader",
+      "checksums": [
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "6a0d1a37206bc231b16a5b14759b078e46aab8de"
+        },
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "5b38f3e1021dc49d188cf874e38cd298dd0d47153ae6719ae09b451ba795963c"
+        }
+      ]
+    },
+    {
+      "fileName": "observer-connected-rich-docker-uploader",
+      "checksums": [
+        {
+          "algorithm": "SHA1",
+          "checksumValue": "1045943220ba1b44c9dae912e61551548e1b47fd"
+        },
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "fe9b67858d01a66a41b5c45a72e31bce1d35b3d1195b76d8d6ddea21eaa18e5d"
+        }
+      ]
+    }
+  ],
+  "packages": [
+    {
+      "name": "github.com/braidenm/home-lab-observer",
+      "versionInfo": "UNKNOWN"
+    },
+    {
+      "name": "github.com/braidenm/home-lab-observer",
+      "versionInfo": "UNKNOWN"
+    },
+    {
+      "name": "github.com/braidenm/home-lab-observer",
+      "versionInfo": "UNKNOWN"
+    },
+    {
+      "name": "github.com/braidenm/home-lab-observer",
+      "versionInfo": "UNKNOWN"
+    },
+    {
+      "name": "github.com/dustin/go-humanize",
+      "versionInfo": "v1.0.1",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "1b392163b4f954d8449301f43d52608f3f9f5f5ae106b47ba514f79839297826"
+        }
+      ]
+    },
+    {
+      "name": "github.com/dustin/go-humanize",
+      "versionInfo": "v1.0.1",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "1b392163b4f954d8449301f43d52608f3f9f5f5ae106b47ba514f79839297826"
+        }
+      ]
+    },
+    {
+      "name": "github.com/google/uuid",
+      "versionInfo": "v1.6.0",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "348bda24330eb231c0f27d630212d2833ac0cf2d4782bfa136b6f9edefbde05d"
+        }
+      ]
+    },
+    {
+      "name": "github.com/google/uuid",
+      "versionInfo": "v1.6.0",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "348bda24330eb231c0f27d630212d2833ac0cf2d4782bfa136b6f9edefbde05d"
+        }
+      ]
+    },
+    {
+      "name": "github.com/remyoudompheng/bigfft",
+      "versionInfo": "v0.0.0-20230129092748-24d4a6f8daec",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "5b4f4854973de2272ae0d8d8ddc95becb93c3b5a89f01741105f33d226d4d2b1"
+        }
+      ]
+    },
+    {
+      "name": "github.com/remyoudompheng/bigfft",
+      "versionInfo": "v0.0.0-20230129092748-24d4a6f8daec",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "5b4f4854973de2272ae0d8d8ddc95becb93c3b5a89f01741105f33d226d4d2b1"
+        }
+      ]
+    },
+    {
+      "name": "github.com/shirou/gopsutil/v4",
+      "versionInfo": "v4.26.9",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "09a068fe1045aaf949a0bbc040429d1dd7f9183f7bfcc3760027f2bfadfed888"
+        }
+      ]
+    },
+    {
+      "name": "github.com/tklauser/go-sysconf",
+      "versionInfo": "v0.4.0",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "ec7d2e00dfbb464c1645ac616170cba9ae55dcb3eb25e57cc260fd7515203d05"
+        }
+      ]
+    },
+    {
+      "name": "github.com/tklauser/numcpus",
+      "versionInfo": "v0.12.0",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "351f39a9dbc703da45b1edf1df0795674af4493f11ea5e511db66b9516aaa1be"
+        }
+      ]
+    },
+    {
+      "name": "golang.org/x/sys",
+      "versionInfo": "v0.48.0",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "6db5ff8bfe8c813f4154b33d453d6d866c4bd38c9e4c085b133e12c9a75b5e8a"
+        }
+      ]
+    },
+    {
+      "name": "golang.org/x/sys",
+      "versionInfo": "v0.48.0",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "6db5ff8bfe8c813f4154b33d453d6d866c4bd38c9e4c085b133e12c9a75b5e8a"
+        }
+      ]
+    },
+    {
+      "name": "golang.org/x/sys",
+      "versionInfo": "v0.48.0",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "6db5ff8bfe8c813f4154b33d453d6d866c4bd38c9e4c085b133e12c9a75b5e8a"
+        }
+      ]
+    },
+    {
+      "name": "golang.org/x/sys",
+      "versionInfo": "v0.48.0",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "6db5ff8bfe8c813f4154b33d453d6d866c4bd38c9e4c085b133e12c9a75b5e8a"
+        }
+      ]
+    },
+    {
+      "name": "modernc.org/libc",
+      "versionInfo": "v1.75.7",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "a370d33fdff4a7da4a998d9608a41ac925bac0889984d33bc1cda5528ca17dec"
+        }
+      ]
+    },
+    {
+      "name": "modernc.org/libc",
+      "versionInfo": "v1.75.7",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "a370d33fdff4a7da4a998d9608a41ac925bac0889984d33bc1cda5528ca17dec"
+        }
+      ]
+    },
+    {
+      "name": "modernc.org/mathutil",
+      "versionInfo": "v1.7.1",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "18265519775a37c813a81d4c7ffbaca7563f852aa0236bc01863f88d9302c4e5"
+        }
+      ]
+    },
+    {
+      "name": "modernc.org/mathutil",
+      "versionInfo": "v1.7.1",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "18265519775a37c813a81d4c7ffbaca7563f852aa0236bc01863f88d9302c4e5"
+        }
+      ]
+    },
+    {
+      "name": "modernc.org/memory",
+      "versionInfo": "v1.12.1",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "9c53225aba52b6065cccd97a5c8f469c893fad68582321c651a474e2919ba7d8"
+        }
+      ]
+    },
+    {
+      "name": "modernc.org/memory",
+      "versionInfo": "v1.12.1",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "9c53225aba52b6065cccd97a5c8f469c893fad68582321c651a474e2919ba7d8"
+        }
+      ]
+    },
+    {
+      "name": "modernc.org/sqlite",
+      "versionInfo": "v1.59.0",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "5f57acd46a6a0654bfe53faf6cce072d475a6bc3ad431e3af03176bebc7edfc0"
+        }
+      ]
+    },
+    {
+      "name": "modernc.org/sqlite",
+      "versionInfo": "v1.59.0",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "5f57acd46a6a0654bfe53faf6cce072d475a6bc3ad431e3af03176bebc7edfc0"
+        }
+      ]
+    },
+    {
+      "name": "stdlib",
+      "versionInfo": "go1.27.3"
+    },
+    {
+      "name": "stdlib",
+      "versionInfo": "go1.27.3"
+    },
+    {
+      "name": "stdlib",
+      "versionInfo": "go1.27.3"
+    },
+    {
+      "name": "stdlib",
+      "versionInfo": "go1.27.3"
+    },
+    {
+      "name": "home-lab-observer-connected-rich-processes-docker_0.1.0-canary.3_linux_amd64.tar.gz",
+      "versionInfo": "sha256:3a3d2e08b3a98a60473b53d9319fdebd2b35b39224374ffe4f608131a2320367",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "3a3d2e08b3a98a60473b53d9319fdebd2b35b39224374ffe4f608131a2320367"
+        }
+      ]
+    }
+  ]
+}
