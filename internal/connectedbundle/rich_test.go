@@ -11,11 +11,13 @@ import (
 	"time"
 
 	"github.com/braidenm/home-lab-observer/internal/connectedidentity"
-	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
-	"github.com/braidenm/home-lab-observer/internal/connectedunits"
 )
 
 func buildRichProcessesFixture(t *testing.T) (string, []byte, string) {
+	return buildNamedRichFixture(t, richProcessesBundleSpec, CreateRichProcessesManifest)
+}
+
+func buildNamedRichFixture(t *testing.T, spec bundleSpec, create func(string, string, string) ([]byte, error)) (string, []byte, string) {
 	t.Helper()
 	goExe, err := exec.LookPath("go")
 	if err != nil {
@@ -28,12 +30,12 @@ func buildRichProcessesFixture(t *testing.T) (string, []byte, string) {
 	if os.WriteFile(filepath.Join(source, "go.mod"), []byte("module github.com/braidenm/home-lab-observer\n\ngo 1.27.1\n"), 0o600) != nil {
 		t.Fatal("fixture module")
 	}
-	for name, role := range richProcessesBinaries {
+	for name, role := range spec.binaries {
 		directory := filepath.Join(source, "cmd", name)
 		if os.MkdirAll(directory, 0o700) != nil || os.WriteFile(filepath.Join(directory, "main.go"), []byte("package main\nimport \"fmt\"\nvar releaseIdentity string\nfunc main(){fmt.Print(releaseIdentity)}\n"), 0o600) != nil {
 			t.Fatal("fixture source")
 		}
-		record, err := connectedidentity.Encode(connectedidentity.Identity{Role: role, Version: version, Commit: commit, OS: "linux", Arch: "amd64", ContractSHA256: connectedprofile.RichProcessesDefinitionSHA256})
+		record, err := connectedidentity.Encode(connectedidentity.Identity{Role: role, Version: version, Commit: commit, OS: "linux", Arch: "amd64", ContractSHA256: spec.contract})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -52,12 +54,12 @@ func buildRichProcessesFixture(t *testing.T) (string, []byte, string) {
 		}
 		cancel()
 	}
-	for name, data := range connectedunits.RichProcessesResources() {
+	for name, data := range spec.resources() {
 		if os.WriteFile(filepath.Join(bundle, name), data, 0o644) != nil {
 			t.Fatal("fixture resource")
 		}
 	}
-	manifest, err := CreateRichProcessesManifest(bundle, version, commit)
+	manifest, err := create(bundle, version, commit)
 	if err != nil || os.WriteFile(filepath.Join(bundle, ManifestName), manifest, 0o644) != nil {
 		t.Fatalf("manifest: %v", err)
 	}

@@ -43,8 +43,12 @@
   of later worker and installer source. Follow with dormant three-worker composition, then complete privileged package;
   retain one packaged acceptance target and keep activation off throughout these review-size splits. PR141 merged
   after all18 exact-head checks passed; this is source-only, not installed acceptance.
-- [ ] Independently validate/review [source layer 2: dormant fixed workers](docker-worker-runtime.md), keeping complete
+- [x] Independently validate/review [source layer 2: dormant fixed workers](docker-worker-runtime.md), keeping complete
   privileged installation and supported four-binary packaging in the final source layer; no release/approval inferred.
+  PR142 merged after all18 exact-head checks passed; installed acceptance remains separate.
+- [x] Independently validate/review [source layer 3: complete privileged package](docker-package.md), preserving the
+  exact old profiles/resources and actual source/artifact/VM/hosted/owner gates before release or enrollment exposure.
+  Source and mechanical publication reviews passed; this layer still requires its own exact-head CI before merge.
 
 - [x] Record delegated engineering decision and [concrete installation plan](installable-docker-observation.md);
   independently reviewed and merged in PR 138; Docker implementation/activation retain their remaining gates.

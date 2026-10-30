@@ -59,20 +59,25 @@ func pinActivationForPair(gid uint32, pair workerPair) (*os.File, error) {
 	if err != nil {
 		return nil, ErrUnsafe
 	}
+	if err := clearPinnedActivationRecords(d, gid); err != nil {
+		d.Close()
+		return nil, err
+	}
+	return d, nil
+}
+
+func clearPinnedActivationRecords(d *os.File, gid uint32) error {
 	names, err := d.Readdirnames(3)
 	if err != nil && err != io.EOF || len(names) > 2 {
-		d.Close()
-		return nil, ErrUnsafe
+		return ErrUnsafe
 	}
 	for _, name := range names {
 		if name != "request.json" && name != "commit.json" {
-			d.Close()
-			return nil, ErrUnsafe
+			return ErrUnsafe
 		}
 		b, err := activationRecord(d, name, 0, gid, 0640)
 		if err != nil {
-			d.Close()
-			return nil, ErrUnsafe
+			return ErrUnsafe
 		}
 		if name == "request.json" {
 			_, err = connectedactivation.DecodeRequest(b)
@@ -80,15 +85,13 @@ func pinActivationForPair(gid uint32, pair workerPair) (*os.File, error) {
 			_, err = connectedactivation.DecodeCommit(b)
 		}
 		if err != nil || unix.Unlinkat(int(d.Fd()), name, 0) != nil {
-			d.Close()
-			return nil, ErrRecovery
+			return ErrRecovery
 		}
 	}
 	if d.Sync() != nil {
-		d.Close()
-		return nil, ErrRecovery
+		return ErrRecovery
 	}
-	return d, nil
+	return nil
 }
 
 func activationDirectory(f *os.File, gid uint32, mode os.FileMode) bool {
@@ -120,7 +123,13 @@ func publishActivation(d *os.File, name string, b []byte, gid uint32) error {
 }
 
 func publishActivationForPair(d *os.File, name string, b []byte, gid uint32, pair workerPair) error {
-	if (name != "request.json" && name != "commit.json") || len(b) == 0 || len(b) > connectedactivation.MaxBytes || !sameActivationDirectoryForPair(d, gid, pair) {
+	return publishPinnedActivation(d, name, b, gid, func() bool { return sameActivationDirectoryForPair(d, gid, pair) })
+}
+
+// Both fixed activation owners reuse the same bounded no-replace publication.
+// The private caller supplies only its code-owned, pinned-directory identity.
+func publishPinnedActivation(d *os.File, name string, b []byte, gid uint32, same func() bool) error {
+	if (name != "request.json" && name != "commit.json") || len(b) == 0 || len(b) > connectedactivation.MaxBytes || same == nil || !same() {
 		return ErrUnsafe
 	}
 	fd, err := unix.Openat(int(d.Fd()), ".activation-next", unix.O_WRONLY|unix.O_CREAT|unix.O_EXCL|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0600)
@@ -135,7 +144,7 @@ func publishActivationForPair(d *os.File, name string, b []byte, gid uint32, pai
 	n, writeErr := f.Write(b)
 	syncErr := f.Sync()
 	closeErr := f.Close()
-	if writeErr != nil || n != len(b) || syncErr != nil || closeErr != nil || !sameActivationDirectoryForPair(d, gid, pair) {
+	if writeErr != nil || n != len(b) || syncErr != nil || closeErr != nil || !same() {
 		return ErrRecovery
 	}
 	if unix.Renameat2(int(d.Fd()), ".activation-next", int(d.Fd()), name, unix.RENAME_NOREPLACE) != nil || d.Sync() != nil {

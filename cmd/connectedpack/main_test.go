@@ -16,7 +16,6 @@ import (
 	"github.com/braidenm/home-lab-observer/internal/connectedbundle"
 	"github.com/braidenm/home-lab-observer/internal/connectedcompat"
 	"github.com/braidenm/home-lab-observer/internal/connectedidentity"
-	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
 )
 
 func TestClosedBuildToolOptions(t *testing.T) {
@@ -36,6 +35,15 @@ func TestClosedBuildToolOptions(t *testing.T) {
 }
 
 func TestRichProcessesPackModeIsSeparateAndExact(t *testing.T) {
+	testRichPackMode(t, richProcessesPackSpec, "rich-processes")
+}
+
+func TestDockerPackModeIsSeparateAndExact(t *testing.T) {
+	testRichPackMode(t, richProcessesDockerPackSpec, "rich-processes-docker")
+}
+
+func testRichPackMode(t *testing.T, spec packSpec, profile string) {
+	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("connected packer requires POSIX filesystem admission")
 	}
@@ -49,8 +57,8 @@ func TestRichProcessesPackModeIsSeparateAndExact(t *testing.T) {
 	}
 	const version = "0.1.0-canary.1"
 	commit := strings.Repeat("b", 40)
-	for _, role := range []string{"rich-collector", "rich-uploader", "rich-install"} {
-		name := "observer-connected-" + role
+	for _, name := range spec.binaries {
+		role := strings.TrimPrefix(name, "observer-connected-")
 		directory := filepath.Join(source, "cmd", name)
 		if err := os.MkdirAll(directory, 0o700); err != nil {
 			t.Fatal(err)
@@ -58,7 +66,7 @@ func TestRichProcessesPackModeIsSeparateAndExact(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(directory, "main.go"), []byte("package main\nimport \"fmt\"\nvar releaseIdentity string\nfunc main(){fmt.Print(releaseIdentity)}\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		record, err := connectedidentity.Encode(connectedidentity.Identity{Role: role, Version: version, Commit: commit, OS: "linux", Arch: "amd64", ContractSHA256: connectedprofile.RichProcessesDefinitionSHA256})
+		record, err := connectedidentity.Encode(connectedidentity.Identity{Role: role, Version: version, Commit: commit, OS: "linux", Arch: "amd64", ContractSHA256: spec.contract})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -82,7 +90,7 @@ func TestRichProcessesPackModeIsSeparateAndExact(t *testing.T) {
 		t.Fatal(err)
 	}
 	output := filepath.Join(outputParent, "release")
-	args := []string{"--mode", "pack", "--profile", "rich-processes", "--version", version, "--commit", commit, "--binaries", input, "--output", output}
+	args := []string{"--mode", "pack", "--profile", profile, "--version", version, "--commit", commit, "--binaries", input, "--output", output}
 	if err := run(args); err != nil {
 		t.Fatal(err)
 	}
@@ -93,13 +101,13 @@ func TestRichProcessesPackModeIsSeparateAndExact(t *testing.T) {
 		}
 		return data
 	}
-	archiveName := "home-lab-observer-connected-rich-processes_" + version + "_linux_amd64.tar.gz"
-	installerName := "install-connected-rich-processes-linux.sh"
+	archiveName := spec.directoryPrefix + version + "_linux_amd64.tar.gz"
+	installerName := spec.installerName
 	archive := read(archiveName)
 	manifest := read(connectedbundle.ManifestName)
 	helper := read(installerName)
 	archiveSum := sha256.Sum256(archive)
-	expected, err := connectedbootstrap.RenderRichProcesses(manifest, hex.EncodeToString(archiveSum[:]), int64(len(archive)))
+	expected, err := spec.render(manifest, hex.EncodeToString(archiveSum[:]), int64(len(archive)))
 	if err != nil || string(helper) != string(expected) {
 		t.Fatal("rich helper not pinned to emitted package")
 	}
@@ -112,6 +120,13 @@ func TestRichProcessesPackModeIsSeparateAndExact(t *testing.T) {
 	lines := strings.Split(strings.TrimSuffix(string(read("SHA256SUMS")), "\n"), "\n")
 	if len(lines) != 3 || !strings.HasSuffix(lines[0], "  "+archiveName) || !strings.HasSuffix(lines[2], "  "+installerName) {
 		t.Fatalf("rich checksum membership = %q", lines)
+	}
+	if err := os.WriteFile(filepath.Join(input, "foreign"), []byte("synthetic"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	args[len(args)-1] = filepath.Join(outputParent, "extra-refused")
+	if run(args) == nil {
+		t.Fatal("extra binary input admitted")
 	}
 }
 

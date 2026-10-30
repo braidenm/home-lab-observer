@@ -44,6 +44,14 @@ var richProcessesPackSpec = packSpec{
 	writeArchive: connectedbundle.WriteRichProcessesArchive, render: connectedbootstrap.RenderRichProcesses,
 }
 
+var richProcessesDockerPackSpec = packSpec{
+	contract: connectedprofile.RichProcessesDockerDefinitionSHA256, installRole: "rich-docker-install",
+	directoryPrefix: "home-lab-observer-connected-rich-processes-docker_", installerName: "install-connected-rich-processes-docker-linux.sh",
+	binaries:  []string{"observer-connected-rich-docker-collector", "observer-connected-rich-docker-reader", "observer-connected-rich-docker-uploader", "observer-connected-rich-docker-install"},
+	resources: connectedunits.RichProcessesDockerResources, createManifest: connectedbundle.CreateRichProcessesDockerManifest,
+	writeArchive: connectedbundle.WriteRichProcessesDockerArchive, render: connectedbootstrap.RenderRichProcessesDocker,
+}
+
 func main() {
 	if run(os.Args[1:]) != nil {
 		fmt.Fprintln(os.Stderr, "CONNECTED_PACK_FAILED")
@@ -55,7 +63,7 @@ func run(args []string) error {
 	f := flag.NewFlagSet("connectedpack", flag.ContinueOnError)
 	f.SetOutput(io.Discard)
 	mode := f.String("mode", "", "identity or pack")
-	profile := f.String("profile", "numeric", "numeric or rich-processes")
+	profile := f.String("profile", "numeric", "numeric, rich-processes or rich-processes-docker")
 	role := f.String("role", "", "connected role")
 	version := f.String("version", "", "prerelease version")
 	commit := f.String("commit", "", "source commit")
@@ -70,6 +78,8 @@ func run(args []string) error {
 		spec = numericPackSpec
 	case "rich-processes":
 		spec = richProcessesPackSpec
+	case "rich-processes-docker":
+		spec = richProcessesDockerPackSpec
 	default:
 		return connectedbundle.ErrInvalid
 	}
@@ -111,7 +121,7 @@ func run(args []string) error {
 	if err != nil {
 		return connectedbundle.ErrInvalid
 	}
-	entries, readErr := listing.ReadDir(4)
+	entries, readErr := listing.ReadDir(len(spec.binaries) + 1)
 	closeErr := listing.Close()
 	if (readErr != nil && readErr != io.EOF) || closeErr != nil || len(entries) != len(spec.binaries) {
 		return connectedbundle.ErrInvalid

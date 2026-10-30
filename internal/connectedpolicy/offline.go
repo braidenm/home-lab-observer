@@ -80,7 +80,14 @@ func validateOffline(data []byte, e OfflineExpectation) error {
 
 func validateOfflineForProfile(data []byte, e OfflineExpectation, rich bool) error {
 	expected, err := offlineExpectedForProfile(e, rich)
-	if err != nil || len(data) == 0 || len(data) > maxOutput || strings.ContainsAny(string(data), "\x00\r") {
+	if err != nil {
+		return ErrUnsafe
+	}
+	return validateOfflineAgainst(data, expected)
+}
+
+func validateOfflineAgainst(data []byte, expected map[string]string) error {
+	if len(data) == 0 || len(data) > maxOutput || strings.ContainsAny(string(data), "\x00\r") {
 		return ErrUnsafe
 	}
 	actual := make(map[string]string, len(offlineFields))
