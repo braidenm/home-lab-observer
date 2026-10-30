@@ -79,6 +79,17 @@ eight-minute cap; measure fresh current-head CI rather than assuming a time savi
 The [Go race-detector guide](https://go.dev/doc/articles/race_detector) documents full selected-package test execution
 and the additional `race` build tag (checked 2026-10-30).
 
+### Runtime-owned build cache — 2026-10-30
+
+PR 146 subsequently passed all 17 checks across nine workflows: Linux runtime 7m28s, Windows 2m39s and macOS 1m03s.
+Keep that coverage and eight-minute cap. Give only runtime's existing `setup-go` action the three cache inputs
+`go.mod`, `go.sum` and `.github/workflows/runtime.yml`; do not add another cache action or change other jobs.
+The [cache investigation](../../docs/architecture-research/2026-10-30-runtime-go-cache.md) separates the confirmed
+shared-key/immutable-hit behavior from the unproven identity of the reported 19 MB cache's creator. A successful cold
+runtime run is needed to populate its new key; no timing or cache-content improvement is claimed before observation.
+Test the exact three inputs and their runtime-only ownership before changing the workflow, retaining all existing
+coverage guards, matrix entries, smoke checks and bounds. No runtime, dependency, permission or release change is implied.
+
 Use deterministic unit/contract tests for field allowlists, unavailable/partial/null/empty states, invalid numbers,
 hostile strings, oversized rows/documents, consent suppression and source mismatch. Use the real receiver and a small
 owner/delegate HTTP journey for integration. No second full Spring context, DirtiesContext or duplicate broad suite.
