@@ -1,0 +1,103 @@
+{
+  "schema_version": "observer-connected-docker-acceptance/v1",
+  "candidate": {
+    "schema_version": "observer-connected-docker-candidate/v1",
+    "repository_id": 1362278980,
+    "owner_id": 44215293,
+    "workflow_path": ".github/workflows/connected-linux-docker-candidate.yml",
+    "workflow_id": 401377430,
+    "ref": "refs/heads/main",
+    "run_id": 41126989574,
+    "run_attempt": 1,
+    "source": "0c7f8806224517f511292d342e361c11e404a887",
+    "version": "0.1.0-canary.3",
+    "contract_sha256": "86f39c7ba444f5ef4560ba82cbf660a17c0d7810b6e49443cb509d9e85036f37",
+    "assets": [
+      {
+        "name": "home-lab-observer-connected-rich-processes-docker_0.1.0-canary.3_linux_amd64.tar.gz",
+        "size": 15697093,
+        "sha256": "e17d2b46521144f2af12656cf53a4560e54c2c0aab742ba275e5a450d73db9e2"
+      },
+      {
+        "name": "connected-manifest.json",
+        "size": 1892,
+        "sha256": "a6145d9370daa4776130b4f4a8f79d6ae60d55af71f4f55574a21f6d04549ef3"
+      },
+      {
+        "name": "install-connected-rich-processes-docker-linux.sh",
+        "size": 24331,
+        "sha256": "e4e2d0c7880f01033d79ef9f2ca37688c78ceb54d23daeb42969c75b8ec9fca9"
+      },
+      {
+        "name": "SHA256SUMS",
+        "size": 355,
+        "sha256": "724d69421235d59c33087102e541dd40803a2e772fc146e3519535cbe69f8267"
+      }
+    ]
+  },
+  "candidate_sha256": "378d46f6eeb1087208d70fe160e61718da069bfb874b0b93d6239887d9bbf96b",
+  "artifacts": {
+    "primary": {
+      "id": 13011825666,
+      "name": "connected-linux-docker-0.1.0-canary.3-41126989574-1",
+      "sha256": "6a4efd949e98a53bcee41f31ec60973d0f1aeb3a5482afe334ac8f9afe86b04a",
+      "size": 15725517,
+      "expires_at": "2026-11-06T20:56:47Z"
+    },
+    "independent": {
+      "id": 13011945122,
+      "name": "connected-linux-docker-0.1.0-canary.3-41126989574-1-independent",
+      "sha256": "e5b34f608dda01c7a45eeb5113884c3305d1f01206532fdb114d533aa65a02d5",
+      "size": 15725517,
+      "expires_at": "2026-11-06T20:56:14Z"
+    }
+  },
+  "vm": {
+    "scope": "rich-docker",
+    "source": "0c7f8806224517f511292d342e361c11e404a887",
+    "image_sha256": "612b2c0cc1bc413a6cb8c38fd611794caf0f2b436c50013d8b3794db12ad7354",
+    "receiver_sha256": "170670baac7efde38b9e75ebb79d730bd1ee45ccfe415407bf462ac582106679",
+    "probe_sha256": "dd548329229202366f1cea531f2dd9b7092d309fba07171f75de2b9fc218883e",
+    "harness_sha256": "754e8ac7f0ad6bc86ea2fb7ad4039dbb6335e174ee2b3ac04b283273fb1472a5",
+    "baseline": {
+      "build_record_sha256": "a7749790c15285f9ed52b612b7049c642c7b1e4030dbf97714945db2998d17ee",
+      "numeric": {
+        "archive_sha256": "08ebff15e714bfffe4d84ce7e7f16528cedbd4edddb99bf7fe2c7dad2e942503",
+        "manifest_sha256": "d1dbc2326a68ce449b20992d609763d5c4e94dcb85280af91047ae088a80c875",
+        "installer_sha256": "b5e9a8afc4009937c3af7c9d55f426fc184bad61ef5eec97235424807ed98694",
+        "checksums_sha256": "248a65b758afb1962a857b45e63b09a8eec4d470f0db0cb0de1de526b9eee4f1"
+      },
+      "processes": {
+        "archive_sha256": "24cdf5dc488efc21edf8f035e0690a97dd6f49965fbe58207050146e84df4009",
+        "manifest_sha256": "062b4444ac0204e93834cbbb58c7c8730059e77757fd6b89cd3c527252da1d11",
+        "installer_sha256": "67b97613b40d3de83f12e22566ce1ca9aaa786dd753b34744894507dead324db",
+        "checksums_sha256": "fde5d6daec285b65ccce4029290b54aca5467a3c50eb65690105e8d8b2f6912f"
+      }
+    },
+    "docker_inputs": {
+      "docker_ce_sha256": "95ddf7a2d8b8c0eb82d8597d4d604e294dcf741081f2e228524d5ab9bfd7c8ae",
+      "docker_ce_cli_sha256": "74747b5c99000279b9b2c7eb82543b4121d8436a58aa3be7e78ac6681d74794f",
+      "containerd_sha256": "f811ab57d1f4bb0cce19df7d526da8c711d8ebea0447cc83da1999188e664122",
+      "fixture_sha256": "c57242b228d5fd6cc2174aa4c10b604111cb97af04ece219c7ebf2ef29aa163a",
+      "rootfs_sha256": "a43627cdcc1c60a07582ba9805197fe5c78420dc17a1a7e3899901a67d822c56"
+    },
+    "cases": {
+      "rich-docker": {
+        "first_boot": "PASS",
+        "reboot": "PASS",
+        "case": "PASS"
+      },
+      "rich-docker-refusal": {
+        "first_boot": "PASS",
+        "reboot": "PASS",
+        "case": "PASS"
+      }
+    },
+    "all_pass": "PASS",
+    "cleanup": {
+      "qemu": "PASS",
+      "mounts": "PASS",
+      "loops": "PASS"
+    }
+  }
+}
