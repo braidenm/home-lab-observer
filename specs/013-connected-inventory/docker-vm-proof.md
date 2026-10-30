@@ -146,3 +146,22 @@ retains failed status for inspection; [v255 service.c](https://github.com/system
 `service_enter_dead` preserves a failure state and `service_start` obtains a new invocation before resetting exit
 status; [v255 unit.c](https://github.com/systemd/systemd/blob/v255/src/core/unit.c) generates invocation IDs in
 `unit_acquire_invocation_id`. Do not generalize these finite255 expectations to arbitrary manager versions.
+
+## Balance fault scheduling across the existing boots (2026-10-30)
+
+The `ae678614ca4e4f0b27cd4cbe9cb05af6fee818dc` first boot reached its existing deadline. Read-only retained-disk
+inspection, without journal replay, found the hold marker and finite receiver state: accepted12, sequence12,
+healthy_sequence12, unavailable_count2, duplicates1 and all required healthy booleans true. This establishes that
+the first-boot fault journey completed and held delivery began; an absent result record in the unreplayed view
+does not establish the precise interrupted operation. This is not a packaged acceptance pass.
+
+Move only the socket-replacement exercise from first boot to late second boot, after the exact pending retry,
+fresh acknowledgement and role-isolation checks, before final supported Stop. Keep the stopped-reader/stale-frame
+fault on first boot. Do not change either fault implementation, assertion, retry TTL, wait/command deadline,
+nine-minute boot limit, two independent cases/four boots, no-NIC resource budget or numeric/process-only proof.
+Socket recovery must still finish before final stopped-state, fingerprint, disk bounds and numeric checks.
+Add deterministic first/reboot call-order tests. Source review, exact-head CI and new exact-source packaged proof
+remain required; balancing work is not permission to skip a gate, reuse old acceptance or extend a timeout.
+
+Local TDD evidence: the stale-fault/no-socket and executed reboot-order cases failed before the two-line move.
+All80 fixture tests then passed, including pending-then-acknowledged status before socket replacement; no VM ran.
