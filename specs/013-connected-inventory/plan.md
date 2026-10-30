@@ -69,6 +69,16 @@ Preserve private networking and the exact empty physical scaffold/inode guard; p
 through a failing rendering regression and exact-source packaged VM acceptance. No guard relaxation or owner-host
 workaround is permitted by that investigation.
 
+The first correction PR's Linux runtime job reached its eight-minute deadline after its normal full tests (1m44s),
+full race tests (5m01s), vet and all service/schema checks passed; its real Docker smoke reported success at cancellation.
+Do not count the cancelled job as green. Remove the duplicate normal Linux full pass while retaining the complete
+race-enabled suite, race-enabled 25-run handoff stress, vet and every schema/service/Docker smoke check. Windows/macOS
+keep normal full tests/stress. The workflow/source guard must reject race-specific build constraints in project Go
+files, including legacy `!race`, before they could silently reduce coverage. Keep the existing job identities and
+eight-minute cap; measure fresh current-head CI rather than assuming a time saving.
+The [Go race-detector guide](https://go.dev/doc/articles/race_detector) documents full selected-package test execution
+and the additional `race` build tag (checked 2026-10-30).
+
 Use deterministic unit/contract tests for field allowlists, unavailable/partial/null/empty states, invalid numbers,
 hostile strings, oversized rows/documents, consent suppression and source mismatch. Use the real receiver and a small
 owner/delegate HTTP journey for integration. No second full Spring context, DirtiesContext or duplicate broad suite.

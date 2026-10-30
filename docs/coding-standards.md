@@ -23,6 +23,10 @@
 - Unit-test domain and policy behavior; contract-test adapters; integration-test local API/storage boundaries; smoke-test packaged artifacts on every supported OS.
 - Prefer deterministic clocks, synthetic fixtures, and platform capability fakes.
 - Race detection, static analysis, vulnerability scanning, license checks, and contract compatibility run in CI.
+- Linux runtime CI executes the complete Go suite once with race detection, not once normally and again with race
+  detection. Windows/macOS retain their normal full suite. Handoff stress remains 25 runs per platform, race-enabled
+  on Linux. A cheap workflow/source guard rejects race-dependent build constraints that would invalidate this coverage
+  equivalence. Static analysis, schema and real-service/Docker smoke checks remain separate; keep the eight-minute cap.
 - Pull-request CI excludes long-running end-to-end and release publication jobs.
 
 ## Repository workflow
