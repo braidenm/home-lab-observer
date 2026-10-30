@@ -165,3 +165,17 @@ remain required; balancing work is not permission to skip a gate, reuse old acce
 
 Local TDD evidence: the stale-fault/no-socket and executed reboot-order cases failed before the two-line move.
 All80 fixture tests then passed, including pending-then-acknowledged status before socket replacement; no VM ran.
+
+## Match the installed-root refusal diagnostic stream (2026-10-30)
+
+Source inspection found a deterministic refusal-fixture contradiction: the Docker installer writes its fixed
+pre-grant `PREFLIGHT_REFUSED` diagnostic to stderr, but the fixture discarded stderr and required that diagnostic
+on stdout. Correct only the fixture: require exit22, empty stdout and the exact known pre-grant stderr line within
+the existing 1024-byte diagnostic bound. Never forward captured child output. Unknown, oversized, mixed-stream or
+otherwise unsuccessful results are not the expected refusal. Production installer output and preflight stay unchanged.
+
+TDD must exercise the real refusal function with a correct stderr result and reject a stdout diagnostic, wrong exit,
+oversized/unknown stderr or extra stdout. Retain all before/after process-only file/inode/NSS/unit fingerprints,
+absent Docker principals/units, no enrollment and numeric checks on both boots. Review the remaining refusal
+assertions against their actual source contracts before another run. Local tests/source review are not either
+packaged VM acceptance case; exact-source CI, both independently reviewed cases and release gates remain pending.
