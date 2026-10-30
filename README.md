@@ -87,6 +87,9 @@ Local process, container and log details do not become upload-eligible through e
 The next [rich connected inventory slice](specs/013-connected-inventory/spec.md) expands hosted process/container and
 system views through explicit local opt-in and a separately reviewed installed profile. It reuses the local collectors,
 does not silently widen the numeric beta, and keeps Docker actions separately permissioned under Spec 011.
+Its unreleased Docker reader retains a minimal filesystem and private networking; the
+[systemd 255 isolation investigation](docs/architecture-research/2026-10-30-reader-private-network-sys.md)
+explains the current startup correction and the packaged acceptance still required before release.
 The pure [combined-envelope contract](specs/013-connected-inventory/delivery-envelope.md) binds host metrics and
 workloads to one upload cycle; it does not yet change the installed beta or receiver admission.
 The [process-only package proof](specs/013-connected-inventory/installable-process-proof.md) connects that contract to
