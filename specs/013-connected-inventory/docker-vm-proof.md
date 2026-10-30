@@ -123,9 +123,13 @@ and prove `Restart=no`, `NRestarts=0`, no job. While awaiting termination, rejec
 automatic restart or adoption. Require the old invocation's exact terminal metadata: `ActiveState=failed`,
 `MainPID=0`, `Result=exit-code`, `ExecMainCode=1` (`CLD_EXITED`), `ExecMainStatus=22`, `NRestarts=0`, no job.
 The retained failed unit must still identify the captured invocation; empty/new IDs, clean exits, signals and other
-states are not evidence. Require this stable state before and after a fresh unavailable receipt, without silently
-restarting the reader. Then only the supported installer `stop`/`start` may recover it. After Stop, an empty retained
-ID is allowed only with proved stopped state; any nonempty ID must still be the old one until explicit Start.
+states are not evidence. A bounded `deactivating` wait is permitted only for the same old invocation, PID old/0,
+exit-code/CLD_EXITED1/status22, zero restarts and no job; it is never terminal proof. Require the exact stable failed
+state before and after a fresh unavailable receipt, without silently restarting the reader. Then only the supported
+installer `stop`/`start` may recover it. Supported Stop preserves that already-failed reader tuple while collector
+and uploader become inactive/PID0. A recovery-specific check must prove fixed disabled unit identities, no
+enrollment, unchanged numeric state and exact `RECOVERY_REQUIRED` status, not pretend normal `STOPPED`. Preserve the
+failed old invocation until explicit Start; no direct systemctl/reset-failed workaround or generic stopped relaxation.
 Recovery must have a fresh active invocation, bind the current root socket, retain `Restart=no`/zero restarts/no job,
 and produce current healthy rows at a sequence strictly beyond the unavailable receipt. Recheck the same recovered
 manager/socket binding after health so historical rows, PID reuse or a later replacement cannot stand in for recovery.
