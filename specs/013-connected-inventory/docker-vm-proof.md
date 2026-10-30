@@ -104,7 +104,45 @@ CI and a new pinned packaged run remain required. This changes diagnostics, not 
 Pre-launch independent review found five fixture correctness gaps, corrected before execution: the frame grant is
 service-only (collector NSS remains SharedGID-only and the persistent frame group is empty), actual live worker
 UID/GID/groups are checked separately, the fixture daemon is exactly static rather than disabled, pending policy
-bytes must match the installed policy digest, and socket replacement must leave the same active reader invocation
-bound to the old inode until explicit Stop/Start. Every fixed engine target is checked with lstat before the first
+bytes must match the installed policy digest, and socket replacement must never silently adopt the new inode.
+The original same-active-reader assertion was incorrect for an unlinked old socket; the correction below requires
+its exact fail-closed exit before explicit Stop/Start recovery. Every fixed engine target is checked with lstat before the first
 write, including dangling entries. The namespace probe also checks the target root device/inode immediately after
 setns and before dropping identity. Focused positive/negative tests cover these gates; real VM acceptance remains pending.
+
+## Socket replacement fixture correction (2026-10-30)
+
+The exact-source `df43ef6e8fb22df8ffd413dcbbc8e47d138792b6` packaged journey reached the fault exercise and reported
+generic `FAULT`. Source review identified an inconsistent same-active-reader requirement; the exact failing subphase
+was not captured. Production requires the pinned socket's link count to remain 1; unlinking its old pathname makes
+that pinned inode's count 0. Preserve this guard and CLI exit22, not a surviving
+reader or automatic socket adoption. The retained failure is not complete VM/release acceptance.
+
+Before replacing the fixture daemon socket, capture the reader's same active PID/invocation and old bound inode,
+and prove `Restart=no`, `NRestarts=0`, no job. While awaiting termination, reject a different PID/invocation,
+automatic restart or adoption. Require the old invocation's exact terminal metadata: `ActiveState=failed`,
+`MainPID=0`, `Result=exit-code`, `ExecMainCode=1` (`CLD_EXITED`), `ExecMainStatus=22`, `NRestarts=0`, no job.
+The retained failed unit must still identify the captured invocation; empty/new IDs, clean exits, signals and other
+states are not evidence. A bounded `deactivating` wait is permitted only for the same old invocation, PID old/0,
+exit-code/CLD_EXITED1/status22, zero restarts and no job; it is never terminal proof. Require the exact stable failed
+state before and after a fresh unavailable receipt, without silently restarting the reader. Then only the supported
+installer `stop`/`start` may recover it. Supported Stop preserves that already-failed reader tuple while collector
+and uploader become inactive/PID0. A recovery-specific check must prove fixed disabled unit identities, no
+enrollment, unchanged numeric state and exact `RECOVERY_REQUIRED` status, not pretend normal `STOPPED`. Preserve the
+failed old invocation until explicit Start; no direct systemctl/reset-failed workaround or generic stopped relaxation.
+Recovery must have a fresh active invocation, bind the current root socket, retain `Restart=no`/zero restarts/no job,
+and produce current healthy rows at a sequence strictly beyond the unavailable receipt. Recheck the same recovered
+manager/socket binding after health so historical rows, PID reuse or a later replacement cannot stand in for recovery.
+
+Add only closed `FAULT_` subphases for initial binding, replacement, terminal reader, unavailable receipt,
+supported Stop/Start and fresh recovery. Never emit raw errors, paths, status records or logs. TDD includes normal
+terminal/recovery and changed PID/invocation/inode, restart, clean/signal/wrong-code exit and stale-health negatives.
+Production Go, units, definition, budgets, profile admission and old numeric/process assertions remain unchanged.
+Merge only after source review and exact-head CI; the next full proof needs fresh same-source protected/local bytes
+and both no-overlay cases. No VM/build/publication/owner operation is authorized by this correction.
+
+Primary sources checked 2026-10-30: [systemd 255 systemctl](https://www.freedesktop.org/software/systemd/man/255/systemctl.html)
+retains failed status for inspection; [v255 service.c](https://github.com/systemd/systemd/blob/v255/src/core/service.c)
+`service_enter_dead` preserves a failure state and `service_start` obtains a new invocation before resetting exit
+status; [v255 unit.c](https://github.com/systemd/systemd/blob/v255/src/core/unit.c) generates invocation IDs in
+`unit_acquire_invocation_id`. Do not generalize these finite255 expectations to arbitrary manager versions.

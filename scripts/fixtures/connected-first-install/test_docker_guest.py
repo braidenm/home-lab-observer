@@ -13,6 +13,12 @@ from unittest import mock
 import docker_guest
 
 
+def reader_state(**changes):
+    return {"ActiveState": "active", "MainPID": "100", "InvocationID": "a" * 32,
+            "Result": "success", "ExecMainCode": "0", "ExecMainStatus": "0",
+            "NRestarts": "0", "Restart": "no", "Job": "", **changes}
+
+
 class DockerGuestTest(unittest.TestCase):
     def test_reader_binding_requires_socket_and_same_active_manager(self):
         import stat
@@ -44,33 +50,110 @@ class DockerGuestTest(unittest.TestCase):
                     groups.assert_called_once_with([60003])
                 self.assertEqual(stat.call_args_list, [mock.call("/proc/100/root"), mock.call("/")])
 
-    def test_socket_replacement_requires_same_active_reader_and_old_bound_inode(self):
+    def test_reader_terminal_requires_exact_old_failure_and_no_adoption(self):
+        import stat
         initial = {"manager": {"ActiveState": "active", "MainPID": "100", "InvocationID": "a" * 32}, "socket": [7, 8]}
-        for change in (None, "pid", "invocation", "inactive", "adopted"):
-            after = {"manager": dict(initial["manager"]), "socket": initial["socket"][:]}
-            if change == "pid":
-                after["manager"]["MainPID"] = "101"
-            if change == "invocation":
-                after["manager"]["InvocationID"] = "b" * 32
-            if change == "inactive":
-                after["manager"]["ActiveState"] = "inactive"
-            if change == "adopted":
-                after["socket"] = [7, 9]
+        failed = reader_state(ActiveState="failed", MainPID="0", Result="exit-code", ExecMainCode="1", ExecMainStatus="22")
+        negatives = ({"ActiveState": "inactive"}, {"MainPID": "100"}, {"InvocationID": ""}, {"InvocationID": "b" * 32},
+                     {"Result": "success", "ExecMainStatus": "0"}, {"Result": "signal", "ExecMainCode": "2"},
+                     {"ExecMainStatus": "0"}, {"ExecMainStatus": "23"}, {"ExecMainCode": "0"}, {"NRestarts": "1"},
+                     {"Restart": "always"}, {"Job": "123"}, {"extra": "hlc_private"})
+        for changes in ({}, *negatives):
+            with self.subTest(changes=changes), mock.patch.object(docker_guest.assert_guest, "unit_properties", return_value={**failed, **changes}):
+                if not changes:
+                    self.assertEqual(docker_guest.wait_reader_termination(initial), failed)
+                else:
+                    with self.assertRaises(AssertionError):
+                        docker_guest.wait_reader_termination(initial)
+        for changes in ({}, {"MainPID": "101"}, {"InvocationID": "b" * 32}, {"NRestarts": "1"}, {"adopted": True}):
+            active = reader_state(**{k: v for k, v in changes.items() if k != "adopted"})
+            node = types.SimpleNamespace(st_dev=7, st_ino=9 if changes.get("adopted") else 8, st_mode=stat.S_IFSOCK)
+            with self.subTest(active=changes), mock.patch.object(docker_guest.assert_guest, "unit_properties", side_effect=[active, active, failed, failed]), mock.patch.object(Path, "stat", return_value=node), mock.patch.object(docker_guest.time, "sleep"):
+                if not changes:
+                    self.assertEqual(docker_guest.wait_reader_termination(initial), failed)
+                else:
+                    with self.assertRaises(AssertionError):
+                        docker_guest.wait_reader_termination(initial)
+        # The original process may exit between the active manager snapshot and
+        # /proc metadata read; only its exact terminal failure can close that race.
+        with mock.patch.object(docker_guest.assert_guest, "unit_properties", side_effect=[reader_state(), failed, failed]), mock.patch.object(Path, "stat", side_effect=FileNotFoundError()):
+            self.assertEqual(docker_guest.wait_reader_termination(initial), failed)
+        retiring = reader_state(ActiveState="deactivating", MainPID="0", Result="exit-code", ExecMainCode="1", ExecMainStatus="22")
+        node = types.SimpleNamespace(st_dev=7, st_ino=8, st_mode=stat.S_IFSOCK)
+        with mock.patch.object(docker_guest.assert_guest, "unit_properties", side_effect=[reader_state(), retiring, retiring, failed, failed]), mock.patch.object(Path, "stat", return_value=node), mock.patch.object(docker_guest.time, "sleep"):
+            self.assertEqual(docker_guest.wait_reader_termination(initial), failed)
+        for changes in ({"MainPID": "101"}, {"InvocationID": "b" * 32}, {"ExecMainStatus": "0"}, {"ExecMainCode": "2"}):
+            with mock.patch.object(docker_guest.assert_guest, "unit_properties", return_value={**retiring, **changes}), self.assertRaises(AssertionError):
+                docker_guest.wait_reader_termination(initial)
+        with mock.patch.object(docker_guest.time, "monotonic", side_effect=[0, 46]), self.assertRaises(AssertionError):
+            docker_guest.wait_reader_termination(initial)
+
+    def test_socket_replacement_requires_terminal_then_explicit_fresh_recovery(self):
+        initial = {"manager": {"ActiveState": "active", "MainPID": "100", "InvocationID": "a" * 32}, "socket": [7, 8]}
+        failed = reader_state(ActiveState="failed", MainPID="0", Result="exit-code", ExecMainCode="1", ExecMainStatus="22")
+        for change in (None, "reused-pid", "terminal-changed", "before-start-invocation", "stopped-reader-cleared", "same-invocation", "wrong-socket", "restart", "stale-unavailable", "stale-health", "unchanged-sequence", "post-health-invocation"):
+            fresh = {"manager": {"ActiveState": "active", "MainPID": "101", "InvocationID": "b" * 32}, "socket": [7, 9]}
+            if change == "reused-pid": fresh["manager"]["MainPID"] = "100"
+            if change == "same-invocation": fresh["manager"]["InvocationID"] = "a" * 32
+            if change == "wrong-socket": fresh["socket"] = [7, 8]
+            final = {"manager": dict(fresh["manager"]), "socket": fresh["socket"][:]}
+            if change == "post-health-invocation": final["manager"]["InvocationID"] = "c" * 32
+            terminal = {**failed, **({"InvocationID": "b" * 32} if change == "terminal-changed" else {})}
+            stopped = {**failed, **({"InvocationID": "c" * 32} if change == "before-start-invocation" else {})}
+            if change == "stopped-reader-cleared": stopped.update(ActiveState="inactive", InvocationID="")
+            active = reader_state(MainPID=fresh["manager"]["MainPID"], InvocationID=fresh["manager"]["InvocationID"], NRestarts="1" if change == "restart" else "0")
             fault = {"unavailable_count": 2, "healthy_sequence": 0, "sequence": 8}
+            if change == "stale-unavailable": fault["unavailable_count"] = 1
             good = {**{name: True for name in ("large_body", "foreign_process", "running_container", "exited_null", "warmed_metrics")}, "healthy_sequence": 9, "sequence": 9}
+            if change == "stale-health": good["healthy_sequence"] = 8
+            if change == "unchanged-sequence": good["healthy_sequence"] = good["sequence"] = 8
             receipts = iter((fault, good))
             def wait(predicate):
                 value = next(receipts)
-                self.assertTrue(predicate(value))
+                if not predicate(value): raise AssertionError("RETRY")
                 return value
-            with mock.patch.object(docker_guest, "reader_binding", side_effect=[initial, after]), mock.patch.object(Path, "stat", side_effect=[types.SimpleNamespace(st_dev=7, st_ino=8), types.SimpleNamespace(st_dev=7, st_ino=9)]), mock.patch.object(docker_guest, "counts", return_value={"unavailable_count": 1}), mock.patch.object(docker_guest.docker_engine, "stop"), mock.patch.object(docker_guest.docker_engine, "start"), mock.patch.object(docker_guest.docker_engine, "cli"), mock.patch.object(docker_guest, "wait_counts", side_effect=wait), mock.patch.object(docker_guest.activation_guest, "command") as command, mock.patch.object(docker_guest, "stopped"):
-                if change is None:
+            states = iter((reader_state(), terminal, stopped, stopped, active, active))
+            def properties(unit, fields):
+                if "NRestarts" in fields: return next(states)
+                if unit == docker_guest.ENROLLMENT: return {"Id": unit, "LoadState": "not-found", "ActiveState": "inactive", "MainPID": "0", "Transient": "no", "FragmentPath": ""}
+                return {"Id": unit, "LoadState": "loaded", "FragmentPath": "/etc/systemd/system/" + unit, "ActiveState": "failed" if unit == docker_guest.UNITS[1] else "inactive", "MainPID": "0", "UnitFileState": "disabled", "DropInPaths": "", "NeedDaemonReload": "no"}
+            with self.subTest(change=change), mock.patch.object(docker_guest, "reader_binding", side_effect=[initial, fresh, final]), mock.patch.object(docker_guest.assert_guest, "unit_properties", side_effect=properties), mock.patch.object(docker_guest, "wait_reader_termination", return_value=failed), mock.patch.object(Path, "stat", side_effect=[types.SimpleNamespace(st_dev=7, st_ino=8), types.SimpleNamespace(st_dev=7, st_ino=9), types.SimpleNamespace(st_dev=7, st_ino=9)]), mock.patch.object(docker_guest, "counts", return_value={"unavailable_count": 1}), mock.patch.object(docker_guest.docker_engine, "stop"), mock.patch.object(docker_guest.docker_engine, "start"), mock.patch.object(docker_guest.docker_engine, "cli"), mock.patch.object(docker_guest, "wait_counts", side_effect=wait), mock.patch.object(docker_guest.activation_guest, "command", return_value=b'{"state":"RECOVERY_REQUIRED"}') as command, mock.patch.object(docker_guest.rich_guest, "verify_numeric"):
+                if change in (None, "reused-pid"):
                     docker_guest.socket_replacement(Path("/fixed"))
-                    self.assertEqual(command.call_args_list, [mock.call(Path("/fixed"), "stop"), mock.call(Path("/fixed"), "start")])
+                    self.assertEqual(command.call_args_list, [mock.call(Path("/fixed"), "stop"), mock.call(Path("/fixed"), "status"), mock.call(Path("/fixed"), "start")])
                 else:
-                    with self.assertRaisesRegex(AssertionError, "^FAULT$"):
+                    with self.assertRaisesRegex(AssertionError, "^FAULT_[A-Z_]+$"):
                         docker_guest.socket_replacement(Path("/fixed"))
-                    command.assert_not_called()
+                    if change in ("terminal-changed", "stale-unavailable"): command.assert_not_called()
+                    if change in ("before-start-invocation", "stopped-reader-cleared"): self.assertEqual(command.call_args_list, [mock.call(Path("/fixed"), "stop")])
+
+    def test_recovery_stop_proves_failed_reader_without_weakening_normal_stop(self):
+        failed = reader_state(ActiveState="failed", MainPID="0", Result="exit-code", ExecMainCode="1", ExecMainStatus="22")
+        for change in (None, "reader-invocation", "collector-active", "drop-in", "enrollment", "fake-stopped-status"):
+            def properties(unit, fields):
+                if "NRestarts" in fields: return {**failed, **({"InvocationID": "b" * 32} if change == "reader-invocation" else {})}
+                if unit == docker_guest.ENROLLMENT: return {"Id": unit, "LoadState": "not-found", "ActiveState": "inactive", "MainPID": "0", "Transient": "yes" if change == "enrollment" else "no", "FragmentPath": ""}
+                return {"Id": unit, "LoadState": "loaded", "FragmentPath": "/etc/systemd/system/" + unit, "ActiveState": "failed" if unit == docker_guest.UNITS[1] else ("active" if change == "collector-active" else "inactive"), "MainPID": "0", "UnitFileState": "disabled", "DropInPaths": "foreign" if change == "drop-in" else "", "NeedDaemonReload": "no"}
+            with self.subTest(change=change), mock.patch.object(docker_guest.assert_guest, "unit_properties", side_effect=properties), mock.patch.object(docker_guest.activation_guest, "command", return_value=b'{"state":"STOPPED"}' if change == "fake-stopped-status" else b'{"state":"RECOVERY_REQUIRED"}') as command, mock.patch.object(docker_guest.rich_guest, "verify_numeric") as numeric:
+                if change is None:
+                    docker_guest.recovery_stopped(Path("/fixed"), failed)
+                    command.assert_called_once_with(Path("/fixed"), "status")
+                    numeric.assert_called_once_with()
+                    with self.assertRaisesRegex(AssertionError, "^STOPPED$"): docker_guest.stopped(Path("/fixed"))
+                else:
+                    with self.assertRaises(AssertionError): docker_guest.recovery_stopped(Path("/fixed"), failed)
+
+    def test_fault_phases_preserve_known_lifecycle_and_sanitize_unknown_errors(self):
+        cases = ((AssertionError("FAULT"), "FAULT_INITIAL_BINDING"),
+                 (AssertionError("hlc_private"), "UNKNOWN"), (OSError("hlc_private"), "UNKNOWN"),
+                 (docker_guest.activation_guest.Refused("START_COMMAND_READER_SOCKET"), "START_COMMAND_READER_SOCKET"),
+                 (docker_guest.activation_guest.Refused("START_COMMAND_hlc_private"), "UNKNOWN"))
+        for error, expected in cases:
+            output = io.StringIO()
+            def exercise(*unused): docker_guest.socket_replacement(Path("/fixed"))
+            with self.subTest(expected=expected), mock.patch.object(docker_guest.sys, "argv", ["docker_guest.py", "rich-docker", "first"]), mock.patch.object(docker_guest, "exercise", side_effect=exercise), mock.patch.object(Path, "stat", side_effect=error), mock.patch.object(Path, "open", side_effect=OSError()), contextlib.redirect_stderr(output):
+                self.assertEqual(docker_guest.main(), 1)
+            self.assertEqual(output.getvalue(), "HLO_VM_FAIL_DOCKER_" + expected + "\n")
 
     def test_service_only_frame_grant_is_absent_from_persistent_nss(self):
         c = {"collector_uid": 60101, "reader_uid": 60102, "uploader_uid": 60103, "shared_gid": 60104, "frame_gid": 60105, "uploader_gid": 60106, "socket_gid": docker_guest.docker_engine.DAEMON_GID}
