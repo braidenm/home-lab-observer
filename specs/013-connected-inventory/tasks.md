@@ -141,6 +141,9 @@ identify unexecuted native/OS proofs rather than substituting a fake or skipped 
 
 ## Unreleased Docker reader `/sys` correction (2026-10-30)
 
+Before the next complete package run, review the [two-PR closed release proposal](docker-release.md); final-source
+identity must include delivery tooling, rather than forcing another full VM merely to add that tooling afterward.
+
 - [x] Narrow the isolated diagnostic refusal to the actual private view validator's fixed `/sys` operation; preserve
   original failure and post-failure causality limits.
 - [x] Research systemd 255 private-network mount behavior and safe alternatives in
@@ -158,3 +161,30 @@ identify unexecuted native/OS proofs rather than substituting a fake or skipped 
 - [x] Independently review the small cache configuration change; no remaining P0-P2 findings.
 - [ ] Require fresh exact-head CI before merge.
 - [ ] Observe a successful cold save and later runtime restore; do not infer creator, contents or a warm speedup from size alone.
+
+## Proposed Docker release delivery order (no execution authorization)
+
+PR-A implementation boundary fixed before code (2026-10-30): private
+`scripts/_connected_candidate_core.py` owns two immutable, identity-allowlisted numeric/Docker presets and shared
+metadata/descriptor-read/authorization/SBOM mechanics. Existing `connected_candidate.py` keeps its public numeric
+signatures/default CLI/golden bytes; new `connected_docker_candidate.py` provides named Docker wrappers and fixed
+authorize/create/verify/compare/verify-sbom commands. `_connected_docker_archive.py` validates streams without
+execution/extraction. No caller-supplied preset, path registry or policy object is admitted.
+Four existing 209,715,200-byte ELF ceilings, six 16,384-byte resource ceilings and one 16,384-byte manifest ceiling
+sum to 838,975,488 content bytes; eleven 512-byte headers and two zero end blocks give an exact maximum of
+838,982,144 decompressed tar bytes. Compressed five-file payload stays 64 MiB. Use fixed 32-KiB stream/identity
+buffers, exact single-gzip/canonical-USTAR admission and trusted six-resource Git blob paths at the metadata source.
+These are bounds from existing packer limits, not increased installed runtime/storage budgets.
+The generated helper is compared with the fixed bootstrap template/extractor/coordinator blobs from that same source;
+neither assets nor those source templates are executed by the Python verifier.
+
+- [x] Review fixed Docker preset factoring, aggregate archive bounds and independent-builder plan before PR-A implementation; receipt vocabulary remains PR B.
+- [ ] PR A: add the protected fixed Docker candidate, two isolated builder comparison with distinct IDs/names/output mappings, archive-only four-role SPDX plus five-file provenance and tests; preserve numeric v1.
+  Local source is implemented; Linux 66 candidate/promotion tests, real old-archive/helper and actual four-ELF Syft
+  fixture guards pass. Complete independent source review and exact-head CI remain open; no candidate dispatch.
+- [ ] Read the registered Docker workflow ID after PR A merges; do not dispatch yet.
+- [ ] PR B: pin that ID and complete fixed Docker prepare/promotion, canonical receipt and operator/tests documentation.
+- [ ] Freeze final clean merged source S, dispatch exact protected candidate and build the complete same-S local baseline.
+- [ ] Verify independent public-byte equality and exact provenance, then run both complete same-source VM cases with no diagnostic overlay.
+- [ ] Merge only the canonical acceptance JSON addition between S and promotion; publish unchanged bytes after all guards pass.
+- [ ] Separately deliver catalog/readers/writer/consent and owner/viewer acceptance; no container controls or Kubernetes here.

@@ -1,0 +1,248 @@
+name: Build connected Linux Docker candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact unused Docker connected version (0.x.y-canary.N)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: connected-linux-docker-candidate
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  GOFLAGS: -buildvcs=false
+  GOTOOLCHAIN: local
+  GOMAXPROCS: '2'
+  PYTHONDONTWRITEBYTECODE: '1'
+
+jobs:
+  authorize:
+    if: github.repository_id == '1362278980' && github.repository_owner_id == '44215293' && github.ref == 'refs/heads/main' && github.actor == 'braidenm' && github.triggering_actor == 'braidenm'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    outputs:
+      version: ${{ steps.identity.outputs.version }}
+      source: ${{ steps.identity.outputs.source }}
+      workflow_id: ${{ steps.identity.outputs.workflow_id }}
+      run_id: ${{ steps.identity.outputs.run_id }}
+      run_attempt: ${{ steps.identity.outputs.run_attempt }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Authorize the exact current-main owner dispatch and attempt
+        id: identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_VERSION: ${{ inputs.version }}
+        run: python3 -I -B scripts/connected_docker_candidate.py authorize --version "$CANDIDATE_VERSION"
+
+  build:
+    needs: authorize
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      artifact_name: connected-linux-docker-${{ needs.authorize.outputs.version }}-${{ needs.authorize.outputs.run_id }}-${{ needs.authorize.outputs.run_attempt }}
+    steps:
+      - name: Initialize fresh primary build caches
+        run: |
+          [[ "$RUNNER_TEMP" == /* && "$RUNNER_TEMP" != *$'\n'* && "$RUNNER_TEMP" != *$'\r'* ]]
+          [[ ! -e "$RUNNER_TEMP/docker-primary-go-cache" && ! -L "$RUNNER_TEMP/docker-primary-go-cache" && ! -e "$RUNNER_TEMP/docker-primary-module-cache" && ! -L "$RUNNER_TEMP/docker-primary-module-cache" ]]
+          mkdir -m 700 -- "$RUNNER_TEMP/docker-primary-go-cache" "$RUNNER_TEMP/docker-primary-module-cache"
+          printf 'GOCACHE=%s\nGOMODCACHE=%s\n' "$RUNNER_TEMP/docker-primary-go-cache" "$RUNNER_TEMP/docker-primary-module-cache" >> "$GITHUB_ENV"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.authorize.outputs.source }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: Verify modules and fixed packaging boundaries
+        run: |
+          go mod download
+          go mod verify
+          go test ./cmd/connectedpack ./internal/connectedbootstrap ./internal/connectedbundle ./internal/connectedidentity ./internal/connectedunits
+          python3 -I -B -m unittest discover -s scripts -p 'test_connected_docker*.py'
+      - name: Build the four roles and deterministic public payload
+        env:
+          VERSION: ${{ needs.authorize.outputs.version }}
+          SOURCE: ${{ needs.authorize.outputs.source }}
+        run: |
+          mkdir -m 700 dist
+          bash scripts/build-connected-rich-docker-linux.sh "$VERSION" "$SOURCE" dist/docker
+      - name: Scan reachable dependencies of every released command root
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOARCH: amd64
+          GOAMD64: v1
+          GOWORK: 'off'
+          GOENV: 'off'
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          "$(go env GOPATH)/bin/govulncheck" ./cmd/observer-connected-rich-docker-collector ./cmd/observer-connected-rich-docker-reader ./cmd/observer-connected-rich-docker-uploader ./cmd/observer-connected-rich-docker-install
+      - name: Bind canonical metadata to the five closed files
+        env:
+          VERSION: ${{ needs.authorize.outputs.version }}
+          SOURCE: ${{ needs.authorize.outputs.source }}
+          WORKFLOW_ID: ${{ needs.authorize.outputs.workflow_id }}
+          RUN_ID: ${{ needs.authorize.outputs.run_id }}
+          RUN_ATTEMPT: ${{ needs.authorize.outputs.run_attempt }}
+        run: |
+          python3 -I -B scripts/connected_docker_candidate.py create --directory dist/docker/payload \
+            --version "$VERSION" --source "$SOURCE" --workflow-id "$WORKFLOW_ID" --run-id "$RUN_ID" --run-attempt "$RUN_ATTEMPT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: upload
+        with:
+          name: connected-linux-docker-${{ needs.authorize.outputs.version }}-${{ needs.authorize.outputs.run_id }}-${{ needs.authorize.outputs.run_attempt }}
+          path: dist/docker/payload/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  independent:
+    needs: authorize
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      artifact_name: connected-linux-docker-${{ needs.authorize.outputs.version }}-${{ needs.authorize.outputs.run_id }}-${{ needs.authorize.outputs.run_attempt }}-independent
+    steps:
+      - name: Initialize fresh independent build caches
+        run: |
+          [[ "$RUNNER_TEMP" == /* && "$RUNNER_TEMP" != *$'\n'* && "$RUNNER_TEMP" != *$'\r'* ]]
+          [[ ! -e "$RUNNER_TEMP/docker-independent-go-cache" && ! -L "$RUNNER_TEMP/docker-independent-go-cache" && ! -e "$RUNNER_TEMP/docker-independent-module-cache" && ! -L "$RUNNER_TEMP/docker-independent-module-cache" ]]
+          mkdir -m 700 -- "$RUNNER_TEMP/docker-independent-go-cache" "$RUNNER_TEMP/docker-independent-module-cache"
+          printf 'GOCACHE=%s\nGOMODCACHE=%s\n' "$RUNNER_TEMP/docker-independent-go-cache" "$RUNNER_TEMP/docker-independent-module-cache" >> "$GITHUB_ENV"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.authorize.outputs.source }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: Independently resolve verified modules and build from source
+        env:
+          VERSION: ${{ needs.authorize.outputs.version }}
+          SOURCE: ${{ needs.authorize.outputs.source }}
+          WORKFLOW_ID: ${{ needs.authorize.outputs.workflow_id }}
+          RUN_ID: ${{ needs.authorize.outputs.run_id }}
+          RUN_ATTEMPT: ${{ needs.authorize.outputs.run_attempt }}
+        run: |
+          go mod download
+          go mod verify
+          mkdir -m 700 dist
+          bash scripts/build-connected-rich-docker-linux.sh "$VERSION" "$SOURCE" dist/docker
+          python3 -I -B scripts/connected_docker_candidate.py create --directory dist/docker/payload \
+            --version "$VERSION" --source "$SOURCE" --workflow-id "$WORKFLOW_ID" --run-id "$RUN_ID" --run-attempt "$RUN_ATTEMPT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: upload
+        with:
+          name: connected-linux-docker-${{ needs.authorize.outputs.version }}-${{ needs.authorize.outputs.run_id }}-${{ needs.authorize.outputs.run_attempt }}-independent
+          path: dist/docker/payload/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  compare:
+    needs: [authorize, build, independent]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.authorize.outputs.source }}
+          persist-credentials: false
+      - name: Reject self-comparison and verify each provider artifact before download
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.authorize.outputs.version }}
+          PRIMARY_ID: ${{ needs.build.outputs.artifact_id }}
+          SECONDARY_ID: ${{ needs.independent.outputs.artifact_id }}
+          PRIMARY_NAME: ${{ needs.build.outputs.artifact_name }}
+          SECONDARY_NAME: ${{ needs.independent.outputs.artifact_name }}
+        run: |
+          python3 -I -B scripts/connected_docker_candidate.py compare-inputs --version "$VERSION" \
+            --primary-id "$PRIMARY_ID" --secondary-id "$SECONDARY_ID" --primary-name "$PRIMARY_NAME" --secondary-name "$SECONDARY_NAME"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact_id }}
+          path: dist/primary
+          merge-multiple: true
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.independent.outputs.artifact_id }}
+          path: dist/independent
+          merge-multiple: true
+      - name: Compare every final public byte and deterministic sidecar
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.authorize.outputs.version }}
+        run: python3 -I -B scripts/connected_docker_candidate.py compare --version "$VERSION" --primary dist/primary --secondary dist/independent
+
+  attest:
+    needs: [authorize, build, compare]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.authorize.outputs.source }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact_id }}
+          path: dist/payload
+          merge-multiple: true
+      - name: Recheck exact-main authorization and the downloaded payload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.authorize.outputs.version }}
+        run: python3 -I -B scripts/connected_docker_candidate.py verify-current --version "$VERSION" --directory dist/payload
+      - name: Discover SPDX dependencies from the actual four-ELF archive
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        env:
+          SYFT_CHECK_FOR_APP_UPDATE: 'false'
+        with:
+          file: dist/payload/home-lab-observer-connected-rich-processes-docker_${{ needs.authorize.outputs.version }}_linux_amd64.tar.gz
+          syft-version: v1.55.0
+          format: spdx-json
+          output-file: dist/connected-docker.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+          dependency-snapshot: false
+      - name: Refuse incomplete four-role/core-module coverage and changed public bytes
+        run: python3 -I -B scripts/connected_docker_candidate.py verify-sbom --directory dist/payload --sbom dist/connected-docker.spdx.json
+      - name: Attest SPDX only for the archive it describes
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/payload/home-lab-observer-connected-rich-processes-docker_${{ needs.authorize.outputs.version }}_linux_amd64.tar.gz
+          sbom-path: dist/connected-docker.spdx.json
+          show-summary: true
+      - name: Attest provenance of exactly the five retained candidate files
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/payload/*
+          show-summary: true
+      - name: Verify public bytes again after read-only attestation
+        run: python3 -I -B scripts/connected_docker_candidate.py verify --directory dist/payload

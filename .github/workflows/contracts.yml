@@ -28,6 +28,9 @@ jobs:
         run: |
           bash -n scripts/build-connected-linux.sh
           python3 -I -B -m unittest discover -s scripts -p test_connected_candidate.py -v
+          python3 -I -B -m unittest discover -s scripts -p test_connected_candidate_presets.py -v
+          python3 -I -B -m unittest discover -s scripts -p 'test_connected_docker*.py' -v
+          node --test scripts/connected-docker-workflow.test.mjs
       - name: Check pure connected publication admission without provider access
         run: python3 -I -B -m unittest discover -s scripts -p test_connected_promotion_policy.py -v
       - name: Check owner promotion with synthetic provider operations only
