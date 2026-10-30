@@ -193,6 +193,11 @@ start a service as a health check. Any failure prevents the attempt. Check both 
 with lstat, without returning early after the first absent path. Preserve the primary closed failure if either
 daemon or receiver cleanup also fails; cleanup failure alone must still fail the journey, never imply acceptance.
 
+Also cover the actual CLI producer in a Linux/amd64 subprocess test with a valid synthetic build identity and nil
+context. It must exit22 with empty stdout and the same exact early stderr line. Nil-context admission refuses
+before bundle, host, socket, DNS or account inspection; the child isolates secret-hardening syscalls. Bound it to
+five seconds with no root, candidate execution, test-only production seam or dependency addition.
+
 TDD must exercise the real refusal function with a correct stderr result and reject a stdout diagnostic, wrong exit,
 oversized/unknown stderr or extra stdout. Retain all before/after process-only file/inode/NSS/unit fingerprints,
 absent Docker principals/units, no enrollment and numeric checks on both boots. Review the remaining refusal
