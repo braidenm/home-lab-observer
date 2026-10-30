@@ -27,6 +27,7 @@ SERVER = "srv_" + "c" * 32
 UNITS = tuple("home-lab-observer-connected-rich-docker-" + role + ".service" for role in ("collector", "reader", "uploader"))
 ENROLLMENT = "home-lab-observer-connected-rich-docker-enrollment.service"
 FAILURES = frozenset(("INPUT", "PACKAGE", "INSTALL", "STOPPED", "IDENTITY", "ISOLATION", "PENDING", "TAMPER", "RETRY", "RETRY_WINDOW", "REFUSAL", "BOUNDS", "NUMERIC", "RECEIVER", "FAULT", "ENGINE", "ENGINE_API", "ENGINE_NETWORK", "ENGINE_DEPENDENCY", "ENGINE_SECURITY", "ENGINE_INPUT", "ENGINE_IMAGE", "ENGINE_START", "ENGINE_SOCKET", "ENGINE_CONTAINER"))
+FAILURES |= frozenset(("FAULT_INITIAL_BINDING", "FAULT_SOCKET_REPLACEMENT", "FAULT_READER_TERMINAL", "FAULT_UNAVAILABLE", "FAULT_STOP", "FAULT_START", "FAULT_RECOVERY"))
 
 
 def package():
@@ -244,23 +245,101 @@ def reader_binding():
     return {"manager": manager, "socket": [node.st_dev, node.st_ino]}
 
 
+def reader_fault_state():
+    fields = ("ActiveState", "MainPID", "InvocationID", "Result", "ExecMainCode", "ExecMainStatus", "Restart", "NRestarts", "Job")
+    value = assert_guest.unit_properties(UNITS[1], fields)
+    need(set(value) == set(fields) and value["Restart"] == "no" and value["NRestarts"] == "0" and value["Job"] == "", "FAULT")
+    if value["ActiveState"] == "active":
+        need(value["Result"] == "success" and value["ExecMainCode"] == value["ExecMainStatus"] == "0", "FAULT")
+    return value
+
+
+def wait_reader_termination(reader):
+    # The old namespace may survive briefly, but the unlinked pinned socket is
+    # no longer approved. Never substitute a different process or invocation.
+    old = reader["manager"]
+    def exited(value):
+        return value["Result"] == "exit-code" and value["ExecMainCode"] == "1" and value["ExecMainStatus"] == "22"
+    def terminal(value):
+        return value["InvocationID"] == old["InvocationID"] and value["ActiveState"] == "failed" and value["MainPID"] == "0" and exited(value)
+    def retiring(value):
+        return value["InvocationID"] == old["InvocationID"] and value["ActiveState"] == "deactivating" and value["MainPID"] in (old["MainPID"], "0") and exited(value)
+    deadline = time.monotonic() + 45
+    while time.monotonic() < deadline:
+        before = reader_fault_state()
+        need(before["InvocationID"] == old["InvocationID"], "FAULT")
+        if terminal(before):
+            need(reader_fault_state() == before, "FAULT")
+            return before
+        need(retiring(before) or (before["ActiveState"] == "active" and before["MainPID"] == old["MainPID"]), "FAULT")
+        try:
+            node = Path(f"/proc/{old['MainPID']}/root/engine/docker.sock").stat() if before["MainPID"] != "0" else None
+        except FileNotFoundError:
+            # The same process can exit between manager and /proc snapshots.
+            # Only its exact stable terminal result can complete this proof.
+            node = None
+        if node is not None:
+            need(stat.S_ISSOCK(node.st_mode) and [node.st_dev, node.st_ino] == reader["socket"], "FAULT")
+        after = reader_fault_state()
+        if terminal(after):
+            need(reader_fault_state() == after, "FAULT")
+            return after
+        need(after == before or retiring(after), "FAULT")
+        time.sleep(0.5)
+    raise AssertionError("FAULT")
+
+
+def recovery_stopped(binary, failed):
+    # Supported Stop intentionally does not reset an already-failed reader.
+    # Keep the normal all-inactive stopped() assertion strict everywhere else.
+    need(reader_fault_state() == failed, "FAULT")
+    for unit in UNITS:
+        fields = ("Id", "LoadState", "FragmentPath", "ActiveState", "MainPID", "UnitFileState", "DropInPaths", "NeedDaemonReload")
+        need(assert_guest.unit_properties(unit, fields) == {"Id": unit, "LoadState": "loaded", "FragmentPath": "/etc/systemd/system/" + unit, "ActiveState": "failed" if unit == UNITS[1] else "inactive", "MainPID": "0", "UnitFileState": "disabled", "DropInPaths": "", "NeedDaemonReload": "no"}, "FAULT")
+    fields = ("Id", "LoadState", "ActiveState", "MainPID", "Transient", "FragmentPath")
+    need(assert_guest.unit_properties(ENROLLMENT, fields) == {"Id": ENROLLMENT, "LoadState": "not-found", "ActiveState": "inactive", "MainPID": "0", "Transient": "no", "FragmentPath": ""}, "FAULT")
+    need(json.loads(activation_guest.command(binary, "status"))["state"] == "RECOVERY_REQUIRED", "FAULT")
+    rich_guest.verify_numeric()
+    need(reader_fault_state() == failed, "FAULT")
+
+
 def socket_replacement(binary):
-    # A real daemon restart replaces the root socket while the reader retains
-    # its audited old bind. Only explicit Observer Stop/Start may adopt it.
-    old = Path("/run/docker.sock").stat()
-    reader = reader_binding()
-    need(reader["socket"] == [old.st_dev, old.st_ino], "FAULT")
-    before = counts()
-    docker_engine.stop()
-    docker_engine.start()
-    docker_engine.cli("container", "start", docker_engine.NAMES[0])
-    current = Path("/run/docker.sock").stat()
-    need((current.st_dev, current.st_ino) != (old.st_dev, old.st_ino), "FAULT")
-    fault = wait_counts(lambda v: v["unavailable_count"] > before["unavailable_count"] and v["healthy_sequence"] == 0)
-    need(reader_binding() == reader, "FAULT")
-    activation_guest.command(binary, "stop"); stopped(binary)
-    activation_guest.command(binary, "start")
-    wait_counts(lambda v: healthy(v) and v["sequence"] > fault["sequence"])
+    phase = "FAULT_INITIAL_BINDING"
+    try:
+        old = Path("/run/docker.sock").stat()
+        reader = reader_binding()
+        initial = reader_fault_state()
+        need({key: initial[key] for key in reader["manager"]} == reader["manager"] and reader["socket"] == [old.st_dev, old.st_ino], "FAULT")
+        before = counts()
+        phase = "FAULT_SOCKET_REPLACEMENT"
+        docker_engine.stop()
+        docker_engine.start()
+        docker_engine.cli("container", "start", docker_engine.NAMES[0])
+        current = Path("/run/docker.sock").stat()
+        need((current.st_dev, current.st_ino) != (old.st_dev, old.st_ino), "FAULT")
+        phase = "FAULT_READER_TERMINAL"
+        failed = wait_reader_termination(reader)
+        phase = "FAULT_UNAVAILABLE"
+        fault = wait_counts(lambda v: v["unavailable_count"] > before["unavailable_count"] and v["healthy_sequence"] == 0)
+        need(reader_fault_state() == failed, "FAULT")
+        phase = "FAULT_STOP"
+        activation_guest.command(binary, "stop"); recovery_stopped(binary, failed)
+        phase = "FAULT_START"
+        activation_guest.command(binary, "start")
+        fresh = reader_binding()
+        current_state = reader_fault_state()
+        need(fresh["manager"]["InvocationID"] != reader["manager"]["InvocationID"] and fresh["socket"] == [current.st_dev, current.st_ino] and {key: current_state[key] for key in fresh["manager"]} == fresh["manager"], "FAULT")
+        phase = "FAULT_RECOVERY"
+        wait_counts(lambda v: healthy(v) and v["sequence"] > fault["sequence"])
+        need(reader_binding() == fresh and reader_fault_state() == current_state, "FAULT")
+        final_socket = Path("/run/docker.sock").stat()
+        need((final_socket.st_dev, final_socket.st_ino) == (current.st_dev, current.st_ino), "FAULT")
+    except AssertionError as error:
+        # Preserve known lifecycle refusals in their existing outer handler;
+        # only closed fixture assertions become a finite fault subphase.
+        if str(error) in FAILURES:
+            raise AssertionError(phase) from None
+        raise
 
 
 def unchanged_process_state():

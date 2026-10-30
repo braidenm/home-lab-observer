@@ -211,8 +211,11 @@ neither assets nor those source templates are executed by the Python verifier.
 
 - [x] Diagnose the exact-source VM's fault-stage assertion against production's strict socket link-count witness;
   record the [finite terminal/recovery contract and255 sources](docker-vm-proof.md#socket-replacement-fixture-correction-2026-10-30).
-- [ ] TDD old-invocation exit22/no restart/no adoption, unavailable receipt and supported fresh Start/socket/advanced
+- [x] TDD old-invocation exit22/no restart/no adoption, unavailable receipt and supported fresh Start/socket/advanced
   health proof; add closed `FAULT_` subphases without production/guard/unit/definition changes.
+  Local78 fixture tests pass without skips, including the unmocked recovery-stop path that first failed when normal
+  `stopped()` incorrectly required the reader inactive. Normal stopped assertions remain strict; source review and
+  exact-head CI are separate gates, not a packaged VM pass.
 - [ ] Independent source review and all exact-head CI before merge.
 - [ ] Freeze fresh same-source protected/local artifacts and complete both no-overlay packaged cases; failed prior
   runs do not become acceptance or authorize release/owner use.
