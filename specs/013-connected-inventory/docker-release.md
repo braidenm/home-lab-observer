@@ -132,7 +132,10 @@ Run the existing two-case [Docker VM proof](docker-vm-proof.md) with the protect
 same-S numeric/process inputs and no diagnostic overlay/probe. Keep two fresh overlays, both first boot and reboot,
 no NIC/host share, 2 vCPU/3 GiB/12-GiB overlays and existing bounded marker/shutdown checks. Require numeric coexistence,
 existing-rich-root pre-mutation refusal, actual rows/null metrics/privacy, role/socket/credential denials, paused-reader
-audit, socket replacement with the same held invocation, policy-bound pending bytes, exact reboot retry and cleanup.
+audit, socket replacement with exact old-invocation fail-closed exit22 and no automatic adoption, followed only by
+supported Stop/Start into a fresh invocation/current socket and advanced healthy sequence, policy-bound pending
+bytes, exact reboot retry and cleanup. See the [fixture correction](docker-vm-proof.md#socket-replacement-fixture-correction-2026-10-30);
+do not require the old reader to survive its now-unlinked socket or weaken production link-count checks.
 
 The canonical `observer-connected-docker-acceptance/v1` JSON binds the full candidate metadata/digest and independent
 provider artifact identity, exact image/Docker package/synthetic fixture/receiver/probe/harness/baseline pins, and a

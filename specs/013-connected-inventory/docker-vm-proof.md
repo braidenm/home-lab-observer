@@ -104,7 +104,40 @@ CI and a new pinned packaged run remain required. This changes diagnostics, not 
 Pre-launch independent review found five fixture correctness gaps, corrected before execution: the frame grant is
 service-only (collector NSS remains SharedGID-only and the persistent frame group is empty), actual live worker
 UID/GID/groups are checked separately, the fixture daemon is exactly static rather than disabled, pending policy
-bytes must match the installed policy digest, and socket replacement must leave the same active reader invocation
-bound to the old inode until explicit Stop/Start. Every fixed engine target is checked with lstat before the first
+bytes must match the installed policy digest, and socket replacement must never silently adopt the new inode.
+The original same-active-reader assertion was incorrect for an unlinked old socket; the correction below requires
+its exact fail-closed exit before explicit Stop/Start recovery. Every fixed engine target is checked with lstat before the first
 write, including dangling entries. The namespace probe also checks the target root device/inode immediately after
 setns and before dropping identity. Focused positive/negative tests cover these gates; real VM acceptance remains pending.
+
+## Socket replacement fixture correction (2026-10-30)
+
+The exact-source `df43ef6e8fb22df8ffd413dcbbc8e47d138792b6` packaged journey reached the fault exercise, then
+refused the fixture's same-active-reader assumption. Production requires the pinned socket's link count to remain1;
+unlinking its old pathname makes that pinned inode's count0. Preserve this guard and CLI exit22, not a surviving
+reader or automatic socket adoption. The retained failure is not complete VM/release acceptance.
+
+Before replacing the fixture daemon socket, capture the reader's same active PID/invocation and old bound inode,
+and prove `Restart=no`, `NRestarts=0`, no job. While awaiting termination, reject a different PID/invocation,
+automatic restart or adoption. Require the old invocation's exact terminal metadata: `ActiveState=failed`,
+`MainPID=0`, `Result=exit-code`, `ExecMainCode=1` (`CLD_EXITED`), `ExecMainStatus=22`, `NRestarts=0`, no job.
+The retained failed unit must still identify the captured invocation; empty/new IDs, clean exits, signals and other
+states are not evidence. Require this stable state before and after a fresh unavailable receipt, without silently
+restarting the reader. Then only the supported installer `stop`/`start` may recover it. After Stop, an empty retained
+ID is allowed only with proved stopped state; any nonempty ID must still be the old one until explicit Start.
+Recovery must have a fresh active invocation, bind the current root socket, retain `Restart=no`/zero restarts/no job,
+and produce current healthy rows at a sequence strictly beyond the unavailable receipt. Recheck the same recovered
+manager/socket binding after health so historical rows, PID reuse or a later replacement cannot stand in for recovery.
+
+Add only closed `FAULT_` subphases for initial binding, replacement, terminal reader, unavailable receipt,
+supported Stop/Start and fresh recovery. Never emit raw errors, paths, status records or logs. TDD includes normal
+terminal/recovery and changed PID/invocation/inode, restart, clean/signal/wrong-code exit and stale-health negatives.
+Production Go, units, definition, budgets, profile admission and old numeric/process assertions remain unchanged.
+Merge only after source review and exact-head CI; the next full proof needs fresh same-source protected/local bytes
+and both no-overlay cases. No VM/build/publication/owner operation is authorized by this correction.
+
+Primary sources checked2026-10-30: [systemd255 systemctl](https://www.freedesktop.org/software/systemd/man/255/systemctl.html)
+retains failed status for inspection; [v255 service.c](https://github.com/systemd/systemd/blob/v255/src/core/service.c)
+`service_enter_dead` preserves a failure state and `service_start` obtains a new invocation before resetting exit
+status; [v255 unit.c](https://github.com/systemd/systemd/blob/v255/src/core/unit.c) generates invocation IDs in
+`unit_acquire_invocation_id`. Do not generalize these finite255 expectations to arbitrary manager versions.

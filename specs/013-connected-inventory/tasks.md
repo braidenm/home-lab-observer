@@ -206,3 +206,13 @@ neither assets nor those source templates are executed by the Python verifier.
 - [ ] Independently review source; pass focused runtime/lifecycle race/vet and all required exact-head CI.
 - [ ] Freeze new complete source/candidate/baselines and pass both same-source packaged Docker VM cases; no overlays.
 - [ ] Canonical acceptance, immutable release and separately authorized owner/viewer acceptance remain later gates.
+
+## Docker socket replacement fixture correction (2026-10-30)
+
+- [x] Diagnose the exact-source VM's fault-stage assertion against production's strict socket link-count witness;
+  record the [finite terminal/recovery contract and255 sources](docker-vm-proof.md#socket-replacement-fixture-correction-2026-10-30).
+- [ ] TDD old-invocation exit22/no restart/no adoption, unavailable receipt and supported fresh Start/socket/advanced
+  health proof; add closed `FAULT_` subphases without production/guard/unit/definition changes.
+- [ ] Independent source review and all exact-head CI before merge.
+- [ ] Freeze fresh same-source protected/local artifacts and complete both no-overlay packaged cases; failed prior
+  runs do not become acceptance or authorize release/owner use.
