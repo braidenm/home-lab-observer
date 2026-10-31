@@ -2,6 +2,10 @@
 
 **Status:** Proposed; documentation only. Deliver after connected observation, one reviewed slice per PR.
 
+First review [ADR 027](../../docs/adr/027-bounded-action-dispatch-and-uncertainty.md): it reconciles proposed grace,
+immutable target/parameter binding and delivery-versus-dispatch recovery with the remote coordinator. It does not
+approve the remaining broker isolation/authentication choices or add executable authority to observation roles.
+
 Use the [open-source alignment evidence](../../docs/architecture-research/007-open-source-alignment.md) when freezing
 the architecture. The owner delegates production-oriented decisions; retain independent review and executable proof.
 

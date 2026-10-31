@@ -2,6 +2,9 @@
 
 **Status:** Proposed for full architecture, security and owner review; not approved for implementation or activation
 
+[ADR 027](../../docs/adr/027-bounded-action-dispatch-and-uncertainty.md) proposes the 2026-10-31 connected contract
+reconciliation below. Both remain Proposed; existing observation definitions and executable authority are unchanged.
+
 ## Outcome and sequencing
 
 After connected read-only observation is delivered, an owner can explicitly enable a separate action broker and grant
@@ -33,7 +36,8 @@ configuration changes, image pulls, daemon restart, host reboot or automatic rem
 - **R4 Fixed operations:** Issue only the code-owned Engine version negotiation, bounded target state reads and exact
   `POST /containers/{full-id}/start`, `/stop`, `/restart` calls in a tested API range. No caller-provided suffix, query,
   headers, body, signal, checkpoint, attachment or method. Start has no body/options. Stop/restart use the owner-approved
-  grace value, proposed default 30 seconds and range 1..120 seconds. Never allow zero/immediate force or negative/infinite
+  grace value, proposed default 30 seconds and range 1..30 seconds, inside the coordinated 45-second call/60-second
+  complete local-phase budget in ADR 027. Never allow zero/immediate force or negative/infinite
   grace. The container's configured stop signal remains in effect; Docker can force termination when grace expires.
   Bind grace to the owner-approved action grant/policy and canonical idempotency payload. Delegates cannot override
   or lower it. Changing grace requires an owner policy update and fresh authorization.
@@ -52,6 +56,8 @@ configuration changes, image pulls, daemon restart, host reboot or automatic rem
   Reconcile through bounded read-only state inspection, but current running/stopped state cannot prove which request
   caused it. Keep ambiguous requests and target locks until explicit owner reconciliation; a fresh operation requires
   explicit acknowledgement, fresh authorization and a new key. Cancellation after dispatch is not rollback.
+  An expired remote lease may reoffer only the same request for journal lookup, never replay a durable dispatch intent.
+  Server expiry/cancellation/pruning or a new key cannot clear the unresolved local target fence.
 - **R8 Audit:** Append durable admission/denial, dispatch, outcome, reconciliation and grant-change records, including
   actor/owner/install opaque identifiers, protected target identity, action, policy revision, request ID, UTC times,
   effective grace and fixed result codes. Remote audit excludes full daemon IDs and local connection details.
