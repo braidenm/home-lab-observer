@@ -4,6 +4,10 @@
 
 - [x] Record owner's accepted first action set: independently granted start, stop and restart.
 - [x] Draft proposed scope, safety semantics, boundaries and primary-source research.
+- [x] Draft coordinated finite-grace/immutable-target/unknown-dispatch proposal in
+  [ADR 027](../../docs/adr/027-bounded-action-dispatch-and-uncertainty.md); no implementation or activation.
+- [ ] Independently review/accept that proposal and freeze parameter codecs, authenticated reconciliation and
+  corresponding crash/deadline/rebinding tests before any executable action profile.
 - [ ] Complete independent architecture/security and owner review of proposed decisions and numerical limits.
 - [ ] Accept spec and create a new ADR without rewriting accepted read-only decisions.
 - [ ] Freeze versioned action/grant/result/audit contracts, credential audiences and standalone-owner authentication.

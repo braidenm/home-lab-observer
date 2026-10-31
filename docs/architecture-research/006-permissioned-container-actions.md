@@ -10,8 +10,9 @@ this proposal excludes checkpoint restore, attachment and interactive input. Thi
 [Engine API](https://docs.docker.com/reference/api/engine/).
 
 Stop uses the container's configured stop signal and can force termination after its grace period. Docker accepts an
-infinite timeout, which this proposal deliberately rejects. Our proposed 30-second default, 1..120-second range and
-confirmation are product choices, not universal daemon defaults or a promise of graceful application shutdown.
+infinite timeout, which this proposal deliberately rejects. The original 1..120-second range is historical:
+[proposed ADR 027](../adr/027-bounded-action-dispatch-and-uncertainty.md) narrows it to 1..30 seconds, default 30,
+inside coordinated execution budgets. These are product proposals, not daemon defaults or a shutdown guarantee.
 [Docker stop](https://docs.docker.com/reference/cli/docker/container/stop/).
 
 Restart is a stop/start operation with configurable grace. Our running-only precheck does not create an atomic daemon
