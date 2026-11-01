@@ -50,6 +50,14 @@ Each implementation PR links requirement IDs to tests and runs focused tests, fu
 contract checks for schema changes, and repository policy. Synthetic tests are default; real container lifecycle tests
 are isolated hosted jobs with code-owned fixtures. No host workload or production credential is a test fixture.
 
+## Next dormant Engine draft
+
+The next bounded proposal is the [fixed Linux Engine adapter](engine-adapter.md)/[ADR029](../../docs/adr/029-fixed-linux-action-engine.md).
+Freeze exact documents first; no code before all journal current-head checks pass and its PR merges. Use stdlib Unix
+HTTP, a singleton API1.45 compatibility profile and existing typed methods, not an SDK/framework, caller transport or
+observation refactor. Synthetic faults precede separately approved exact disposable native fixtures. No installed
+broker, credentials, grants, owner reconciliation, action controls or activation follows from this dormant slice.
+
 ## Deferred
 
 Kubernetes Deployment rollout restart has separate UID/RBAC/patch-field/admission and rollout-health semantics; it is

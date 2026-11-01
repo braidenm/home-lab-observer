@@ -21,9 +21,16 @@
   two uncertainty-retaining permits, 1,000 records, 30-day retention/floor and no unknown-clear method.
 - [x] Local proof: derived DB+journal ceiling plus honestly bounded before/after samples, maximal terminal completion,
   actual private-fixture ENOSPC, commit uncertainty, hot/subprocess crash recovery and no replay/new-key bypass.
-- [ ] Obtain exact final journal root/independent code review and fresh CI before any fixed Engine adapter or publication.
+- [x] Obtain exact final journal root/independent code review and fresh CI: PR161 merged as
+  cb5331dc6a5efbf0ed55d94490bcdad64031ecaa after all18 checks/all10 workflows passed. No action activation follows.
 - [ ] Prove unknown outcomes cannot auto-retry, unlock silently or lose their dispatch audit.
 - [ ] Implement/test separate broker process, protected state and fixed local Docker adapter.
+- [ ] Obtain exact root/independent review of [fixed Engine contract](engine-adapter.md)/ADR029; journal all-green merge
+  precedes implementation. Drafting is not approval for code or native mutations.
+- [ ] TDD the unused Linux adapter's fixed1.45 HTTP, full-ID/selected-field/witness checks, bounds and no-retry faults;
+  preserve observation APIs/dependencies and prove Worker+real-journal replay safety.
+- [ ] Separately approve/review then execute one exact image/full-ID/label-owned disposable native fixture with fixed
+  caps; record actual tested daemon/API1.45 evidence and cleanup without touching any other workload.
 - [ ] Prove start/stop/restart, grace and external-state-race semantics with disposable native fixtures.
 - [ ] Integrate explicit enrollment, grant/revoke and execution transport without observation-credential reuse.
 - [ ] Add accessible permission-filtered UI and independent responsive UX review.
