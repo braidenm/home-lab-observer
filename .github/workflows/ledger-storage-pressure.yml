@@ -6,6 +6,9 @@ on:
     paths:
       - internal/uploadledger/**
       - internal/uploadstate/**
+      - internal/actionjournal/**
+      - internal/actioncore/**
+      - scripts/fixtures/action-journal/Dockerfile
       - go.mod
       - go.sum
       - .github/workflows/ledger-storage-pressure.yml
@@ -14,6 +17,9 @@ on:
     paths:
       - internal/uploadledger/**
       - internal/uploadstate/**
+      - internal/actionjournal/**
+      - internal/actioncore/**
+      - scripts/fixtures/action-journal/Dockerfile
       - go.mod
       - go.sum
       - .github/workflows/ledger-storage-pressure.yml
@@ -45,3 +51,19 @@ jobs:
       - name: Exercise actual ENOSPC only inside a private bounded mount
         shell: bash
         run: sudo env -i PATH=/usr/bin:/bin TMPDIR=/tmp HLO_LEDGER_PRESSURE=1 "$RUNNER_TEMP/uploadledger.test" -test.run='^TestStoragePressureFixture$' -test.count=3
+      - name: Compile the unused action journal fixture
+        shell: bash
+        run: |
+          mkdir -m 0700 "$RUNNER_TEMP/action-journal-fixture"
+          go test -c -o "$RUNNER_TEMP/action-journal-fixture/actionjournal.test" ./internal/actionjournal
+          cp scripts/fixtures/action-journal/Dockerfile "$RUNNER_TEMP/action-journal-fixture/Dockerfile"
+          docker build --network=none -t "hlo-action-journal-test:${{ github.run_id }}" "$RUNNER_TEMP/action-journal-fixture"
+      - name: Prove action-journal bounds and uncertainty in private tmpfs only
+        shell: bash
+        run: >-
+          docker run --rm --network=none --read-only --cap-drop=ALL --security-opt=no-new-privileges
+          --cpus=2 --memory=256m --memory-swap=256m --pids-limit=64
+          --tmpfs /fixture:rw,noexec,nosuid,nodev,size=64m,mode=0700,uid=65532,gid=65532
+          -e TMPDIR=/fixture -e GOMAXPROCS=2 -e HLO_ACTION_PRESSURE=1
+          "hlo-action-journal-test:${{ github.run_id }}"
+          -test.run='^Test' -test.count=3 -test.timeout=90s -test.v

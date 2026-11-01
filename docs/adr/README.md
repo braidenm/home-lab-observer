@@ -29,5 +29,6 @@
 | [025](025-isolated-installed-docker-observation.md) | Accepted for engineering design only | Fixed credential-free Docker reader, immutable separately enrolled process-and-Docker profile; implementation/activation gated |
 | [026](026-docker-reader-startup-barrier.md) | Accepted for dormant implementation | Reuse same-process startup rendezvous before reader Engine I/O; no second permit protocol |
 | [027](027-bounded-action-dispatch-and-uncertainty.md) | Proposed | Coordinate finite grace, immutable action targets/parameters and a durable unknown-outcome fence; no action activation |
+| [028](028-dormant-linux-action-journal.md) | Accepted for unused Linux implementation only | Private bounded SQLite action journal; unknown permits survive Close/crash/expiry, no reconciliation or activation |
 
 Accepted ADRs are immutable except for status and supersession links. Material changes require a new ADR.

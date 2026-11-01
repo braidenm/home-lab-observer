@@ -40,6 +40,12 @@ Independent review of that slice precedes code; it does not approve the full exe
 
 ## Verification
 
+The next complete dormant slice is the [Linux action journal](action-journal.md), with [ADR 028's limited decision
+candidate](../../docs/adr/028-dormant-linux-action-journal.md). Exact spec/ADR and core metadata/byte-compatibility review
+precedes code. Reuse the existing SQLite dependency and storage principles, not an extracted framework or changed upload
+ledger. Two uncertainty-retaining permits, 1,000 records, 30-day terminal retention and measured/derived 32 MiB total
+proof precede a real Engine adapter. Full broker authentication/isolation, owner reconciliation and activation stay gated.
+
 Each implementation PR links requirement IDs to tests and runs focused tests, full Go tests/vet where Go changes,
 contract checks for schema changes, and repository policy. Synthetic tests are default; real container lifecycle tests
 are isolated hosted jobs with code-owned fixtures. No host workload or production credential is a test fixture.
