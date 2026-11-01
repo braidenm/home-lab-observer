@@ -101,7 +101,13 @@ The checked-in scratch-only build has no RUN/base pull/network. Verify exact ima
 caps before operations and cleanup; uncertain identity retains the fixture and refuses further cases. Real journal
 cooldowns remain in force: the bounded manual run waits between independent requests rather than changing its clock.
 The opt-in Go native entry is intentionally skipped in ordinary CI; that skip is not native proof. Cheap Node policy
-tests run in the existing contracts task. The private temporary context, built image and bounded result record (source,
+tests run in the existing contracts task. Linux audit stages use fixed persistent `/var/tmp`, not session-scoped `/tmp`;
+Windows retains its ordinary temporary directory. Each fresh stage is privately owned 0700 and its bounded synthetic
+basename is emitted before tool execution for recovery. Immediately after a valid full create ID, before inspecting or
+operating on it, exclusively write a bounded private 0600 `created-<mode>.json` containing source, run ID, image ID,
+mode and captured full ID. Synchronize the file and, on Linux, its parent directory. This receipt records captured identity
+only: it does not certify ownership, successful actions, removal or acceptance. Failure retains the stage and never
+authorizes cleanup by name/prefix. The final bounded result record (source,
 version, image/binary hashes, synthetic run ID and two exact fixture IDs with removal acknowledgements) are retained;
 acknowledgement is not verified absence, which requires separate read-only exact-ID checks. No image prune or broad
 cleanup is attempted. Output is closed markers,
@@ -126,8 +132,8 @@ and unknown outcomes across reopening without another inspect/mutation; unavaila
 Full Linux race plus final focused reruns/vet, complete Windows tests/vet, existing contracts (93 including thirteen new fixture policy tests),
 Foundation43 and diff checks pass locally. Ordinary Linux Engine tests have one intentional native opt-in skip;
 that is not actual Docker, rootful namespace, graceful/forced-exit or runtime compatibility proof. The manual harness
-is source for independent review only; no image build, fixture creation, root native fixture test execution or mutation has
-been executed. Exact source/harness review, scoped execution approval and actual native results remain required.
+is source for independent review; actual native Start/Stop/Restart success remains unproven. Exact source/harness
+review, scoped execution approval and actual native results remain required.
 
 Two supervised preflights refused before image build/container creation or native test execution: missing offline
 module metadata, then Windows path conversion through WSL's default shell. Cache preparation restored clean tracked
@@ -155,3 +161,14 @@ Primary evidence: [CLI29.1.3 plugin lookup](https://raw.githubusercontent.com/do
 [official release](https://github.com/docker/buildx/releases/tag/v0.38.1) and
 [Docker driver](https://docs.docker.com/build/builders/drivers/docker/). This driver uses the daemon's embedded BuildKit,
 not an additional builder container. Compatibility with the tested daemon still requires actual source-reviewed proof.
+
+A subsequent supervised Linux attempt built the synthetic image and created its first stopped fixture, then refused
+ownership before native Start/Stop/Restart. Exact-ID read-only recovery confirmed the sole mismatch: create requested
+`no-new-privileges=true` while both strict Node and Go ownership predicates expected `no-new-privileges:true`.
+The correction requests the exact colon spelling; neither validator accepts both spellings or relaxes any isolation
+check. The first attempt's success-only receipt was insufficient for recovery and its temporary stage was unavailable
+from the later session; the persistent stage and immediate captured-identity receipt above close that audit gap.
+Retained-fixture recovery/cleanup is separate from a future reviewed rerun; no successful native proof is implied.
+Regression requirements: exact create/inspect spelling agreement, equal-spelling rejection by unchanged ownership
+checks, platform-specific stage parent, bounded closed created-receipt fields, exclusive private write before first
+inspection, and continued identity refusal/retention. No production Engine or Go ownership change is needed.
