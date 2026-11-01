@@ -100,7 +100,7 @@ export function approvedDefaultBuilder(output, endpoint, contextHost) {
 export function createArgs(id, run, image, mode) {
   need(runID(run) && imageID(image) && ['graceful', 'ignore'].includes(mode) && id === `hlo-action-${run}-${mode}`, 'CREATE_REFUSED');
   return ['create', '--pull=never', '--name', id, '--label', `hlo.action-fixture=${run}`, '--network=none', '--read-only',
-    '--cap-drop=ALL', '--security-opt=no-new-privileges=true', '--pids-limit=64', '--memory=32m', '--memory-swap=32m',
+    '--cap-drop=ALL', '--security-opt=no-new-privileges:true', '--pids-limit=64', '--memory=32m', '--memory-swap=32m',
     '--cpus=0.25', '--restart=no', '--log-driver=none', image, mode];
 }
 export function ownedContainer(c, expected) {
@@ -131,6 +131,52 @@ export function resultReceipt(source, version, image, hashes, run, fixtures, bui
     cases: 2, scope: 'DISPOSABLE_PROTOCOL_PROOF_NOT_AUTHORITY_OR_RELEASE' };
   need(Buffer.byteLength(JSON.stringify(record), 'utf8') <= 2048, 'RECEIPT_REFUSED');
   return record;
+}
+export function stageParent(platform, windowsTemporary) {
+  need(platform === 'linux' || platform === 'win32', 'PLATFORM_REFUSED');
+  return platform === 'linux' ? '/var/tmp' : windowsTemporary;
+}
+export function stageReference(directory) {
+  const reference = path.basename(directory);
+  need(/^hlo-action-engine-[A-Za-z0-9]{6}$/.test(reference), 'STAGE_REFUSED');
+  return reference;
+}
+export function createdReceipt(source, expected) {
+  need(typeof source === 'string' && /^[a-f0-9]{40}$/.test(source) && fullID(expected?.id) && imageID(expected?.image) &&
+    runID(expected?.run) && ['graceful', 'ignore'].includes(expected?.mode) && Object.keys(expected).sort().join('|') === 'id|image|mode|run', 'CREATED_AUDIT_REFUSED');
+  const record = { schema: 'hlo-created-action-fixture/v1', source, run_id: expected.run, full_id: expected.id,
+    image: expected.image, mode: expected.mode, scope: 'CAPTURED_ID_NOT_VERIFIED_OWNERSHIP' };
+  need(Buffer.byteLength(JSON.stringify(record)) <= 512, 'CREATED_AUDIT_REFUSED');
+  return record;
+}
+export function creationIntent(source, run, image, mode) {
+  need(typeof source === 'string' && /^[a-f0-9]{40}$/.test(source) && runID(run) && imageID(image) &&
+    ['graceful', 'ignore'].includes(mode), 'CREATED_AUDIT_REFUSED');
+  const record = { schema: 'hlo-action-fixture-intent/v1', source, run_id: run, image, mode,
+    name: `hlo-action-${run}-${mode}`, scope: 'CREATE_INTENT_NOT_CREATION_ACKNOWLEDGEMENT' };
+  need(Buffer.byteLength(JSON.stringify(record)) <= 512, 'CREATED_AUDIT_REFUSED');
+  return record;
+}
+async function writePrivateAudit(directory, filename, record) {
+  let handle, directoryHandle;
+  try {
+    handle = await open(path.join(directory, filename), 'wx', 0o600);
+    await handle.writeFile(JSON.stringify(record) + '\n');
+    await handle.sync();
+    if (process.platform === 'linux') {
+      directoryHandle = await open(directory, fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW);
+      await directoryHandle.sync();
+    }
+  } catch { throw new Refusal('CREATED_AUDIT_REFUSED'); }
+  finally { if (handle) await handle.close(); if (directoryHandle) await directoryHandle.close(); }
+}
+export async function recordCreatedFixture(directory, source, expected) {
+  const record = createdReceipt(source, expected);
+  await writePrivateAudit(directory, `created-${record.mode}.json`, record);
+}
+export async function recordCreationIntent(directory, source, run, image, mode) {
+  const record = creationIntent(source, run, image, mode);
+  await writePrivateAudit(directory, `intent-${record.mode}.json`, record);
 }
 
 function command(program, args, env, code, timeout = 120000) {
@@ -175,8 +221,12 @@ export async function main(argv = process.argv.slice(2)) {
   const source = command('git', ['rev-parse', 'HEAD'], env, 'SOURCE_REFUSED').trim();
   need(/^[a-f0-9]{40}$/.test(source), 'SOURCE_REFUSED');
   need(/^go version go1\.27\.3 (linux|windows)\/amd64\s*$/.test(command('go', ['version'], env, 'TOOLCHAIN_REFUSED')), 'TOOLCHAIN_REFUSED');
-  const temporary = await mkdtemp(path.join(tmpdir(), 'hlo-action-engine-'));
+  const temporary = await mkdtemp(path.join(stageParent(process.platform, tmpdir()), 'hlo-action-engine-'));
   await chmod(temporary, 0o700);
+  const stage = await lstat(temporary);
+  need(stage.isDirectory() && !stage.isSymbolicLink() && (process.platform !== 'linux' ||
+    (stage.uid === process.getuid() && (stage.mode & 0o7777) === 0o700 && await realpath(temporary) === temporary)), 'STAGE_REFUSED');
+  console.log(`ACTION_ENGINE_NATIVE_STAGE=${stageReference(temporary)}`);
   const config = path.join(temporary, 'docker-config');
   await mkdir(config, { mode: 0o700 });
   await writeFile(path.join(config, 'config.json'), '{}\n', { flag: 'wx', mode: 0o600 });
@@ -234,9 +284,11 @@ export async function main(argv = process.argv.slice(2)) {
   for (const mode of ['graceful', 'ignore']) {
     need(versionTuple(await cliVersion()) === version && versionTuple(exactMarker(native('version'), 'HLO_ENGINE_NATIVE_VERSION=')) === version, 'DAEMON_MISMATCH');
     const name = `hlo-action-${run}-${mode}`;
+    await recordCreationIntent(temporary, source, run, image, mode);
     const id = (await docker(createArgs(name, run, image, mode), 'CREATE_REFUSED')).trim();
     need(fullID(id), 'CREATED_ID_REFUSED');
     const expected = { id, run, image, mode };
+    await recordCreatedFixture(temporary, source, expected);
     const inspect = async () => {
       const raw = await docker(['inspect', '--type=container', id], 'OWNERSHIP_REFUSED');
       let result;

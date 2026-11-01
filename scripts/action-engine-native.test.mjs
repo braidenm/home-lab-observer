@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { lstat, mkdtemp, readFile, rmdir, unlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import * as native from './test-action-engine-native.mjs';
 import { cleanEnvironment, fixedEndpoint, fullID, imageID, versionTuple, approvedDefaultBuilder, createArgs, ownedContainer, cleanupArgs, resultReceipt, wslPathArgs, wslNativeArgs, nativeOptions, approvedBuildxSource, installBuildxSource, buildxPin, main } from './test-action-engine-native.mjs';
 
 const expected = { id: 'a'.repeat(64), image: `sha256:${'b'.repeat(64)}`, run: 'c'.repeat(32), mode: 'graceful' };
@@ -47,7 +50,10 @@ test('only full IDs and exact pinned image IDs are valid', () => {
 test('create uses one fixed owned immutable mode and all isolation caps', () => {
   const args = createArgs(`hlo-action-${expected.run}-graceful`, expected.run, expected.image, 'graceful');
   assert.deepEqual(args, ['create', '--pull=never', '--name', `hlo-action-${expected.run}-graceful`, '--label', `hlo.action-fixture=${expected.run}`, '--network=none', '--read-only',
-    '--cap-drop=ALL', '--security-opt=no-new-privileges=true', '--pids-limit=64', '--memory=32m', '--memory-swap=32m', '--cpus=0.25', '--restart=no', '--log-driver=none', expected.image, 'graceful']);
+    '--cap-drop=ALL', '--security-opt=no-new-privileges:true', '--pids-limit=64', '--memory=32m', '--memory-swap=32m', '--cpus=0.25', '--restart=no', '--log-driver=none', expected.image, 'graceful']);
+  assert.equal(args.find(arg => arg.startsWith('--security-opt=')).slice('--security-opt='.length), container().HostConfig.SecurityOpt[0]);
+  const wrongSpelling = container(); wrongSpelling.HostConfig.SecurityOpt = ['no-new-privileges=true'];
+  assert.equal(ownedContainer(wrongSpelling, expected), false);
   assert.throws(() => createArgs('existing-workload', expected.run, expected.image, 'graceful'));
   assert.throws(() => createArgs(`hlo-action-${expected.run}-graceful`, expected.run, 'image:tag', 'graceful'));
   assert.throws(() => createArgs(`hlo-action-${expected.run}-arbitrary`, expected.run, expected.image, 'arbitrary'));
@@ -120,6 +126,54 @@ test('bounded private receipt names only two exact synthetic removals, not verif
   for (const entries of [[], fixtures.slice(0, 1), [...fixtures, fixtures[0]], [null, fixtures[1]], [{ ...fixtures[0], removed_acknowledged: false }, fixtures[1]],
     [fixtures[0], { ...fixtures[1], fullID: fixtures[0].fullID }], [{ ...fixtures[0], endpoint: 'foreign' }, fixtures[1]]]) assert.throws(() => receipt(entries));
 });
+test('Linux recovery stages are persistent and the public marker is only a bounded synthetic basename', () => {
+  assert.equal(native.stageParent('linux', '/session/tmp'), '/var/tmp');
+  assert.equal(native.stageParent('win32', 'C:\\Synthetic Owner\\Temp'), 'C:\\Synthetic Owner\\Temp');
+  assert.throws(() => native.stageParent('darwin', '/tmp'));
+  assert.equal(native.stageReference('/var/tmp/hlo-action-engine-Ab123Z'), 'hlo-action-engine-Ab123Z');
+  for (const value of ['/var/tmp/foreign', '/var/tmp/hlo-action-engine-secret-canary', '/var/tmp/hlo-action-engine-a\nsecret']) assert.throws(() => native.stageReference(value));
+});
+test('created identity audit is bounded, closed and explicitly not verified ownership', async () => {
+  const source = '1'.repeat(40);
+  const record = native.createdReceipt(source, expected);
+  assert.deepEqual(record, { schema: 'hlo-created-action-fixture/v1', source, run_id: expected.run, full_id: expected.id,
+    image: expected.image, mode: expected.mode, scope: 'CAPTURED_ID_NOT_VERIFIED_OWNERSHIP' });
+  assert.ok(Buffer.byteLength(JSON.stringify(record)) <= 512);
+  assert.doesNotMatch(JSON.stringify(record), /endpoint|credential|removed|accepted|verified_absence/);
+  for (const value of [{ ...expected, id: 'short' }, { ...expected, mode: '../foreign' }, { ...expected, run: 'secret-canary' }, { ...expected, image: 'latest' }]) assert.throws(() => native.createdReceipt(source, value));
+  assert.throws(() => native.createdReceipt('secret-canary', expected));
+  const directory = await mkdtemp(path.join(tmpdir(), 'hlo-created-audit-test-'));
+  const filename = path.join(directory, 'created-graceful.json');
+  try {
+    await native.recordCreatedFixture(directory, source, expected);
+    assert.deepEqual(JSON.parse(await readFile(filename, 'utf8')), record);
+    const stat = await lstat(filename);
+    assert.equal(stat.isFile(), true); assert.equal(stat.nlink, 1);
+    if (process.platform !== 'win32') assert.equal(stat.mode & 0o777, 0o600);
+    await assert.rejects(native.recordCreatedFixture(directory, source, { ...expected, id: 'd'.repeat(64) }));
+    assert.deepEqual(JSON.parse(await readFile(filename, 'utf8')), record);
+  } finally { await unlink(filename).catch(() => {}); await rmdir(directory); }
+});
+test('creation intent records only the exact derived name and refuses overwrite before CLI creation', async () => {
+  const source = '1'.repeat(40);
+  const record = native.creationIntent(source, expected.run, expected.image, expected.mode);
+  assert.deepEqual(record, { schema: 'hlo-action-fixture-intent/v1', source, run_id: expected.run, image: expected.image,
+    mode: expected.mode, name: `hlo-action-${expected.run}-graceful`, scope: 'CREATE_INTENT_NOT_CREATION_ACKNOWLEDGEMENT' });
+  assert.ok(Buffer.byteLength(JSON.stringify(record)) <= 512);
+  for (const args of [['secret-canary', expected.run, expected.image, 'graceful'], [source, 'short', expected.image, 'graceful'],
+    [source, expected.run, 'latest', 'graceful'], [source, expected.run, expected.image, '../foreign']]) assert.throws(() => native.creationIntent(...args));
+  const directory = await mkdtemp(path.join(tmpdir(), 'hlo-intent-audit-test-'));
+  const filename = path.join(directory, 'intent-graceful.json');
+  try {
+    await native.recordCreationIntent(directory, source, expected.run, expected.image, expected.mode);
+    assert.deepEqual(JSON.parse(await readFile(filename, 'utf8')), record);
+    const stat = await lstat(filename);
+    assert.equal(stat.isFile(), true); assert.equal(stat.nlink, 1);
+    if (process.platform !== 'win32') assert.equal(stat.mode & 0o777, 0o600);
+    await assert.rejects(native.recordCreationIntent(directory, source, expected.run, expected.image, expected.mode));
+    assert.deepEqual(JSON.parse(await readFile(filename, 'utf8')), record);
+  } finally { await unlink(filename).catch(() => {}); await rmdir(directory); }
+});
 test('source keeps checked-in scratch-only build, sequential cases, fixed bridge and bounded subprocess capture', async () => {
   const source = await readFile(new URL('./test-action-engine-native.mjs', import.meta.url), 'utf8');
   const dockerfile = await readFile(new URL('./fixtures/action-engine/Dockerfile', import.meta.url), 'utf8');
@@ -136,6 +190,14 @@ test('source keeps checked-in scratch-only build, sequential cases, fixed bridge
   assert.match(source, /'Ubuntu', '--user', 'root', '--exec', '\/usr\/bin\/env', '-i'/);
   assert.doesNotMatch(source, /'root', '--', '\/usr\/bin\/(?:wslpath|env)'/);
   assert.match(source, /maxBuffer: 512 \* 1024/);
+  assert.match(source, /mkdtemp\(path.join\(stageParent\(process.platform, tmpdir\(\)\), 'hlo-action-engine-'\)\)/);
+  assert.match(source, /ACTION_ENGINE_NATIVE_STAGE=\$\{stageReference\(temporary\)\}/);
+  assert.ok(source.indexOf('await recordCreatedFixture(temporary, source, expected);') > source.indexOf("need(fullID(id), 'CREATED_ID_REFUSED');"));
+  assert.ok(source.indexOf('await recordCreatedFixture(temporary, source, expected);') < source.indexOf('const inspect = async'));
+  const intentAt = source.indexOf('await recordCreationIntent(temporary, source, run, image, mode);');
+  assert.ok(intentAt >= 0 && intentAt < source.indexOf('const id = (await docker(createArgs('));
+  assert.match(source, /await handle.sync\(\)/);
+  assert.match(source, /await directoryHandle.sync\(\)/);
   assert.ok(source.indexOf("await docker(cleanupArgs(await inspect(), expected), 'CLEANUP_REFUSED');") < source.indexOf('removed.push('));
   assert.doesNotMatch(source, /Promise\.all|docker.*prune|console\.(?:log|error)\([^)]*(?:stdout|stderr|raw)/);
 });

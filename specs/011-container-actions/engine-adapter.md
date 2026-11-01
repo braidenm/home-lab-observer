@@ -177,3 +177,6 @@ checks, platform-specific stage parent, bounded closed intent/created-receipt fi
 creation/first inspection respectively, and continued identity refusal/retention. No production Engine or Go ownership
 change is needed. Separately approved exact-ID recovery subsequently removed the retained stopped fixture without
 force, followed by an independent exact-ID absence check; this is cleanup evidence, not native action proof.
+The focused harness regressions first failed on the mismatched create spelling/missing audit behavior, then passed
+16/16 with zero skips; all 96 Node contract tests and canonical contract validation pass after the correction.
+No production Go or strict ownership-predicate bytes changed, and no rerun is claimed by this source evidence.
