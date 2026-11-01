@@ -103,7 +103,10 @@ cooldowns remain in force: the bounded manual run waits between independent requ
 The opt-in Go native entry is intentionally skipped in ordinary CI; that skip is not native proof. Cheap Node policy
 tests run in the existing contracts task. Linux audit stages use fixed persistent `/var/tmp`, not session-scoped `/tmp`;
 Windows retains its ordinary temporary directory. Each fresh stage is privately owned 0700 and its bounded synthetic
-basename is emitted before tool execution for recovery. Immediately after a valid full create ID, before inspecting or
+basename is emitted before daemon execution for recovery. Before CLI create, exclusively write and synchronize a
+bounded private 0600 `intent-<mode>.json` containing source, run ID, image ID, mode and the exact derived fixture name;
+an audit failure prevents creation. This intent does not claim that creation succeeded; it permits exact-name recovery
+after a lost acknowledgement without enumeration. Immediately after a valid full create ID, before inspecting or
 operating on it, exclusively write a bounded private 0600 `created-<mode>.json` containing source, run ID, image ID,
 mode and captured full ID. Synchronize the file and, on Linux, its parent directory. This receipt records captured identity
 only: it does not certify ownership, successful actions, removal or acceptance. Failure retains the stage and never
@@ -170,5 +173,7 @@ check. The first attempt's success-only receipt was insufficient for recovery an
 from the later session; the persistent stage and immediate captured-identity receipt above close that audit gap.
 Retained-fixture recovery/cleanup is separate from a future reviewed rerun; no successful native proof is implied.
 Regression requirements: exact create/inspect spelling agreement, equal-spelling rejection by unchanged ownership
-checks, platform-specific stage parent, bounded closed created-receipt fields, exclusive private write before first
-inspection, and continued identity refusal/retention. No production Engine or Go ownership change is needed.
+checks, platform-specific stage parent, bounded closed intent/created-receipt fields, exclusive private writes before
+creation/first inspection respectively, and continued identity refusal/retention. No production Engine or Go ownership
+change is needed. Separately approved exact-ID recovery subsequently removed the retained stopped fixture without
+force, followed by an independent exact-ID absence check; this is cleanup evidence, not native action proof.
