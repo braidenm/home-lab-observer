@@ -63,7 +63,11 @@ Provision requires a new empty dedicated directory, exclusively creates lock/dat
 and syncs directory entries. Any partial artifacts refuse subsequent Provision. OpenExisting requires both files,
 acquires lifetime nonblocking flock first and opens mode=rw, never initializes schema. Before SQL, check file/header
 format, fixed application_id 0x484C414A, user_version 1 and 4 KiB rollback-mode format. SQLite may recover only a vetted
-valid-format hot journal; then validate exact schema, binding and all bounded logical records. No migration, salvage,
+first-header journal envelope: empty/all-zero cold headers or exact hot magic, bounded record count (including SQLite's
+-1 sentinel), original page count, 4 KiB pages and power-of-two 512..65,536-byte sector. Malformed nonzero/truncated hot
+headers refuse before SQL. This is not full body authentication or bitrot certification; SQLite alone validates body
+checksums/segments and performs recovery. Then validate exact schema, binding and all bounded logical records,
+including impossible duplicate unresolved opaque/physical fences. No migration, salvage,
 quarantine, implicit recreation or data adoption. Do not open/close a raw DB handle while SQLite owns a connection.
 
 Use three STRICT tables: singleton metadata (binding and pruned_expiry_through), immutable actions (key, canonical
@@ -119,4 +123,33 @@ work and preserves compatible readers/unknown fences, not automatic old-state ad
   only that fixture's bounded file and prove no dispatch on admission/intent failure and unknown on terminal failure.
   No root/production-server action is implied. Extend existing pressure CI narrowly; preserve its resource/time bounds.
 - Full Go tests/vet, Linux race CI, contracts and independent code/security review. Static native execution is not race
-  proof; process death/tmpfs/ENOSPC is not physical power-loss or dishonest-device fsync proof. No native proof is claimed yet.
+  proof; process death/tmpfs/ENOSPC is not physical power-loss or dishonest-device fsync proof. Final independent acceptance
+  and current-head CI remain separate from local evidence below.
+
+## Local implementation evidence (2026-11-01; not runtime acceptance)
+
+The specs were committed before code. Initial core-metadata/journal contract tests failed before implementation.
+The unchanged version-1 fingerprint has an independently frozen original-preimage golden; typed canonical metadata
+round-trips full uint64 revisions and rejects alternate UTC bytes/duplicates/unknowns. Native tests exercise one-shot
+intent, stale/closed handles, full expected state, two retained unknown permits, physical/opaque fences, cooldown,
+cross-process exclusivity, corrupt/foreign refusal and Worker+journal synthetic no-second-mutation behavior.
+
+All 1,000 maximum-schema requests complete both reserved event slots, reopen, retain results at full capacity and
+refuse record 1,001. Maximum before/after-COMMIT DB+journal sample is 1,528,440 bytes; sampling does NOT observe every
+intermediate COMMIT instant or prove a measured 12 MiB database peak. The separate conservative 25,321,472-byte derived
+ceiling depends on the documented page/no-spill/no-savepoint/single-DB restrictions. Logical SQLITE_FULL is tested
+separately from actual private-tmpfs kernel ENOSPC at admission/intent/terminal phases.
+
+Subprocess death before/after intent/terminal commit, genuine SQLite hot-journal rollback, commit uncertainty and
+atomic prune/floor recovery pass. The hot-format fixture deliberately enables cache spill only in its child to produce
+a real hot journal; production always verifies spill OFF. Root review found and TDD reproduced a retention-clock bug:
+deletion eligibility now uses actual now-minus-30-days, while the persisted floor advances separately. Header/collision
+refusal regressions likewise preceded their corrections. SQLite's [rollback format](https://www.sqlite.org/fileformat2.html#the_rollback_journal)
+defines the bounded header fields and leaves body recovery to SQLite.
+
+Native proof uses only a new FROM scratch test image and private 64 MiB tmpfs: network none, read-only root, UID65532,
+no capabilities/socket/host mounts, two CPUs, 256 MiB RAM/no extra swap and 90-second test deadline. Existing pressure CI
+adds that complete package three times with explicit ENOSPC opt-in; normal Linux race coverage remains in runtime CI.
+Local ordinary-user Linux race, complete Windows Go tests/vet, Node22 contracts (80), workflow guards (10), Foundation43
+and workflow syntax/context checks passed. Exact final code review and current-head CI remain required. No physical
+power-loss, installed broker, authenticated authority, Engine adapter or live mutation is claimed.

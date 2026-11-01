@@ -178,3 +178,26 @@ test("unparsed Go setup uses fail closed and both YAML extensions are inspected"
   for (const name of ["runtime.yml", "another.yaml"]) assert.equal(isWorkflow(name), true);
   for (const name of ["notes.md", "workflow.yml.backup"]) assert.equal(isWorkflow(name), false);
 });
+
+function checkActionJournalFixture(workflow, dockerfile) {
+  assert.match(workflow, /^    timeout-minutes: 5$/mu);
+  for (const input of ["internal/actionjournal/**", "internal/actioncore/**", "scripts/fixtures/action-journal/Dockerfile"])
+    assert.equal(workflow.split(`      - ${input}`).length - 1, 2);
+  const profile = workflow.slice(workflow.indexOf("      - name: Compile the unused action journal fixture"));
+  for (const token of ["go test -c", "./internal/actionjournal", "docker build --network=none", "docker run --rm --network=none --read-only --cap-drop=ALL --security-opt=no-new-privileges",
+    "--cpus=2 --memory=256m --memory-swap=256m --pids-limit=64", "--tmpfs /fixture:rw,noexec,nosuid,nodev,size=64m,mode=0700,uid=65532,gid=65532",
+    "-e TMPDIR=/fixture -e GOMAXPROCS=2 -e HLO_ACTION_PRESSURE=1", "-test.run='^Test' -test.count=3 -test.timeout=90s -test.v"])
+    assert.ok(profile.includes(token), `fixed action journal fixture: ${token}`);
+  assert.doesNotMatch(profile, /--(?:privileged|cap-add|volume|mount|network[= ]host)|docker\.sock|-test\.(?:skip|short)\b/u);
+  assert.equal(dockerfile.trim(), 'FROM scratch\nCOPY actionjournal.test /actionjournal.test\nUSER 65532:65532\nENTRYPOINT ["/actionjournal.test"]');
+  assert.ok(workflow.includes('HLO_LEDGER_PRESSURE=1 "$RUNNER_TEMP/uploadledger.test"'), "existing pressure proof retained");
+}
+
+test("action-journal pressure proof is explicit, bounded and credential-free", async () => {
+  const workflow = await readFile(path.join(root, ".github/workflows/ledger-storage-pressure.yml"), "utf8");
+  const dockerfile = (await readFile(path.join(root, "scripts/fixtures/action-journal/Dockerfile"), "utf8")).replaceAll("\r\n", "\n");
+  checkActionJournalFixture(workflow, dockerfile);
+  for (const token of ["-e HLO_ACTION_PRESSURE=1", "--memory=256m", "--cap-drop=ALL", "-test.run='^Test'", "size=64m"])
+    assert.throws(() => checkActionJournalFixture(workflow.replace(token, "REMOVED"), dockerfile));
+  assert.throws(() => checkActionJournalFixture(workflow + "\n          --volume /:/host\n", dockerfile));
+});

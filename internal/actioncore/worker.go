@@ -88,6 +88,7 @@ type Engine interface {
 type Key struct {
 	ActionID, TargetID string
 	Fingerprint        [32]byte
+	Metadata           JournalMetadata
 }
 
 // Journal must atomically compare fingerprints and serialize the target. It must
@@ -144,7 +145,11 @@ func (w *Worker) Execute(parent context.Context, request Request, binding Bindin
 	if remaining(ctx, w.now(), end) <= 0 {
 		return BudgetExceeded
 	}
-	attempt, err := w.journal.Acquire(ctx, Key{request.ActionID, request.TargetID, fingerprint(request, binding)})
+	key, err := NewJournalKey(request, binding)
+	if err != nil {
+		return Unavailable
+	}
+	attempt, err := w.journal.Acquire(ctx, key)
 	if errors.Is(err, ErrIdentityConflict) {
 		return IdentityConflict
 	}
@@ -329,14 +334,7 @@ func retained(code Code, op Operation) bool {
 
 func fingerprint(r Request, b Binding) [32]byte {
 	// Fixed struct + scalar UTC values, no maps or delivery-specific state.
-	value := struct {
-		Version                                                                                       int
-		ActionID, ServerID, InstallationID, OwnerID, ActorID, TargetID, EngineGeneration, ContainerID string
-		Operation                                                                                     Operation
-		Grace                                                                                         uint8
-		Policy, Capability                                                                            uint64
-		Created, Expires                                                                              string
-	}{1, r.ActionID, r.ServerID, r.InstallationID, r.OwnerID, r.ActorID, r.TargetID, b.EngineGeneration, b.ContainerID, r.Operation, r.GraceSeconds, r.PolicyRevision, r.CapabilityRevision, r.CreatedAt.UTC().Format(time.RFC3339Nano), r.ExpiresAt.UTC().Format(time.RFC3339Nano)}
+	value := journalRecordFor(r, b)
 	encoded, _ := json.Marshal(value) // The closed scalar shape cannot fail encoding.
 	return sha256.Sum256(encoded)
 }
