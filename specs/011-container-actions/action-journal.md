@@ -83,6 +83,12 @@ COMMIT and independent bounded rollback/disposal; uncertain commit poisons the i
 Short operations use caller deadline capped at two seconds, cleanup separately two seconds. Kernel/device stalls are
 not forcibly interruptible. No ATTACH, savepoints, vacuum, backup, bulk import or SQL chosen by callers.
 
+Revalidation reads at most 1,000 actions and 2,000 events through two fixed ordered query streams, including the
+related-target history variant used for admission. Bound raw fields in SQL before materialization and share the same
+pure metadata/event validators with single-action reads. Query count must not grow per retained record. Preserve all
+canonical bytes, digest/index/binding, event ordering/operation/expiry, orphan and unresolved-fence checks; batching
+does not relax the two-second operation deadline or the schema and storage limits.
+
 ## Capacity, retention and time floor
 
 Cap combined logical DB+journal bytes at 32 MiB; lock is zero length. Never equate journal_size_limit with peak growth.
@@ -154,3 +160,12 @@ adds that complete package three times with explicit ENOSPC opt-in; normal Linux
 Local ordinary-user Linux race, complete Windows Go tests/vet, Node22 contracts (80), workflow guards (10), Foundation43
 and workflow syntax/context checks passed. Exact final code review and current-head CI remain required. No physical
 power-loss, installed broker, authenticated authority, Engine adapter or live mutation is claimed.
+
+## CI revalidation correction (2026-11-01; proof pending)
+
+PR 161's Linux race job failed the maximal-schema reopen, without a reported data race. The original loader issued
+one ID query plus three queries per action (3,001 at capacity), within the unchanged two-second open deadline.
+Replace that N+1 pattern with the bounded streams above, first reproducing statement-count growth on real SQLite
+through test-only driver instrumentation. Verify the same improvement for target history/maintenance and rerun the
+unchanged full-capacity reopen/prune, malformed-state, native pressure and race checks. This is a local correction
+plan, not successful current-head CI or an authorization to activate actions.
