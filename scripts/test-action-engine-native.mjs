@@ -89,6 +89,22 @@ function exactMarker(output, prefix) {
   need(matches.length === 1, 'NATIVE_MARKER_REFUSED');
   return matches[0].slice(prefix.length);
 }
+export function wslPathArgs(filename) {
+  need(typeof filename === 'string' && /^[A-Za-z]:[\\/]/.test(filename) && !filename.includes('\0'), 'WSL_PATH_REFUSED');
+  return ['-d', 'Ubuntu', '--user', 'root', '--exec', '/usr/bin/wslpath', '-a', '-u', filename];
+}
+export function wslNativeArgs(binary, variables) {
+  need(typeof binary === 'string' && /^\/mnt\/[a-z]\/[A-Za-z0-9_./ -]+$/.test(binary) && !binary.includes('..'), 'WSL_PATH_REFUSED');
+  const keys = Object.keys(variables);
+  need(keys.every(key => ['HLO_ENGINE_NATIVE_PHASE', 'HLO_ENGINE_NATIVE_VERSION', 'HLO_ENGINE_NATIVE_ID', 'HLO_ENGINE_NATIVE_IMAGE', 'HLO_ENGINE_NATIVE_RUN'].includes(key)), 'NATIVE_ARGUMENTS_REFUSED');
+  const phase = variables.HLO_ENGINE_NATIVE_PHASE;
+  need(['version', 'graceful', 'ignore'].includes(phase), 'NATIVE_ARGUMENTS_REFUSED');
+  versionTuple(variables.HLO_ENGINE_NATIVE_VERSION);
+  need(phase === 'version' ? keys.length === 2 : keys.length === 5 && fullID(variables.HLO_ENGINE_NATIVE_ID) && imageID(variables.HLO_ENGINE_NATIVE_IMAGE) && runID(variables.HLO_ENGINE_NATIVE_RUN), 'NATIVE_ARGUMENTS_REFUSED');
+  return ['-d', 'Ubuntu', '--user', 'root', '--exec', '/usr/bin/env', '-i',
+    ...Object.entries(variables).map(([key, value]) => `${key}=${value}`), binary,
+    '-test.run=^TestOwnedNativeFixture$', '-test.count=1', '-test.timeout=150s'];
+}
 
 export async function main(argv = process.argv.slice(2)) {
   need(argv.length === 1 && argv[0] === '--allow-owned-fixtures', 'EXECUTION_NOT_APPROVED');
@@ -130,15 +146,14 @@ export async function main(argv = process.argv.slice(2)) {
     'FROM scratch\nCOPY fixture /fixture\nUSER 65532:65532\nENTRYPOINT ["/fixture"]\n', 'DOCKERFILE_REFUSED');
   let linuxBinary = testBinary;
   if (process.platform === 'win32') {
-    linuxBinary = command('wsl.exe', ['-d', 'Ubuntu', '--user', 'root', '--', '/usr/bin/wslpath', '-a', '-u', testBinary], env, 'WSL_PATH_REFUSED').trim();
+    linuxBinary = command('wsl.exe', wslPathArgs(testBinary), env, 'WSL_PATH_REFUSED').trim();
     need(/^\/mnt\/[a-z]\/[A-Za-z0-9_./ -]+$/.test(linuxBinary) && !linuxBinary.includes('..'), 'WSL_PATH_REFUSED');
   }
   const native = (phase, extra = {}) => {
     const variables = { HLO_ENGINE_NATIVE_PHASE: phase, HLO_ENGINE_NATIVE_VERSION: version, ...extra };
     const testArgs = ['-test.run=^TestOwnedNativeFixture$', '-test.count=1', '-test.timeout=150s'];
     if (process.platform === 'win32') {
-      return command('wsl.exe', ['-d', 'Ubuntu', '--user', 'root', '--', '/usr/bin/env', '-i',
-        ...Object.entries(variables).map(([key, value]) => `${key}=${value}`), linuxBinary, ...testArgs], env, 'NATIVE_FIXTURE_REFUSED', 180000);
+      return command('wsl.exe', wslNativeArgs(linuxBinary, variables), env, 'NATIVE_FIXTURE_REFUSED', 180000);
     }
     return command(linuxBinary, testArgs, { ...env, ...variables }, 'NATIVE_FIXTURE_REFUSED', 180000);
   };

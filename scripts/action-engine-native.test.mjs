@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { cleanEnvironment, fixedEndpoint, fullID, imageID, versionTuple, createArgs, ownedContainer, cleanupArgs, resultReceipt, main } from './test-action-engine-native.mjs';
+import { cleanEnvironment, fixedEndpoint, fullID, imageID, versionTuple, createArgs, ownedContainer, cleanupArgs, resultReceipt, wslPathArgs, wslNativeArgs, main } from './test-action-engine-native.mjs';
 
 const expected = { id: 'a'.repeat(64), image: `sha256:${'b'.repeat(64)}`, run: 'c'.repeat(32), mode: 'graceful' };
 function container() {
@@ -61,6 +61,18 @@ test('manual gate refuses before any tool or daemon command', async () => {
   await assert.rejects(main([]), /EXECUTION_NOT_APPROVED/);
   await assert.rejects(main(['--host=ssh://bad.example']), /EXECUTION_NOT_APPROVED/);
 });
+test('both fixed WSL bridges execute directly and preserve backslashes/spaces as single arguments', () => {
+  const windowsPath = String.raw`C:\Users\Synthetic Owner\AppData\Local\Temp\fixture path\actionengine.test`;
+  assert.deepEqual(wslPathArgs(windowsPath), ['-d', 'Ubuntu', '--user', 'root', '--exec', '/usr/bin/wslpath', '-a', '-u', windowsPath]);
+  const binary = '/mnt/c/Users/Synthetic Owner/AppData/Local/Temp/fixture path/actionengine.test';
+  const variables = { HLO_ENGINE_NATIVE_PHASE: 'version', HLO_ENGINE_NATIVE_VERSION: '29.9.1|1.56|1.40|linux|amd64' };
+  assert.deepEqual(wslNativeArgs(binary, variables), ['-d', 'Ubuntu', '--user', 'root', '--exec', '/usr/bin/env', '-i',
+    'HLO_ENGINE_NATIVE_PHASE=version', 'HLO_ENGINE_NATIVE_VERSION=29.9.1|1.56|1.40|linux|amd64', binary,
+    '-test.run=^TestOwnedNativeFixture$', '-test.count=1', '-test.timeout=150s']);
+  assert.throws(() => wslPathArgs('relative.test'));
+  assert.throws(() => wslNativeArgs(binary, { ...variables, DOCKER_HOST: 'foreign' }));
+  assert.throws(() => wslNativeArgs(binary, { ...variables, HLO_ENGINE_NATIVE_PHASE: 'arbitrary' }));
+});
 test('bounded private receipt names only two exact synthetic removals, not verified absence', () => {
   const fixtures = [{ mode: 'graceful', fullID: expected.id, removed_acknowledged: true }, { mode: 'ignore', fullID: 'd'.repeat(64), removed_acknowledged: true }];
   const hashes = { fixture: 'e'.repeat(64), test_binary: 'f'.repeat(64) };
@@ -81,7 +93,8 @@ test('source keeps checked-in scratch-only build, sequential cases, fixed bridge
   assert.match(source, /for \(const mode of \['graceful', 'ignore'\]\)/);
   assert.match(source, /'--config', config, '--host', endpoint/);
   assert.match(source, /'--builder', 'default', '--network=none', '--pull=false'/);
-  assert.match(source, /'Ubuntu', '--user', 'root', '--', '\/usr\/bin\/env', '-i'/);
+  assert.match(source, /'Ubuntu', '--user', 'root', '--exec', '\/usr\/bin\/env', '-i'/);
+  assert.doesNotMatch(source, /'root', '--', '\/usr\/bin\/(?:wslpath|env)'/);
   assert.match(source, /maxBuffer: 512 \* 1024/);
   assert.ok(source.indexOf("await docker(cleanupArgs(await inspect(), expected), 'CLEANUP_REFUSED');") < source.indexOf('removed.push('));
   assert.doesNotMatch(source, /Promise\.all|docker.*prune|console\.(?:log|error)\([^)]*(?:stdout|stderr|raw)/);

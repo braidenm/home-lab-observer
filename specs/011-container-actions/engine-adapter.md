@@ -123,8 +123,15 @@ redirect/proxy fallback and cancellation/Close joining. Body-read cancellation i
 not a short deadline that assumes the server was scheduled. Worker + the real journal + Unix HTTP retain both known
 and unknown outcomes across reopening without another inspect/mutation; unavailable storage performs no Engine I/O.
 
-Full Linux race plus final focused reruns/vet, complete Windows tests/vet, existing contracts (89 including nine new fixture policy tests),
+Full Linux race plus final focused reruns/vet, complete Windows tests/vet, existing contracts (90 including ten new fixture policy tests),
 Foundation43 and diff checks pass locally. Ordinary Linux Engine tests have one intentional native opt-in skip;
 that is not actual Docker, rootful namespace, graceful/forced-exit or runtime compatibility proof. The manual harness
-is source for independent review only; no image build, fixture creation, WSL root invocation or native mutation has
+is source for independent review only; no image build, fixture creation, root native fixture test execution or mutation has
 been executed. Exact source/harness review, scoped execution approval and actual native results remain required.
+
+Two supervised preflights refused before image build/container creation or native test execution: missing offline
+module metadata, then Windows path conversion through WSL's default shell. Cache preparation restored clean tracked
+sums and offline verification/builds. The narrow bridge correction uses `wsl --exec` for both wslpath and the fixed
+env/native command, preserving argument boundaries/backslashes rather than invoking the default Linux shell. Cheap
+argument regressions cover Windows paths with spaces; these preflight corrections are not native Docker proof.
+See [Microsoft WSL commands](https://learn.microsoft.com/en-us/windows/wsl/basic-commands) and current `wsl --help`.
