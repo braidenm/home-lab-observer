@@ -6,6 +6,8 @@
 - [x] Draft proposed scope, safety semantics, boundaries and primary-source research.
 - [x] Draft coordinated finite-grace/immutable-target/unknown-dispatch proposal in
   [ADR 027](../../docs/adr/027-bounded-action-dispatch-and-uncertainty.md); no implementation or activation.
+- [x] Review and implement the [unused typed coordinator](worker-core.md) with synthetic ports;
+  this does not complete durable storage, a Docker adapter or installed action authority.
 - [ ] Independently review/accept that proposal and freeze parameter codecs, authenticated reconciliation and
   corresponding crash/deadline/rebinding tests before any executable action profile.
 - [ ] Complete independent architecture/security and owner review of proposed decisions and numerical limits.

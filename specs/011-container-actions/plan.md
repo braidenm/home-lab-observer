@@ -22,6 +22,9 @@ and checks fresh authorization at dispatch. Freeze the standalone-owner equivale
 
 ## Delivery order
 
+The first bounded code candidate is the [unused typed coordinator](worker-core.md).
+Independent review of that slice precedes code; it does not approve the full executable broker.
+
 1. Review Spec 011, resolve the three proposed architecture decisions and create a new ADR; do not edit accepted ADR 006.
 2. Freeze separate versioned request/result/grant/audit schemas, error vocabulary, state transition table and threat model.
    Include grant-to-full-ID private mapping, signed freshness/replay semantics and crash recovery diagrams.
