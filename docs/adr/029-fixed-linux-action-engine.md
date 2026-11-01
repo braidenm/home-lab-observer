@@ -1,6 +1,7 @@
 # ADR 029: Fixed dormant Linux Docker action adapter
 
-Status: Draft for independent review; no implementation, real fixture mutation or installed authority approved.
+Status: Accepted for unused Linux adapter implementation only after exact coordinator/independent review.
+Actual fixture execution and installed authority require separate approval.
 Date: 2026-11-01. Scope: the next unused Spec 011 adapter, after complete dormant journal delivery.
 
 ## Question and current evidence
@@ -18,7 +19,7 @@ Linux/amd64. These advertisements contain1.45 but are not mutation compatibility
 belongs in public source. Journal PR161 merged as cb5331dc6a5efbf0ed55d94490bcdad64031ecaa after all18 checks and
 all10 triggered workflows passed. That prerequisite does not approve this draft or the full broker.
 
-## Recommendation for review
+## Decision for unused implementation
 
 Use the existing standard library HTTP client with a private Unix transport and exact API **1.45**; implement only
 the four typed Engine methods plus fixed construction/resource disposal. The [closed contract](../../specs/011-container-actions/engine-adapter.md)
@@ -66,8 +67,9 @@ Cancellation/timeout can leave a completed daemon operation unknown; only the du
 ## Proof, operation and remaining decisions
 
 First freeze this decision/contract, then TDD fake Unix transport/decoder/witness boundaries and Worker+real-journal
-integration. Only separately reviewed native tests may create one exact owned source-built fixture; verify image,
-full ID, labels and caps before mutation/cleanup. Record the actual API1.45 daemon tuple without claiming broad parity.
+integration. Only separately reviewed native tests may create one exact owned source-built fixture at a time:
+at most two sequential modes for graceful handling and ignored SIGTERM, with exact verified cleanup between them.
+Verify each image/full ID/labels/caps before mutation/cleanup. Record the actual API1.45 daemon tuple without broad parity.
 No existing workload is a fixture. Safe finite codes, no raw logs/inspect/error export, and unchanged observation
 packages are acceptance requirements. No public metrics/listener/audit API is added.
 

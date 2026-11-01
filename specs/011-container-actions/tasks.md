@@ -25,12 +25,13 @@
   cb5331dc6a5efbf0ed55d94490bcdad64031ecaa after all18 checks/all10 workflows passed. No action activation follows.
 - [ ] Prove unknown outcomes cannot auto-retry, unlock silently or lose their dispatch audit.
 - [ ] Implement/test separate broker process, protected state and fixed local Docker adapter.
-- [ ] Obtain exact root/independent review of [fixed Engine contract](engine-adapter.md)/ADR029; journal all-green merge
-  precedes implementation. Drafting is not approval for code or native mutations.
+- [x] Obtain exact root/independent review of [fixed Engine contract](engine-adapter.md)/ADR029 for unused Linux
+  implementation only; journal all-green merge is complete. Actual native mutations remain separately gated.
 - [ ] TDD the unused Linux adapter's fixed1.45 HTTP, full-ID/selected-field/witness checks, bounds and no-retry faults;
   preserve observation APIs/dependencies and prove Worker+real-journal replay safety.
-- [ ] Separately approve/review then execute one exact image/full-ID/label-owned disposable native fixture with fixed
-  caps; record actual tested daemon/API1.45 evidence and cleanup without touching any other workload.
+- [ ] Separately approve/review then execute at most two sequential exact image/full-ID/label-owned native fixture
+  modes (graceful and ignored signal), one at a time with fixed caps and verified cleanup between; record actual
+  tested daemon/API1.45 evidence without touching any other workload.
 - [ ] Prove start/stop/restart, grace and external-state-race semantics with disposable native fixtures.
 - [ ] Integrate explicit enrollment, grant/revoke and execution transport without observation-credential reuse.
 - [ ] Add accessible permission-filtered UI and independent responsive UX review.

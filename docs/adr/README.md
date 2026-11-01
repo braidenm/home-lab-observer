@@ -30,6 +30,6 @@
 | [026](026-docker-reader-startup-barrier.md) | Accepted for dormant implementation | Reuse same-process startup rendezvous before reader Engine I/O; no second permit protocol |
 | [027](027-bounded-action-dispatch-and-uncertainty.md) | Proposed | Coordinate finite grace, immutable action targets/parameters and a durable unknown-outcome fence; no action activation |
 | [028](028-dormant-linux-action-journal.md) | Accepted for unused Linux implementation only | Private bounded SQLite action journal; unknown permits survive Close/crash/expiry, no reconciliation or activation |
-| [029](029-fixed-linux-action-engine.md) | Draft | Fixed Linux-only API1.45 action adapter and exact disposable proof; no installed authority or real mutation approval |
+| [029](029-fixed-linux-action-engine.md) | Accepted for unused Linux implementation only | Fixed API1.45 action adapter; exact disposable execution and installed authority remain separately gated |
 
 Accepted ADRs are immutable except for status and supersession links. Material changes require a new ADR.

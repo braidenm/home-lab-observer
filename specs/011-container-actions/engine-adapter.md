@@ -1,8 +1,8 @@
 # Dormant fixed Linux Docker Engine adapter
 
-Date: 2026-11-01. Status: draft for exact coordinator/independent review, not code or mutation approval.
-Decision candidate: [ADR 029](../../docs/adr/029-fixed-linux-action-engine.md). The complete dormant journal must pass
-all current-head CI and merge before adapter implementation. Exact document review is a separate prerequisite.
+Date: 2026-11-01. Status: accepted for unused Linux adapter implementation only after exact coordinator/independent review.
+Decision: [ADR 029](../../docs/adr/029-fixed-linux-action-engine.md). The dormant journal's current-head checks and merge
+prerequisite are complete. Actual native-fixture execution still requires reviewed source and separate approval.
 The full broker, credentials, grants, authenticated recovery, OS isolation, installation and activation remain gated.
 
 ## Closed surface and authority
@@ -69,8 +69,11 @@ owner/ancestry adaptation is not acceptance of the rootful production namespace;
 The later native Desktop fixture uses its explicitly approved actual rootful socket metadata, canonicalizing only
 its known test namespace alias, never relaxing public ancestry rules or changing daemon socket/group permissions.
 
-Only after test/source approval, create one uniquely named/labelled disposable container from a source-built static
-scratch fixture image pinned to its exact inspected image ID. Use UID65532, read-only root, network none, no ports,
+Only after test/source approval, create **one fixture at a time**, with at most two sequential source-built modes:
+default graceful signal handling, then ignored SIGTERM. A single immutable container need not expose a mode-switch
+control surface. Each has a separate uniquely named/labelled full ID; verify and clean up the first before creating
+the second, never a concurrent fleet. Pin the static scratch fixture image to its exact inspected image ID.
+Use UID65532, read-only root, network none, no ports,
 host mounts/devices, all capabilities dropped, no-new-privileges, PID limit64, memory32 MiB/no extra swap and CPU0.25.
 Before every fixture mutation AND cleanup verify captured full ID, unique run label, exact image identity and fixed
 isolation settings. A label/name alone never grants production action authority. Uncertain ownership aborts; do not
@@ -79,9 +82,9 @@ additional adapter operations. Cleanup targets only the exact verified fixture I
 
 Exercise all three independently requested operations through Worker + the real journal + the actual adapter,
 including graceful stop and exact retained replay without another restart (fixture StartedAt plus call-count proof).
-Test a fixture that ignores its configured stop signal to verify finite grace without a separate kill endpoint.
+The second fixed mode ignores its configured stop signal to verify finite grace without a separate kill endpoint.
 Prove intent/storage failure prevents dispatch and retained uncertainty never repeats a mutation. No real mutation,
-native success, owner authentication or remote authorization is claimed by this draft. Root-access test invocation
+native success, owner authentication or remote authorization is claimed by accepting this contract. Root-access test invocation
 against a local disposable fixture requires separate explicit approval; it is not permission to operate host workloads.
 
 ## Delivery and rollback

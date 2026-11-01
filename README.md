@@ -81,11 +81,14 @@ their own adapters and permission models; none will be exposed through a generic
 See the [threat model](docs/security/threat-model.md) for the separation between observation and future control.
 
 An [unused typed coordinator](specs/011-container-actions/worker-core.md) now tests operation permissions,
-deadlines and intent-before-dispatch ordering with synthetic adapters. It has no Docker transport, durable store,
-listener or installed role; this is not a management release and grants no additional access to an installed agent.
+deadlines and intent-before-dispatch ordering with synthetic adapters. The separately merged
+[unused durable journal](specs/011-container-actions/action-journal.md) adds persistence, but there is no installed
+transport/store composition, listener or action role. This is not a management release and grants no additional
+access to an installed agent.
 
-The [fixed Linux Engine adapter proposal](specs/011-container-actions/engine-adapter.md) is still a draft after the
-separately reviewed dormant journal: exact typed operations and disposable proof only, not an installed broker,
+The [fixed Linux Engine adapter contract](specs/011-container-actions/engine-adapter.md) is accepted for unused Linux
+implementation only after the separately reviewed dormant journal: exact typed operations and disposable proof,
+not an installed broker,
 permission grant, action release or approval to change an existing container. Current monitoring remains read-only.
 
 The [delivery roadmap](docs/delivery-plan.md) prioritizes completing real hosted connection/sharing acceptance, then separately permissioned Docker
