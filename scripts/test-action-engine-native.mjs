@@ -1,0 +1,327 @@
+// Manual, separately reviewed disposable-fixture proof. Never an automatic PR job.
+import { spawnSync } from 'node:child_process';
+import { createHash, randomUUID } from 'node:crypto';
+import { constants as fsConstants } from 'node:fs';
+import { chmod, copyFile, lstat, mkdir, mkdtemp, open, readFile, realpath, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = fileURLToPath(new URL('..', import.meta.url));
+export const fullID = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+export const imageID = value => typeof value === 'string' && /^sha256:[a-f0-9]{64}$/.test(value);
+const runID = value => typeof value === 'string' && /^[a-f0-9]{32}$/.test(value);
+class Refusal extends Error { constructor(code) { super(code); this.code = code; } }
+function need(value, code) { if (!value) throw new Refusal(code); }
+export const buildxPin = Object.freeze({ version: 'v0.38.1', size: 68366498, sha256: 'e25d5cd675092bb5d1d03632fdc46cdf3fede7b514dc5f023a105e00d3ce5ad4' });
+export function nativeOptions(argv, platform) {
+  need(argv[0] === '--allow-owned-fixtures', 'EXECUTION_NOT_APPROVED');
+  if (argv.length === 1) return { buildxSource: null };
+  need(argv.length === 3 && argv[1] === '--buildx-source' && platform === 'linux', 'ARGUMENTS_REFUSED');
+  const source = argv[2];
+  need(typeof source === 'string' && path.posix.isAbsolute(source) && path.posix.normalize(source) === source && !source.includes('\0'), 'BUILDX_SOURCE_REFUSED');
+  return { buildxSource: source };
+}
+export function approvedBuildxSource(file, parent, digest) {
+  need(file?.isFile() && !file.isSymbolicLink() && file.nlink === 1 && file.uid === 0 && (file.mode & 0o7777) === 0o700 && file.size === buildxPin.size &&
+    parent?.isDirectory() && !parent.isSymbolicLink() && parent.uid === 0 && (parent.mode & 0o7777) === 0o700, 'BUILDX_SOURCE_REFUSED');
+  if (digest !== undefined) need(digest === buildxPin.sha256, 'BUILDX_DIGEST_REFUSED');
+}
+async function pinnedBuildx(filename) {
+  let handle;
+  try {
+    need(await realpath(filename) === filename, 'BUILDX_SOURCE_REFUSED');
+    const parent = await lstat(path.dirname(filename));
+    const named = await lstat(filename);
+    approvedBuildxSource(named, parent);
+    handle = await open(filename, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+    const before = await handle.stat();
+    approvedBuildxSource(before, parent);
+    need(before.dev === named.dev && before.ino === named.ino, 'BUILDX_SOURCE_REFUSED');
+    const hash = createHash('sha256');
+    let bytes = 0;
+    for await (const chunk of handle.createReadStream({ start: 0, end: buildxPin.size, autoClose: false })) {
+      bytes += chunk.length;
+      need(bytes <= buildxPin.size, 'BUILDX_SOURCE_REFUSED');
+      hash.update(chunk);
+    }
+    need(bytes === buildxPin.size, 'BUILDX_SOURCE_REFUSED');
+    approvedBuildxSource(await handle.stat(), parent, hash.digest('hex'));
+    return { version: buildxPin.version, sha256: buildxPin.sha256 };
+  } catch (error) {
+    if (error instanceof Refusal) throw error;
+    throw new Refusal('BUILDX_SOURCE_REFUSED');
+  } finally { if (handle) await handle.close(); }
+}
+export async function installBuildxSource(source, config) {
+  const receipt = await pinnedBuildx(source);
+  const directory = path.join(config, 'cli-plugins');
+  await mkdir(directory, { mode: 0o700 });
+  const target = path.join(directory, 'docker-buildx');
+  await copyFile(source, target, fsConstants.COPYFILE_EXCL);
+  await chmod(target, 0o700);
+  await pinnedBuildx(target);
+  return { target, receipt };
+}
+
+export function cleanEnvironment(parent) {
+  // No Docker/TLS/context/proxy/SSH/credential-helper or Go flag inheritance.
+  const result = {};
+  for (const name of ['PATH', 'Path', 'SystemRoot', 'WINDIR', 'ComSpec', 'PATHEXT', 'TEMP', 'TMP', 'HOME', 'USERPROFILE', 'LOCALAPPDATA', 'APPDATA']) {
+    if (typeof parent[name] === 'string') result[name] = parent[name];
+  }
+  result.LC_ALL = 'C';
+  return result;
+}
+export function fixedEndpoint(platform, canonical = '') {
+  if (platform === 'win32') return 'npipe:////./pipe/dockerDesktopLinuxEngine';
+  need(platform === 'linux' && (canonical === '/run/docker.sock' || canonical.startsWith('/mnt/wsl/docker-desktop/')) &&
+    /^\/[A-Za-z0-9_./-]+$/.test(canonical) && path.posix.normalize(canonical) === canonical, 'ENDPOINT_REFUSED');
+  return `unix://${canonical}`;
+}
+export function versionTuple(raw) {
+  need(typeof raw === 'string' && raw.length < 160, 'VERSION_REFUSED');
+  const value = raw.trim();
+  need(/^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(?:[-+][A-Za-z0-9.-]{1,32})?\|[1-9][0-9]{0,2}\.[0-9]{1,3}\|[1-9][0-9]{0,2}\.[0-9]{1,3}\|linux\|amd64$/.test(value), 'VERSION_REFUSED');
+  const [, max, min] = value.split('|');
+  const api = x => { const [a, b] = x.split('.').map(Number); need(`${a}.${b}` === x, 'VERSION_REFUSED'); return a * 1000 + b; };
+  need(api(min) <= 1045 && api(max) >= 1045 && api(min) <= api(max), 'VERSION_REFUSED');
+  return value;
+}
+export function approvedDefaultBuilder(output, endpoint, contextHost) {
+  if (typeof output !== 'string' || Buffer.byteLength(output) > 16384 || contextHost !== endpoint) return false;
+  const lines = output.split(/\r?\n/).map(line => line.trim());
+  const values = key => lines.filter(line => line.startsWith(`${key}:`)).map(line => line.slice(key.length + 1).trim());
+  const names = values('Name'), drivers = values('Driver'), endpoints = values('Endpoint'), status = values('Status');
+  return values('Error').length === 0 && lines.filter(line => line === 'Nodes:').length === 1 &&
+    names.length === 2 && names.every(name => name === 'default') && drivers.length === 1 && drivers[0] === 'docker' &&
+    endpoints.length === 1 && (endpoints[0] === 'default' || endpoints[0] === endpoint) && status.length === 1 && status[0] === 'running';
+}
+export function createArgs(id, run, image, mode) {
+  need(runID(run) && imageID(image) && ['graceful', 'ignore'].includes(mode) && id === `hlo-action-${run}-${mode}`, 'CREATE_REFUSED');
+  return ['create', '--pull=never', '--name', id, '--label', `hlo.action-fixture=${run}`, '--network=none', '--read-only',
+    '--cap-drop=ALL', '--security-opt=no-new-privileges:true', '--pids-limit=64', '--memory=32m', '--memory-swap=32m',
+    '--cpus=0.25', '--restart=no', '--log-driver=none', image, mode];
+}
+export function ownedContainer(c, expected) {
+  const h = c?.HostConfig, cfg = c?.Config;
+  const empty = value => value == null || (Array.isArray(value) ? value.length === 0 : typeof value === 'object' && Object.keys(value).length === 0);
+  return fullID(expected?.id) && imageID(expected?.image) && runID(expected?.run) && ['graceful', 'ignore'].includes(expected?.mode) &&
+    c?.Id === expected.id && c.Image === expected.image && cfg?.User === '65532:65532' &&
+    JSON.stringify(cfg.Entrypoint) === '["/fixture"]' && JSON.stringify(cfg.Cmd) === JSON.stringify([expected.mode]) &&
+    cfg.Labels?.['hlo.action-fixture'] === expected.run && Object.keys(cfg.Labels).length === 1 &&
+    h?.NetworkMode === 'none' && h.ReadonlyRootfs === true && h.Privileged === false && h.PublishAllPorts === false && h.AutoRemove === false &&
+    h.Memory === 33554432 && h.MemorySwap === 33554432 && h.NanoCpus === 250000000 && h.PidsLimit === 64 &&
+    empty(h.CapAdd) && JSON.stringify(h.CapDrop) === '["ALL"]' && JSON.stringify(h.SecurityOpt) === '["no-new-privileges:true"]' &&
+    [h.Binds, h.VolumesFrom, h.Devices, h.DeviceRequests, h.PortBindings, h.Tmpfs, c.Mounts].every(empty) &&
+    h.PidMode === '' && h.IpcMode === 'private' && h.UTSMode === '' && h.RestartPolicy?.Name === 'no' && h.LogConfig?.Type === 'none';
+}
+export function cleanupArgs(container, expected) {
+  need(ownedContainer(container, expected), 'CLEANUP_IDENTITY_REFUSED');
+  return ['rm', '--force', expected.id];
+}
+export function resultReceipt(source, version, image, hashes, run, fixtures, buildx = null) {
+  need(/^[a-f0-9]{40}$/.test(source) && imageID(image) && runID(run) && fullID(hashes?.fixture) && fullID(hashes?.test_binary), 'RECEIPT_REFUSED');
+  need(Array.isArray(fixtures) && fixtures.length === 2 &&
+    fixtures.every((entry, index) => entry && typeof entry === 'object' && !Array.isArray(entry) && entry.mode === ['graceful', 'ignore'][index] && fullID(entry.fullID) && entry.removed_acknowledged === true &&
+      Object.keys(entry).sort().join('|') === 'fullID|mode|removed_acknowledged') && fixtures[0].fullID !== fixtures[1].fullID, 'RECEIPT_REFUSED');
+  need(buildx === null || (buildx.version === buildxPin.version && buildx.sha256 === buildxPin.sha256 && Object.keys(buildx).sort().join('|') === 'sha256|version'), 'RECEIPT_REFUSED');
+  const record = { schema: 'hlo-owned-action-fixture/v1', source, version: versionTuple(version), image, buildx,
+    hashes: { fixture: hashes.fixture, test_binary: hashes.test_binary }, run_id: run, fixtures,
+    cases: 2, scope: 'DISPOSABLE_PROTOCOL_PROOF_NOT_AUTHORITY_OR_RELEASE' };
+  need(Buffer.byteLength(JSON.stringify(record), 'utf8') <= 2048, 'RECEIPT_REFUSED');
+  return record;
+}
+export function stageParent(platform, windowsTemporary) {
+  need(platform === 'linux' || platform === 'win32', 'PLATFORM_REFUSED');
+  return platform === 'linux' ? '/var/tmp' : windowsTemporary;
+}
+export function stageReference(directory) {
+  const reference = path.basename(directory);
+  need(/^hlo-action-engine-[A-Za-z0-9]{6}$/.test(reference), 'STAGE_REFUSED');
+  return reference;
+}
+export function createdReceipt(source, expected) {
+  need(typeof source === 'string' && /^[a-f0-9]{40}$/.test(source) && fullID(expected?.id) && imageID(expected?.image) &&
+    runID(expected?.run) && ['graceful', 'ignore'].includes(expected?.mode) && Object.keys(expected).sort().join('|') === 'id|image|mode|run', 'CREATED_AUDIT_REFUSED');
+  const record = { schema: 'hlo-created-action-fixture/v1', source, run_id: expected.run, full_id: expected.id,
+    image: expected.image, mode: expected.mode, scope: 'CAPTURED_ID_NOT_VERIFIED_OWNERSHIP' };
+  need(Buffer.byteLength(JSON.stringify(record)) <= 512, 'CREATED_AUDIT_REFUSED');
+  return record;
+}
+export function creationIntent(source, run, image, mode) {
+  need(typeof source === 'string' && /^[a-f0-9]{40}$/.test(source) && runID(run) && imageID(image) &&
+    ['graceful', 'ignore'].includes(mode), 'CREATED_AUDIT_REFUSED');
+  const record = { schema: 'hlo-action-fixture-intent/v1', source, run_id: run, image, mode,
+    name: `hlo-action-${run}-${mode}`, scope: 'CREATE_INTENT_NOT_CREATION_ACKNOWLEDGEMENT' };
+  need(Buffer.byteLength(JSON.stringify(record)) <= 512, 'CREATED_AUDIT_REFUSED');
+  return record;
+}
+async function writePrivateAudit(directory, filename, record) {
+  let handle, directoryHandle;
+  try {
+    handle = await open(path.join(directory, filename), 'wx', 0o600);
+    await handle.writeFile(JSON.stringify(record) + '\n');
+    await handle.sync();
+    if (process.platform === 'linux') {
+      directoryHandle = await open(directory, fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW);
+      await directoryHandle.sync();
+    }
+  } catch { throw new Refusal('CREATED_AUDIT_REFUSED'); }
+  finally { if (handle) await handle.close(); if (directoryHandle) await directoryHandle.close(); }
+}
+export async function recordCreatedFixture(directory, source, expected) {
+  const record = createdReceipt(source, expected);
+  await writePrivateAudit(directory, `created-${record.mode}.json`, record);
+}
+export async function recordCreationIntent(directory, source, run, image, mode) {
+  const record = creationIntent(source, run, image, mode);
+  await writePrivateAudit(directory, `intent-${record.mode}.json`, record);
+}
+
+function command(program, args, env, code, timeout = 120000) {
+  const result = spawnSync(program, args, { cwd: root, env, encoding: 'utf8', timeout, maxBuffer: 512 * 1024, windowsHide: true });
+  // Never include captured compiler/daemon/test output in an exception or log.
+  if (result.error || result.status !== 0 || typeof result.stdout !== 'string') {
+    if (code === 'NATIVE_FIXTURE_REFUSED' && typeof result.stdout === 'string') {
+      const stages = result.stdout.split(/\r?\n/).filter(line => /^HLO_ENGINE_NATIVE_STAGE=(VERSION|IDENTITY|START|STOP|RESTART|REPLAY)$/.test(line));
+      if (stages.length) throw new Refusal(`NATIVE_${stages.at(-1).split('=')[1]}_REFUSED`);
+    }
+    throw new Refusal(code);
+  }
+  return result.stdout;
+}
+function exactMarker(output, prefix) {
+  const matches = output.split(/\r?\n/).filter(line => line.startsWith(prefix));
+  need(matches.length === 1, 'NATIVE_MARKER_REFUSED');
+  return matches[0].slice(prefix.length);
+}
+export function wslPathArgs(filename) {
+  need(typeof filename === 'string' && /^[A-Za-z]:[\\/]/.test(filename) && !filename.includes('\0'), 'WSL_PATH_REFUSED');
+  return ['-d', 'Ubuntu', '--user', 'root', '--exec', '/usr/bin/wslpath', '-a', '-u', filename];
+}
+export function wslNativeArgs(binary, variables) {
+  need(typeof binary === 'string' && /^\/mnt\/[a-z]\/[A-Za-z0-9_./ -]+$/.test(binary) && !binary.includes('..'), 'WSL_PATH_REFUSED');
+  const keys = Object.keys(variables);
+  need(keys.every(key => ['HLO_ENGINE_NATIVE_PHASE', 'HLO_ENGINE_NATIVE_VERSION', 'HLO_ENGINE_NATIVE_ID', 'HLO_ENGINE_NATIVE_IMAGE', 'HLO_ENGINE_NATIVE_RUN'].includes(key)), 'NATIVE_ARGUMENTS_REFUSED');
+  const phase = variables.HLO_ENGINE_NATIVE_PHASE;
+  need(['version', 'graceful', 'ignore'].includes(phase), 'NATIVE_ARGUMENTS_REFUSED');
+  versionTuple(variables.HLO_ENGINE_NATIVE_VERSION);
+  need(phase === 'version' ? keys.length === 2 : keys.length === 5 && fullID(variables.HLO_ENGINE_NATIVE_ID) && imageID(variables.HLO_ENGINE_NATIVE_IMAGE) && runID(variables.HLO_ENGINE_NATIVE_RUN), 'NATIVE_ARGUMENTS_REFUSED');
+  return ['-d', 'Ubuntu', '--user', 'root', '--exec', '/usr/bin/env', '-i',
+    ...Object.entries(variables).map(([key, value]) => `${key}=${value}`), binary,
+    '-test.run=^TestOwnedNativeFixture$', '-test.count=1', '-test.timeout=150s'];
+}
+
+export async function main(argv = process.argv.slice(2)) {
+  const options = nativeOptions(argv, process.platform);
+  need(['linux', 'win32'].includes(process.platform) && process.arch === 'x64', 'PLATFORM_REFUSED');
+  const env = cleanEnvironment(process.env);
+  need(command('git', ['status', '--porcelain', '--untracked-files=all'], env, 'SOURCE_REFUSED').trim() === '', 'SOURCE_REFUSED');
+  const source = command('git', ['rev-parse', 'HEAD'], env, 'SOURCE_REFUSED').trim();
+  need(/^[a-f0-9]{40}$/.test(source), 'SOURCE_REFUSED');
+  need(/^go version go1\.27\.3 (linux|windows)\/amd64\s*$/.test(command('go', ['version'], env, 'TOOLCHAIN_REFUSED')), 'TOOLCHAIN_REFUSED');
+  const temporary = await mkdtemp(path.join(stageParent(process.platform, tmpdir()), 'hlo-action-engine-'));
+  await chmod(temporary, 0o700);
+  const stage = await lstat(temporary);
+  need(stage.isDirectory() && !stage.isSymbolicLink() && (process.platform !== 'linux' ||
+    (stage.uid === process.getuid() && (stage.mode & 0o7777) === 0o700 && await realpath(temporary) === temporary)), 'STAGE_REFUSED');
+  console.log(`ACTION_ENGINE_NATIVE_STAGE=${stageReference(temporary)}`);
+  const config = path.join(temporary, 'docker-config');
+  await mkdir(config, { mode: 0o700 });
+  await writeFile(path.join(config, 'config.json'), '{}\n', { flag: 'wx', mode: 0o600 });
+  const privateBuildx = options.buildxSource ? await installBuildxSource(options.buildxSource, config) : null;
+  const endpoint = fixedEndpoint(process.platform, process.platform === 'linux' ? await realpath('/var/run/docker.sock') : '');
+  const docker = async (args, code, timeout) => {
+    need((await readFile(path.join(config, 'config.json'), 'utf8')) === '{}\n', 'CONFIG_REFUSED');
+    if (privateBuildx) await pinnedBuildx(privateBuildx.target);
+    return command('docker', ['--config', config, '--host', endpoint, ...args], env, code, timeout);
+  };
+  const cliVersion = () => docker(['version', '--format', '{{.Server.Version}}|{{.Server.APIVersion}}|{{.Server.MinAPIVersion}}|{{.Server.Os}}|{{.Server.Arch}}'], 'CLI_VERSION_REFUSED');
+  const version = versionTuple(await cliVersion());
+  if (privateBuildx) need(/^github\.com\/docker\/buildx v0\.38\.1 [a-f0-9]{7,40}$/.test((await docker(['buildx', 'version'], 'BUILDX_VERSION_REFUSED')).trim()), 'BUILDX_VERSION_REFUSED');
+  const buildEnv = { ...env, GOOS: 'linux', GOARCH: 'amd64', CGO_ENABLED: '0', GOPROXY: 'off', GOSUMDB: 'off',
+    GOTOOLCHAIN: 'local', GOENV: 'off', GOFLAGS: '-mod=readonly', GOMAXPROCS: '2', GOMEMLIMIT: '256MiB' };
+  command('go', ['mod', 'verify'], buildEnv, 'MODULES_REFUSED');
+  const contextDir = path.join(temporary, 'context');
+  await mkdir(contextDir, { mode: 0o700 });
+  await copyFile(path.join(root, 'scripts/fixtures/action-engine/Dockerfile'), path.join(contextDir, 'Dockerfile'));
+  command('go', ['build', '-trimpath', '-o', path.join(contextDir, 'fixture'), './scripts/fixtures/action-engine'], buildEnv, 'FIXTURE_BUILD_REFUSED');
+  const testBinary = path.join(temporary, 'actionengine.test');
+  command('go', ['test', '-c', '-trimpath', '-o', testBinary, './internal/actionengine'], buildEnv, 'TEST_BUILD_REFUSED');
+  await chmod(testBinary, 0o700);
+  const hashes = {};
+  for (const [name, filename] of [['fixture', path.join(contextDir, 'fixture')], ['test_binary', testBinary]]) {
+    const stat = await lstat(filename);
+    need(stat.isFile() && !stat.isSymbolicLink() && stat.nlink === 1 && stat.size > 0 && stat.size < 32 * 1024 * 1024, 'BINARY_REFUSED');
+    hashes[name] = createHash('sha256').update(await readFile(filename)).digest('hex');
+  }
+  need((await readFile(path.join(contextDir, 'Dockerfile'), 'utf8')).replaceAll('\r\n', '\n') ===
+    'FROM scratch\nCOPY fixture /fixture\nUSER 65532:65532\nENTRYPOINT ["/fixture"]\n', 'DOCKERFILE_REFUSED');
+  let linuxBinary = testBinary;
+  if (process.platform === 'win32') {
+    linuxBinary = command('wsl.exe', wslPathArgs(testBinary), env, 'WSL_PATH_REFUSED').trim();
+    need(/^\/mnt\/[a-z]\/[A-Za-z0-9_./ -]+$/.test(linuxBinary) && !linuxBinary.includes('..'), 'WSL_PATH_REFUSED');
+  }
+  const native = (phase, extra = {}) => {
+    const variables = { HLO_ENGINE_NATIVE_PHASE: phase, HLO_ENGINE_NATIVE_VERSION: version, ...extra };
+    const testArgs = ['-test.run=^TestOwnedNativeFixture$', '-test.count=1', '-test.timeout=150s'];
+    if (process.platform === 'win32') {
+      return command('wsl.exe', wslNativeArgs(linuxBinary, variables), env, 'NATIVE_FIXTURE_REFUSED', 180000);
+    }
+    return command(linuxBinary, testArgs, { ...env, ...variables }, 'NATIVE_FIXTURE_REFUSED', 180000);
+  };
+  need(versionTuple(exactMarker(native('version'), 'HLO_ENGINE_NATIVE_VERSION=')) === version, 'DAEMON_MISMATCH');
+  const contextHost = (await docker(['context', 'inspect', 'default', '--format', '{{.Endpoints.docker.Host}}'], 'BUILDER_REFUSED')).trim();
+  const builder = await docker(['buildx', 'inspect', 'default'], 'BUILDER_REFUSED');
+  need(approvedDefaultBuilder(builder, endpoint, contextHost), 'BUILDER_REFUSED');
+  const run = randomUUID().replaceAll('-', '');
+  const image = (await docker(['buildx', 'build', '--builder', 'default', '--network=none', '--pull=false', '--quiet', '--tag', `hlo-action-fixture:${run}`, '--file', path.join(contextDir, 'Dockerfile'), contextDir], 'IMAGE_BUILD_REFUSED')).trim();
+  need(imageID(image), 'IMAGE_ID_REFUSED');
+  need((await docker(['image', 'inspect', '--format', '{{.Id}}', image], 'IMAGE_ID_REFUSED')).trim() === image, 'IMAGE_ID_REFUSED');
+  let cases = 0;
+  const removed = [];
+  for (const mode of ['graceful', 'ignore']) {
+    need(versionTuple(await cliVersion()) === version && versionTuple(exactMarker(native('version'), 'HLO_ENGINE_NATIVE_VERSION=')) === version, 'DAEMON_MISMATCH');
+    const name = `hlo-action-${run}-${mode}`;
+    await recordCreationIntent(temporary, source, run, image, mode);
+    const id = (await docker(createArgs(name, run, image, mode), 'CREATE_REFUSED')).trim();
+    need(fullID(id), 'CREATED_ID_REFUSED');
+    const expected = { id, run, image, mode };
+    await recordCreatedFixture(temporary, source, expected);
+    const inspect = async () => {
+      const raw = await docker(['inspect', '--type=container', id], 'OWNERSHIP_REFUSED');
+      let result;
+      try { result = JSON.parse(raw); } catch { throw new Refusal('OWNERSHIP_REFUSED'); }
+      need(Array.isArray(result) && result.length === 1 && ownedContainer(result[0], expected), 'OWNERSHIP_REFUSED');
+      return result[0];
+    };
+    let primary;
+    try {
+      await inspect();
+      const output = native(mode, { HLO_ENGINE_NATIVE_ID: id, HLO_ENGINE_NATIVE_IMAGE: image, HLO_ENGINE_NATIVE_RUN: run });
+      need(exactMarker(output, 'HLO_ENGINE_NATIVE_CASE_PASS=') === mode, 'NATIVE_MARKER_REFUSED');
+      cases++;
+    } catch (error) { primary = error; }
+    try {
+      need(versionTuple(await cliVersion()) === version, 'DAEMON_MISMATCH');
+      await docker(cleanupArgs(await inspect(), expected), 'CLEANUP_REFUSED');
+      // Acknowledgement only. Independent exact-ID absence checks are separate.
+      removed.push({ mode, fullID: id, removed_acknowledged: true });
+    } catch {
+      if (primary) console.error(`ACTION_ENGINE_NATIVE_PRIMARY=${primary instanceof Refusal ? primary.code : 'UNEXPECTED_REFUSAL'}`);
+      throw new Refusal('CLEANUP_REFUSED_RETAINED_FIXTURE');
+    }
+    if (primary) throw primary;
+  }
+  need(command('git', ['status', '--porcelain', '--untracked-files=all'], env, 'SOURCE_REFUSED').trim() === '', 'SOURCE_REFUSED');
+  need(cases === 2, 'RECEIPT_REFUSED');
+  await writeFile(path.join(temporary, 'result.json'), JSON.stringify(resultReceipt(source, version, image, hashes, run, removed, privateBuildx?.receipt ?? null)) + '\n', { flag: 'wx', mode: 0o600 });
+  // Keep the private source-built image/context/result for audit. Never prune
+  // images or enumerate/delete another workload to clean a test environment.
+  console.log('ACTION_ENGINE_NATIVE_PASS cases=2 scope=DISPOSABLE_PROTOCOL_ONLY');
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch(error => { console.error(`ACTION_ENGINE_NATIVE_REFUSED=${error instanceof Refusal ? error.code : 'UNEXPECTED_REFUSAL'}`); process.exitCode = 1; });
+}

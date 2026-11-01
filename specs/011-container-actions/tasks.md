@@ -21,10 +21,25 @@
   two uncertainty-retaining permits, 1,000 records, 30-day retention/floor and no unknown-clear method.
 - [x] Local proof: derived DB+journal ceiling plus honestly bounded before/after samples, maximal terminal completion,
   actual private-fixture ENOSPC, commit uncertainty, hot/subprocess crash recovery and no replay/new-key bypass.
-- [ ] Obtain exact final journal root/independent code review and fresh CI before any fixed Engine adapter or publication.
+- [x] Obtain exact final journal root/independent code review and fresh CI: PR161 merged as
+  cb5331dc6a5efbf0ed55d94490bcdad64031ecaa after all18 checks/all10 workflows passed. No action activation follows.
 - [ ] Prove unknown outcomes cannot auto-retry, unlock silently or lose their dispatch audit.
 - [ ] Implement/test separate broker process, protected state and fixed local Docker adapter.
-- [ ] Prove start/stop/restart, grace and external-state-race semantics with disposable native fixtures.
+- [x] Obtain exact root/independent review of [fixed Engine contract](engine-adapter.md)/ADR029 for unused Linux
+  implementation only; journal all-green merge is complete. Actual native mutations remain separately gated.
+- [x] Locally TDD the unused Linux adapter's fixed1.45 HTTP, full-ID/selected-field/witness checks, bounds and no-retry
+  faults; preserve observation APIs/dependencies and prove Worker+real-journal replay safety. Native execution is separate.
+- [x] Obtain exact final adapter/native-harness root/independent code review before real fixture execution; fresh PR CI
+  and publication remain separate delivery gates.
+- [x] Separately approve/review then execute at most two sequential exact image/full-ID/label-owned native fixture
+  modes (graceful and ignored signal), one at a time with fixed caps and verified cleanup between; record actual
+  tested Docker29.1.3/API1.45 evidence without touching any other workload. Both exact fixtures independently absent
+  after acknowledged removal; see [bounded proof and limitations](engine-adapter.md#supervised-disposable-linux-proof).
+- [x] Prove distinct start/stop/restart, graceful/forced stop and retained replay without another restart on disposable
+  native fixtures. External-state checks remain non-atomic as documented in ADR027; this is not remote authorization,
+  installed confinement, a release/canary gate or cross-platform parity.
+- [ ] Exercise controlled external-state races on owned native fixtures; current fake HTTP304/state-race coverage and
+  successful basic native operations do not prove this acceptance case or atomic state changes.
 - [ ] Integrate explicit enrollment, grant/revoke and execution transport without observation-credential reuse.
 - [ ] Add accessible permission-filtered UI and independent responsive UX review.
 - [ ] Document enable/disable/rotate/upgrade/recover/remove and known authority/health limitations.
