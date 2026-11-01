@@ -24,6 +24,10 @@ type fixture struct {
 	acquireError error
 	inspectError bool
 	intentHook   func()
+	acquireHook  func()
+	existingHook func()
+	engineIDs    []string
+	graces       []uint8
 	request      Request
 	binding      Binding
 	delivery     Delivery
@@ -55,9 +59,17 @@ func (f *fixture) Acquire(_ context.Context, key Key) (Attempt, error) {
 		return nil, ErrIdentityConflict
 	}
 	f.keys = append(f.keys, key)
+	if f.acquireHook != nil {
+		f.acquireHook()
+	}
 	return f, nil
 }
-func (f *fixture) Existing() Code { return f.previous }
+func (f *fixture) Existing() Code {
+	if f.existingHook != nil {
+		f.existingHook()
+	}
+	return f.previous
+}
 func (f *fixture) Intent(context.Context) error {
 	f.events = append(f.events, "intent")
 	f.previous = OutcomeUnknown
@@ -79,8 +91,9 @@ func (f *fixture) Finish(_ context.Context, code Code) error {
 	return nil
 }
 func (f *fixture) Close() { f.events = append(f.events, "close") }
-func (f *fixture) Inspect(context.Context, string) (State, error) {
+func (f *fixture) Inspect(_ context.Context, id string) (State, error) {
 	f.events = append(f.events, "inspect")
+	f.engineIDs = append(f.engineIDs, id)
 	if f.inspectError {
 		return "", errors.New("private-inspect-canary")
 	}
@@ -94,9 +107,20 @@ func (f *fixture) mutate(op string) error {
 	}
 	return nil
 }
-func (f *fixture) Start(context.Context, string) error          { return f.mutate("start") }
-func (f *fixture) Stop(context.Context, string, uint8) error    { return f.mutate("stop") }
-func (f *fixture) Restart(context.Context, string, uint8) error { return f.mutate("restart") }
+func (f *fixture) Start(_ context.Context, id string) error {
+	f.engineIDs = append(f.engineIDs, id)
+	return f.mutate("start")
+}
+func (f *fixture) Stop(_ context.Context, id string, grace uint8) error {
+	f.engineIDs = append(f.engineIDs, id)
+	f.graces = append(f.graces, grace)
+	return f.mutate("stop")
+}
+func (f *fixture) Restart(_ context.Context, id string, grace uint8) error {
+	f.engineIDs = append(f.engineIDs, id)
+	f.graces = append(f.graces, grace)
+	return f.mutate("restart")
+}
 func (f *fixture) run(ctx context.Context) Code {
 	return New(f, f, f, func() time.Time { return f.now }).Execute(ctx, f.request, f.binding, f.delivery)
 }
@@ -151,6 +175,16 @@ func TestOperationStateMatrix(t *testing.T) {
 					joined := strings.Join(f.events, ",")
 					if joined != "auth,acquire,inspect,auth,intent,"+call+",finish,close" {
 						t.Fatalf("bad ordering: %s", joined)
+					}
+				}
+				for _, id := range f.engineIDs {
+					if id != f.binding.ContainerID {
+						t.Fatal("Engine received substituted identity")
+					}
+				}
+				for _, grace := range f.graces {
+					if grace != f.request.GraceSeconds {
+						t.Fatal("Engine received substituted grace")
 					}
 				}
 			})
@@ -346,6 +380,39 @@ func TestBoundaryFailures(t *testing.T) {
 	f.binding.GraceSeconds = 1
 	if f.run(context.Background()) != Restarted {
 		t.Fatal("minimum grace rejected")
+	}
+}
+
+func TestRetainedLookupHonorsDeadlineAndCurrentAuthority(t *testing.T) {
+	for _, duringExisting := range []bool{false, true} {
+		for _, cancelLookup := range []bool{false, true} {
+			f := newFixture()
+			f.previous = Restarted
+			ctx, cancel := context.WithCancel(context.Background())
+			hook := func() {
+				if cancelLookup {
+					cancel()
+				} else {
+					f.now = f.now.Add(time.Minute)
+				}
+			}
+			if duringExisting {
+				f.existingHook = hook
+			} else {
+				f.acquireHook = hook
+			}
+			got := f.run(ctx)
+			cancel()
+			if got != BudgetExceeded || count(f.events, "inspect") != 0 || count(f.events, "close") != 1 {
+				t.Fatal("late/canceled retained lookup escaped budget")
+			}
+		}
+	}
+	f := newFixture()
+	f.previous = Restarted
+	f.denyAt = 1
+	if f.run(context.Background()) != Denied || count(f.events, "acquire") != 0 {
+		t.Fatal("revoked authority read retained result")
 	}
 }
 

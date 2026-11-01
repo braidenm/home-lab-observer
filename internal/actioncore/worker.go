@@ -155,7 +155,13 @@ func (w *Worker) Execute(parent context.Context, request Request, binding Bindin
 		return Unavailable
 	}
 	defer attempt.Close()
+	if remaining(ctx, w.now(), end) <= 0 {
+		return BudgetExceeded
+	}
 	if code := attempt.Existing(); code != "" {
+		if remaining(ctx, w.now(), end) <= 0 {
+			return BudgetExceeded
+		}
 		if retained(code, request.Operation) {
 			return code
 		}
