@@ -1,6 +1,6 @@
 # Typed action coordinator: first implementation slice
 
-Date: 2026-11-01. Status: review candidate; implementation requires independent review.
+Date: 2026-11-01. Status: independently reviewed for unused synthetic coordinator implementation only.
 
 ## Scope
 
@@ -27,7 +27,9 @@ policy; names, inventory aliases, role names and caller-provided permission bool
    not a cached allow flag; errors fail closed. A later adapter must prove actual authenticated
    current remote authority and local allowlist provenance before an executable profile exists.
 3. Acquire the exclusive journal attempt for a canonical fingerprint covering actor, owner,
-   installation, target, private engine/container binding, operation, grace, revisions and expiry.
+   installation, target, private engine/container binding, operation, grace, revisions and immutable
+   action expiry. Replaceable delivery lease deadlines/IDs and local claim timings are excluded,
+   so recovered delivery still looks up the same durable intent instead of becoming a new action.
    Conflicting identity/payload, unresolved target fences and unavailable storage refuse.
    Retained outcomes are returned without another inspect/mutation, but only after fresh authority.
 4. Inspect the exact full container ID. Running start is ALREADY_RUNNING; created/exited stop is
@@ -37,6 +39,8 @@ policy; names, inventory aliases, role names and caller-provided permission bool
 5. Reserve five seconds for durable completion. A mutation call is capped at 45 seconds and must
    accommodate the approved grace plus a five-second call allowance. Refuse if this cannot fit.
    Persist dispatch intent before the call. Do not call the Engine when that persistence fails.
+   Recheck context/budget after intent persistence; if the remaining reservation is insufficient,
+   make no Engine call and conservatively retain OUTCOME_UNKNOWN for committed/uncertain intent.
 6. Call exactly one typed Engine method. Any call error, cancellation, lost response or failure
    to persist the terminal result after intent returns OUTCOME_UNKNOWN, never automatic retry.
    A durable journal must retain that fence after process death, expiry, new keys and cleanup.
@@ -45,6 +49,9 @@ policy; names, inventory aliases, role names and caller-provided permission bool
 Success means a daemon acknowledgement, not application health. The coordinator stores no raw
 error, response, output, credential or environment data. Results use finite codes. It creates
 no logs or unbounded goroutines and makes no persistence/durability claim for synthetic adapters.
+All ports must honor their bounded context. Late acknowledgement/cancellation after intent is
+uncertain. A cancellation signal cannot forcibly stop an uncooperative adapter or daemon call;
+do not wrap it in a leaking goroutine or claim a hard wall-clock kill guarantee.
 
 ## Acceptance and remaining gates
 
