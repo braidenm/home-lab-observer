@@ -84,7 +84,8 @@ Short operations use caller deadline capped at two seconds, cleanup separately t
 not forcibly interruptible. No ATTACH, savepoints, vacuum, backup, bulk import or SQL chosen by callers.
 
 Revalidation reads at most 1,000 actions and 2,000 events through two fixed ordered query streams, including the
-related-target history variant used for admission. Bound raw fields in SQL before materialization and share the same
+related-target history variant used for admission. Bound raw fields in SQL before materialization (TEXT uses byte
+length after CAST AS BLOB, never character-count length) and share the same
 pure metadata/event validators with single-action reads. Query count must not grow per retained record. Preserve all
 canonical bytes, digest/index/binding, event ordering/operation/expiry, orphan and unresolved-fence checks; batching
 does not relax the two-second operation deadline or the schema and storage limits.
@@ -161,11 +162,19 @@ Local ordinary-user Linux race, complete Windows Go tests/vet, Node22 contracts 
 and workflow syntax/context checks passed. Exact final code review and current-head CI remain required. No physical
 power-loss, installed broker, authenticated authority, Engine adapter or live mutation is claimed.
 
-## CI revalidation correction (2026-11-01; proof pending)
+## CI revalidation correction (2026-11-01; local proof, current-head CI pending)
 
 PR 161's Linux race job failed the maximal-schema reopen, without a reported data race. The original loader issued
 one ID query plus three queries per action (3,001 at capacity), within the unchanged two-second open deadline.
 Replace that N+1 pattern with the bounded streams above, first reproducing statement-count growth on real SQLite
-through test-only driver instrumentation. Verify the same improvement for target history/maintenance and rerun the
-unchanged full-capacity reopen/prune, malformed-state, native pressure and race checks. This is a local correction
-plan, not successful current-head CI or an authorization to activate actions.
+through test-only driver instrumentation. The deterministic regression reproduced 3,001 queries before correction;
+all-record, single-record and related-target loads now use exactly two streams, and maintenance uses four queries
+including its binding/floor check. Shared pure validators retain the same canonical metadata and event decisions.
+Actual SQLite corruption tests cover all three scopes, orphan events and pre-scan raw-field refusal, including
+NUL-tail/multibyte TEXT values that defeat SQLite character-count length but not the byte-count projection.
+
+The unchanged maximal-schema reopen/prune passes with the two-second operation deadline. Final local Linux race
+passes (actioncore 1.021 s, actionjournal 43.699 s), as does focused vet; optional kernel-pressure fixtures are proved
+separately, not by their normal-race skips. All 23 native package tests pass three times in the same bounded scratch
+fixture with pressure enabled, including ENOSPC, hot recovery and crash/commit cases. Complete Windows Go tests/vet
+also pass. These are local source checks, not successful current-head CI or authorization to activate actions.

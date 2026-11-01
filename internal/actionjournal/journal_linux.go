@@ -256,15 +256,11 @@ func (j *Journal) Acquire(ctx context.Context, k actioncore.Key) (actioncore.Att
 		if !exists && !req.ExpiresAt.After(floor) {
 			return actioncore.ErrIdentityConflict
 		}
-		related, e := j.ids(bounded, `SELECT action_id FROM actions WHERE target_id=? OR (engine_generation=? AND container_id=?)`, k.TargetID, k.Metadata.EngineGeneration, k.Metadata.ContainerID)
+		related, e := j.related(bounded, k)
 		if e != nil {
 			return e
 		}
-		for _, id := range related {
-			other, e := j.read(bounded, id)
-			if e != nil {
-				return e
-			}
+		for _, other := range related {
 			if !other.intent.IsZero() && other.terminal.IsZero() {
 				return actioncore.ErrUnresolvedTarget
 			}
