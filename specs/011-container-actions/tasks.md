@@ -27,8 +27,9 @@
 - [ ] Implement/test separate broker process, protected state and fixed local Docker adapter.
 - [x] Obtain exact root/independent review of [fixed Engine contract](engine-adapter.md)/ADR029 for unused Linux
   implementation only; journal all-green merge is complete. Actual native mutations remain separately gated.
-- [ ] TDD the unused Linux adapter's fixed1.45 HTTP, full-ID/selected-field/witness checks, bounds and no-retry faults;
-  preserve observation APIs/dependencies and prove Worker+real-journal replay safety.
+- [x] Locally TDD the unused Linux adapter's fixed1.45 HTTP, full-ID/selected-field/witness checks, bounds and no-retry
+  faults; preserve observation APIs/dependencies and prove Worker+real-journal replay safety. Native execution is separate.
+- [ ] Obtain exact final adapter/native-harness root/independent code review before real fixture execution or publication.
 - [ ] Separately approve/review then execute at most two sequential exact image/full-ID/label-owned native fixture
   modes (graceful and ignored signal), one at a time with fixed caps and verified cleanup between; record actual
   tested daemon/API1.45 evidence without touching any other workload.

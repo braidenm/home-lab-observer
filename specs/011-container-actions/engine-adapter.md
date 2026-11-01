@@ -89,9 +89,42 @@ against a local disposable fixture requires separate explicit approval; it is no
 
 ## Delivery and rollback
 
+The manual entry is `node scripts/test-action-engine-native.mjs --allow-owned-fixtures`, only after exact source/test
+review and separate execution approval. Preconditions: a clean reviewed checkout, Node22, the existing Go1.27.3
+toolchain/dependency cache (offline), and an approved local Linux/amd64 daemon. No download, host package install or
+socket/group change is performed. Windows/x64 uses the fixed Docker Desktop Linux named pipe and explicit
+WSL Ubuntu root bridge to the same Linux test binary; other platforms refuse before mutation. The CLI gets a fresh
+empty private Docker config and scrubbed environment, with an explicit local endpoint, not inherited credentials,
+contexts, TLS or proxies. Before creation, compare CLI and Linux-adapter version/API/minimum/OS/architecture tuples.
+
+The checked-in scratch-only build has no RUN/base pull/network. Verify exact image/full ID/run label and all fixed
+caps before operations and cleanup; uncertain identity retains the fixture and refuses further cases. Real journal
+cooldowns remain in force: the bounded manual run waits between independent requests rather than changing its clock.
+The opt-in Go native entry is intentionally skipped in ordinary CI; that skip is not native proof. Cheap Node policy
+tests run in the existing contracts task. The private temporary context, built image and bounded result record (source,
+version, image/binary hashes, synthetic run ID and two exact fixture IDs with removal acknowledgements) are retained;
+acknowledgement is not verified absence, which requires separate read-only exact-ID checks. No image prune or broad
+cleanup is attempted. Output is closed markers,
+never raw Docker/compiler/inspect/error content. This source contains no successful native-run or release claim.
+
 One coherent dormant adapter/test PR after journal delivery; no unused wire-contract chain or observation refactor.
 Run focused/full Go tests/vet, Linux race, contracts and independent review. The native fixture's exact image/source,
 daemon/API tuple and limits must be recorded separately from synthetic coverage; API1.45 support on tested daemons is
 not proof of every API between their advertised minimum and maximum. No production default/capability changes.
 Removing unused adapter code leaves journal evidence and observation untouched. Future rollback disables dispatch,
 preserves unknown fences and compatible journal readers, and never replays a request to compensate for cancellation.
+
+## Local implementation evidence (2026-11-01; native execution pending)
+
+Accepted specs preceded code. The initial fixed-Unix contract tests failed without the adapter, then passed for
+exact routes/options, full IDs, version intersection, selected case-sensitive fields, malformed/oversized bodies,
+UTF8, witness drift and finite errors. Actual pinned-transport Unix faults prove one POST after lost response, no
+redirect/proxy fallback and cancellation/Close joining. Body-read cancellation is synchronized after handler flush,
+not a short deadline that assumes the server was scheduled. Worker + the real journal + Unix HTTP retain both known
+and unknown outcomes across reopening without another inspect/mutation; unavailable storage performs no Engine I/O.
+
+Full Linux race plus final focused reruns/vet, complete Windows tests/vet, existing contracts (89 including nine new fixture policy tests),
+Foundation43 and diff checks pass locally. Ordinary Linux Engine tests have one intentional native opt-in skip;
+that is not actual Docker, rootful namespace, graceful/forced-exit or runtime compatibility proof. The manual harness
+is source for independent review only; no image build, fixture creation, WSL root invocation or native mutation has
+been executed. Exact source/harness review, scoped execution approval and actual native results remain required.
