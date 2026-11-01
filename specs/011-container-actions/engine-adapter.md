@@ -123,7 +123,7 @@ redirect/proxy fallback and cancellation/Close joining. Body-read cancellation i
 not a short deadline that assumes the server was scheduled. Worker + the real journal + Unix HTTP retain both known
 and unknown outcomes across reopening without another inspect/mutation; unavailable storage performs no Engine I/O.
 
-Full Linux race plus final focused reruns/vet, complete Windows tests/vet, existing contracts (90 including ten new fixture policy tests),
+Full Linux race plus final focused reruns/vet, complete Windows tests/vet, existing contracts (93 including thirteen new fixture policy tests),
 Foundation43 and diff checks pass locally. Ordinary Linux Engine tests have one intentional native opt-in skip;
 that is not actual Docker, rootful namespace, graceful/forced-exit or runtime compatibility proof. The manual harness
 is source for independent review only; no image build, fixture creation, root native fixture test execution or mutation has
@@ -135,3 +135,23 @@ sums and offline verification/builds. The narrow bridge correction uses `wsl --e
 env/native command, preserving argument boundaries/backslashes rather than invoking the default Linux shell. Cheap
 argument regressions cover Windows paths with spaces; these preflight corrections are not native Docker proof.
 See [Microsoft WSL commands](https://learn.microsoft.com/en-us/windows/wsl/basic-commands) and current `wsl --help`.
+
+Further supervised preflights correctly refused a Windows/Ubuntu daemon mismatch, then a Linux CLI without Buildx;
+neither reached container creation. The Linux-only optional test prerequisite is now fixed Buildx **v0.38.1**,
+official asset `buildx-v0.38.1.linux-amd64`, 68,366,498 bytes,
+SHA256 `e25d5cd675092bb5d1d03632fdc46cdf3fede7b514dc5f023a105e00d3ce5ad4`.
+The manual entry may add `--buildx-source <absolute-private-file>` only on Linux. Preparation/download is outside the
+harness: require root-owned private 0700 parent and regular, nonsymlink, single-link 0700 file of exact size/hash;
+copy exclusively to the fresh config's `cli-plugins/docker-buildx`, recheck the digest before CLI use and verify
+the exact version read-only. No URL/hash/plugin-name overrides, runtime downloads, global installation, driver
+creation/bootstrap or legacy-builder fallback. Keep `{}` config, fixed local daemon and `buildx build --builder default`
+with no-pull/no-network scratch-only input. Record only the fixed version/hash in the bounded private receipt.
+Before building, read only `buildx inspect default` without bootstrap and require exactly one running Docker-driver
+node; its endpoint must be the fixed URI or the default alias whose separate default-context host equals that URI.
+Reject other drivers, extra nodes, errors or malformed metadata, never create a builder or fall back.
+Windows rejects this extra option; its existing installed-plugin behavior is unchanged and not proven by Linux tests.
+Primary evidence: [CLI29.1.3 plugin lookup](https://raw.githubusercontent.com/docker/cli/v29.1.3/cli-plugins/manager/manager.go),
+[Buildx0.38.1 testing-only manual download](https://raw.githubusercontent.com/docker/buildx/v0.38.1/README.md),
+[official release](https://github.com/docker/buildx/releases/tag/v0.38.1) and
+[Docker driver](https://docs.docker.com/build/builders/drivers/docker/). This driver uses the daemon's embedded BuildKit,
+not an additional builder container. Compatibility with the tested daemon still requires actual source-reviewed proof.

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { cleanEnvironment, fixedEndpoint, fullID, imageID, versionTuple, createArgs, ownedContainer, cleanupArgs, resultReceipt, wslPathArgs, wslNativeArgs, main } from './test-action-engine-native.mjs';
+import { cleanEnvironment, fixedEndpoint, fullID, imageID, versionTuple, approvedDefaultBuilder, createArgs, ownedContainer, cleanupArgs, resultReceipt, wslPathArgs, wslNativeArgs, nativeOptions, approvedBuildxSource, installBuildxSource, buildxPin, main } from './test-action-engine-native.mjs';
 
 const expected = { id: 'a'.repeat(64), image: `sha256:${'b'.repeat(64)}`, run: 'c'.repeat(32), mode: 'graceful' };
 function container() {
@@ -28,6 +28,16 @@ test('version profile is canonical and requires exact1.45 intersection', () => {
   for (const value of ['29.9.1|1.56|1.40|linux|amd64', '29.0.0|1.52|1.44|linux|amd64']) assert.equal(versionTuple(value), value);
   for (const value of ['29.9.1|1.56|1.46|linux|amd64', '29.9.1|1.44|1.40|linux|amd64', '29.9.1|1.040|1.40|linux|amd64',
     '29.9.1|1.56|1.40|windows|amd64', '29.9.1|1.56|1.40|linux|arm64', 'secret-canary', 'x'.repeat(160)]) assert.throws(() => versionTuple(value));
+});
+test('read-only default builder must be one docker node bound to the explicit local endpoint', () => {
+  const endpoint = 'unix:///run/docker.sock';
+  const output = 'Name: default\nDriver: docker\n\nNodes:\nName: default\nEndpoint: default\nStatus: running\nBuildKit version: v0.25.1\nPlatforms: linux/amd64\n';
+  assert.equal(approvedDefaultBuilder(output, endpoint, endpoint), true);
+  assert.equal(approvedDefaultBuilder(output.replace('Endpoint: default', `Endpoint: ${endpoint}`), endpoint, endpoint), true);
+  for (const bad of [output.replace('Driver: docker', 'Driver: docker-container'), output.replace('Endpoint: default', 'Endpoint: tcp://foreign.example:2375'),
+    output + 'Endpoint: default\n', output + 'Driver: docker\n', output.replace('Status: running', 'Status: error'), output + 'Error: refused\n',
+    'malformed', 'x'.repeat(16385)]) assert.equal(approvedDefaultBuilder(bad, endpoint, endpoint), false);
+  assert.equal(approvedDefaultBuilder(output, endpoint, 'unix:///foreign.sock'), false);
 });
 test('only full IDs and exact pinned image IDs are valid', () => {
   assert.equal(fullID(expected.id), true); assert.equal(imageID(expected.image), true);
@@ -61,6 +71,27 @@ test('manual gate refuses before any tool or daemon command', async () => {
   await assert.rejects(main([]), /EXECUTION_NOT_APPROVED/);
   await assert.rejects(main(['--host=ssh://bad.example']), /EXECUTION_NOT_APPROVED/);
 });
+test('only Linux may opt into one pinned private Buildx source', () => {
+  assert.deepEqual(nativeOptions(['--allow-owned-fixtures'], 'win32'), { buildxSource: null });
+  assert.deepEqual(nativeOptions(['--allow-owned-fixtures', '--buildx-source', '/private/task/buildx'], 'linux'), { buildxSource: '/private/task/buildx' });
+  for (const args of [['--allow-owned-fixtures', '--buildx-source', '/private/task/buildx', '--buildx-source', '/other'],
+    ['--allow-owned-fixtures', '--buildx-source'], ['--allow-owned-fixtures', '--buildx-source', 'relative'],
+    ['--allow-owned-fixtures', '--buildx-source', 'https://invalid.example/tool'], ['--allow-owned-fixtures', '--buildx-version', 'latest']]) assert.throws(() => nativeOptions(args, 'linux'));
+  assert.throws(() => nativeOptions(['--allow-owned-fixtures', '--buildx-source', '/private/task/buildx'], 'win32'));
+});
+test('Buildx source requires exact private root-owned file metadata and code-owned hash', async () => {
+  const file = () => ({ isFile: () => true, isSymbolicLink: () => false, nlink: 1, uid: 0, mode: 0o100700, size: buildxPin.size });
+  const parent = () => ({ isDirectory: () => true, isSymbolicLink: () => false, uid: 0, mode: 0o40700 });
+  assert.doesNotThrow(() => approvedBuildxSource(file(), parent(), buildxPin.sha256));
+  for (const mutation of [f => f.isFile = () => false, f => f.isSymbolicLink = () => true, f => f.nlink = 2, f => f.uid = 1000, f => f.mode = 0o100755, f => f.size++]) {
+    const f = file(); mutation(f); assert.throws(() => approvedBuildxSource(f, parent(), buildxPin.sha256));
+  }
+  for (const mutation of [p => p.isDirectory = () => false, p => p.isSymbolicLink = () => true, p => p.uid = 1000, p => p.mode = 0o40755]) {
+    const p = parent(); mutation(p); assert.throws(() => approvedBuildxSource(file(), p, buildxPin.sha256));
+  }
+  assert.throws(() => approvedBuildxSource(file(), parent(), '0'.repeat(64)));
+  await assert.rejects(installBuildxSource('/this-fixed-fixture-does-not-exist/buildx', '/unused'), /BUILDX_SOURCE_REFUSED/);
+});
 test('both fixed WSL bridges execute directly and preserve backslashes/spaces as single arguments', () => {
   const windowsPath = String.raw`C:\Users\Synthetic Owner\AppData\Local\Temp\fixture path\actionengine.test`;
   assert.deepEqual(wslPathArgs(windowsPath), ['-d', 'Ubuntu', '--user', 'root', '--exec', '/usr/bin/wslpath', '-a', '-u', windowsPath]);
@@ -82,6 +113,9 @@ test('bounded private receipt names only two exact synthetic removals, not verif
   assert.deepEqual(record.fixtures, fixtures);
   assert.equal(record.cases, 2);
   assert.ok(Buffer.byteLength(JSON.stringify(record)) <= 2048);
+  const withBuildx = resultReceipt('1'.repeat(40), '29.9.1|1.56|1.40|linux|amd64', expected.image, hashes, expected.run, fixtures, { version: buildxPin.version, sha256: buildxPin.sha256 });
+  assert.equal(withBuildx.buildx.sha256, buildxPin.sha256);
+  assert.throws(() => resultReceipt('1'.repeat(40), '29.9.1|1.56|1.40|linux|amd64', expected.image, hashes, expected.run, fixtures, { version: 'latest', sha256: buildxPin.sha256 }));
   assert.doesNotMatch(JSON.stringify(record), /verified_absence|endpoint|credential/);
   for (const entries of [[], fixtures.slice(0, 1), [...fixtures, fixtures[0]], [null, fixtures[1]], [{ ...fixtures[0], removed_acknowledged: false }, fixtures[1]],
     [fixtures[0], { ...fixtures[1], fullID: fixtures[0].fullID }], [{ ...fixtures[0], endpoint: 'foreign' }, fixtures[1]]]) assert.throws(() => receipt(entries));
@@ -92,7 +126,13 @@ test('source keeps checked-in scratch-only build, sequential cases, fixed bridge
   assert.equal(dockerfile.replaceAll('\r\n', '\n'), 'FROM scratch\nCOPY fixture /fixture\nUSER 65532:65532\nENTRYPOINT ["/fixture"]\n');
   assert.match(source, /for \(const mode of \['graceful', 'ignore'\]\)/);
   assert.match(source, /'--config', config, '--host', endpoint/);
-  assert.match(source, /'--builder', 'default', '--network=none', '--pull=false'/);
+  assert.match(source, /\['buildx', 'build', '--builder', 'default', '--network=none', '--pull=false'/);
+  assert.match(source, /copyFile\(source, target, fsConstants\.COPYFILE_EXCL\)/);
+  assert.match(source, /chmod\(target, 0o700\)/);
+  assert.match(source, /if \(privateBuildx\) await pinnedBuildx\(privateBuildx\.target\)/);
+  assert.match(source, /\['buildx', 'inspect', 'default'\]/);
+  assert.match(source, /\['context', 'inspect', 'default', '--format', '\{\{\.Endpoints\.docker\.Host\}\}'\]/);
+  assert.doesNotMatch(source, /'--bootstrap'|\['buildx', 'create'/);
   assert.match(source, /'Ubuntu', '--user', 'root', '--exec', '\/usr\/bin\/env', '-i'/);
   assert.doesNotMatch(source, /'root', '--', '\/usr\/bin\/(?:wslpath|env)'/);
   assert.match(source, /maxBuffer: 512 \* 1024/);

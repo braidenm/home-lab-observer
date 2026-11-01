@@ -1,7 +1,8 @@
 // Manual, separately reviewed disposable-fixture proof. Never an automatic PR job.
 import { spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
+import { chmod, copyFile, lstat, mkdir, mkdtemp, open, readFile, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +13,56 @@ export const imageID = value => typeof value === 'string' && /^sha256:[a-f0-9]{6
 const runID = value => typeof value === 'string' && /^[a-f0-9]{32}$/.test(value);
 class Refusal extends Error { constructor(code) { super(code); this.code = code; } }
 function need(value, code) { if (!value) throw new Refusal(code); }
+export const buildxPin = Object.freeze({ version: 'v0.38.1', size: 68366498, sha256: 'e25d5cd675092bb5d1d03632fdc46cdf3fede7b514dc5f023a105e00d3ce5ad4' });
+export function nativeOptions(argv, platform) {
+  need(argv[0] === '--allow-owned-fixtures', 'EXECUTION_NOT_APPROVED');
+  if (argv.length === 1) return { buildxSource: null };
+  need(argv.length === 3 && argv[1] === '--buildx-source' && platform === 'linux', 'ARGUMENTS_REFUSED');
+  const source = argv[2];
+  need(typeof source === 'string' && path.posix.isAbsolute(source) && path.posix.normalize(source) === source && !source.includes('\0'), 'BUILDX_SOURCE_REFUSED');
+  return { buildxSource: source };
+}
+export function approvedBuildxSource(file, parent, digest) {
+  need(file?.isFile() && !file.isSymbolicLink() && file.nlink === 1 && file.uid === 0 && (file.mode & 0o7777) === 0o700 && file.size === buildxPin.size &&
+    parent?.isDirectory() && !parent.isSymbolicLink() && parent.uid === 0 && (parent.mode & 0o7777) === 0o700, 'BUILDX_SOURCE_REFUSED');
+  if (digest !== undefined) need(digest === buildxPin.sha256, 'BUILDX_DIGEST_REFUSED');
+}
+async function pinnedBuildx(filename) {
+  let handle;
+  try {
+    need(await realpath(filename) === filename, 'BUILDX_SOURCE_REFUSED');
+    const parent = await lstat(path.dirname(filename));
+    const named = await lstat(filename);
+    approvedBuildxSource(named, parent);
+    handle = await open(filename, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+    const before = await handle.stat();
+    approvedBuildxSource(before, parent);
+    need(before.dev === named.dev && before.ino === named.ino, 'BUILDX_SOURCE_REFUSED');
+    const hash = createHash('sha256');
+    let bytes = 0;
+    for await (const chunk of handle.createReadStream({ start: 0, end: buildxPin.size, autoClose: false })) {
+      bytes += chunk.length;
+      need(bytes <= buildxPin.size, 'BUILDX_SOURCE_REFUSED');
+      hash.update(chunk);
+    }
+    need(bytes === buildxPin.size, 'BUILDX_SOURCE_REFUSED');
+    approvedBuildxSource(await handle.stat(), parent, hash.digest('hex'));
+    return { version: buildxPin.version, sha256: buildxPin.sha256 };
+  } catch (error) {
+    if (error instanceof Refusal) throw error;
+    throw new Refusal('BUILDX_SOURCE_REFUSED');
+  } finally { if (handle) await handle.close(); }
+}
+export async function installBuildxSource(source, config) {
+  const receipt = await pinnedBuildx(source);
+  const directory = path.join(config, 'cli-plugins');
+  await mkdir(directory, { mode: 0o700 });
+  const target = path.join(directory, 'docker-buildx');
+  await copyFile(source, target, fsConstants.COPYFILE_EXCL);
+  await chmod(target, 0o700);
+  await pinnedBuildx(target);
+  return { target, receipt };
+}
 
 export function cleanEnvironment(parent) {
   // No Docker/TLS/context/proxy/SSH/credential-helper or Go flag inheritance.
@@ -37,6 +88,15 @@ export function versionTuple(raw) {
   need(api(min) <= 1045 && api(max) >= 1045 && api(min) <= api(max), 'VERSION_REFUSED');
   return value;
 }
+export function approvedDefaultBuilder(output, endpoint, contextHost) {
+  if (typeof output !== 'string' || Buffer.byteLength(output) > 16384 || contextHost !== endpoint) return false;
+  const lines = output.split(/\r?\n/).map(line => line.trim());
+  const values = key => lines.filter(line => line.startsWith(`${key}:`)).map(line => line.slice(key.length + 1).trim());
+  const names = values('Name'), drivers = values('Driver'), endpoints = values('Endpoint'), status = values('Status');
+  return values('Error').length === 0 && lines.filter(line => line === 'Nodes:').length === 1 &&
+    names.length === 2 && names.every(name => name === 'default') && drivers.length === 1 && drivers[0] === 'docker' &&
+    endpoints.length === 1 && (endpoints[0] === 'default' || endpoints[0] === endpoint) && status.length === 1 && status[0] === 'running';
+}
 export function createArgs(id, run, image, mode) {
   need(runID(run) && imageID(image) && ['graceful', 'ignore'].includes(mode) && id === `hlo-action-${run}-${mode}`, 'CREATE_REFUSED');
   return ['create', '--pull=never', '--name', id, '--label', `hlo.action-fixture=${run}`, '--network=none', '--read-only',
@@ -60,12 +120,13 @@ export function cleanupArgs(container, expected) {
   need(ownedContainer(container, expected), 'CLEANUP_IDENTITY_REFUSED');
   return ['rm', '--force', expected.id];
 }
-export function resultReceipt(source, version, image, hashes, run, fixtures) {
+export function resultReceipt(source, version, image, hashes, run, fixtures, buildx = null) {
   need(/^[a-f0-9]{40}$/.test(source) && imageID(image) && runID(run) && fullID(hashes?.fixture) && fullID(hashes?.test_binary), 'RECEIPT_REFUSED');
   need(Array.isArray(fixtures) && fixtures.length === 2 &&
     fixtures.every((entry, index) => entry && typeof entry === 'object' && !Array.isArray(entry) && entry.mode === ['graceful', 'ignore'][index] && fullID(entry.fullID) && entry.removed_acknowledged === true &&
       Object.keys(entry).sort().join('|') === 'fullID|mode|removed_acknowledged') && fixtures[0].fullID !== fixtures[1].fullID, 'RECEIPT_REFUSED');
-  const record = { schema: 'hlo-owned-action-fixture/v1', source, version: versionTuple(version), image,
+  need(buildx === null || (buildx.version === buildxPin.version && buildx.sha256 === buildxPin.sha256 && Object.keys(buildx).sort().join('|') === 'sha256|version'), 'RECEIPT_REFUSED');
+  const record = { schema: 'hlo-owned-action-fixture/v1', source, version: versionTuple(version), image, buildx,
     hashes: { fixture: hashes.fixture, test_binary: hashes.test_binary }, run_id: run, fixtures,
     cases: 2, scope: 'DISPOSABLE_PROTOCOL_PROOF_NOT_AUTHORITY_OR_RELEASE' };
   need(Buffer.byteLength(JSON.stringify(record), 'utf8') <= 2048, 'RECEIPT_REFUSED');
@@ -107,7 +168,7 @@ export function wslNativeArgs(binary, variables) {
 }
 
 export async function main(argv = process.argv.slice(2)) {
-  need(argv.length === 1 && argv[0] === '--allow-owned-fixtures', 'EXECUTION_NOT_APPROVED');
+  const options = nativeOptions(argv, process.platform);
   need(['linux', 'win32'].includes(process.platform) && process.arch === 'x64', 'PLATFORM_REFUSED');
   const env = cleanEnvironment(process.env);
   need(command('git', ['status', '--porcelain', '--untracked-files=all'], env, 'SOURCE_REFUSED').trim() === '', 'SOURCE_REFUSED');
@@ -119,13 +180,16 @@ export async function main(argv = process.argv.slice(2)) {
   const config = path.join(temporary, 'docker-config');
   await mkdir(config, { mode: 0o700 });
   await writeFile(path.join(config, 'config.json'), '{}\n', { flag: 'wx', mode: 0o600 });
+  const privateBuildx = options.buildxSource ? await installBuildxSource(options.buildxSource, config) : null;
   const endpoint = fixedEndpoint(process.platform, process.platform === 'linux' ? await realpath('/var/run/docker.sock') : '');
   const docker = async (args, code, timeout) => {
     need((await readFile(path.join(config, 'config.json'), 'utf8')) === '{}\n', 'CONFIG_REFUSED');
+    if (privateBuildx) await pinnedBuildx(privateBuildx.target);
     return command('docker', ['--config', config, '--host', endpoint, ...args], env, code, timeout);
   };
   const cliVersion = () => docker(['version', '--format', '{{.Server.Version}}|{{.Server.APIVersion}}|{{.Server.MinAPIVersion}}|{{.Server.Os}}|{{.Server.Arch}}'], 'CLI_VERSION_REFUSED');
   const version = versionTuple(await cliVersion());
+  if (privateBuildx) need(/^github\.com\/docker\/buildx v0\.38\.1 [a-f0-9]{7,40}$/.test((await docker(['buildx', 'version'], 'BUILDX_VERSION_REFUSED')).trim()), 'BUILDX_VERSION_REFUSED');
   const buildEnv = { ...env, GOOS: 'linux', GOARCH: 'amd64', CGO_ENABLED: '0', GOPROXY: 'off', GOSUMDB: 'off',
     GOTOOLCHAIN: 'local', GOENV: 'off', GOFLAGS: '-mod=readonly', GOMAXPROCS: '2', GOMEMLIMIT: '256MiB' };
   command('go', ['mod', 'verify'], buildEnv, 'MODULES_REFUSED');
@@ -158,8 +222,11 @@ export async function main(argv = process.argv.slice(2)) {
     return command(linuxBinary, testArgs, { ...env, ...variables }, 'NATIVE_FIXTURE_REFUSED', 180000);
   };
   need(versionTuple(exactMarker(native('version'), 'HLO_ENGINE_NATIVE_VERSION=')) === version, 'DAEMON_MISMATCH');
+  const contextHost = (await docker(['context', 'inspect', 'default', '--format', '{{.Endpoints.docker.Host}}'], 'BUILDER_REFUSED')).trim();
+  const builder = await docker(['buildx', 'inspect', 'default'], 'BUILDER_REFUSED');
+  need(approvedDefaultBuilder(builder, endpoint, contextHost), 'BUILDER_REFUSED');
   const run = randomUUID().replaceAll('-', '');
-  const image = (await docker(['build', '--builder', 'default', '--network=none', '--pull=false', '--quiet', '--tag', `hlo-action-fixture:${run}`, '--file', path.join(contextDir, 'Dockerfile'), contextDir], 'IMAGE_BUILD_REFUSED')).trim();
+  const image = (await docker(['buildx', 'build', '--builder', 'default', '--network=none', '--pull=false', '--quiet', '--tag', `hlo-action-fixture:${run}`, '--file', path.join(contextDir, 'Dockerfile'), contextDir], 'IMAGE_BUILD_REFUSED')).trim();
   need(imageID(image), 'IMAGE_ID_REFUSED');
   need((await docker(['image', 'inspect', '--format', '{{.Id}}', image], 'IMAGE_ID_REFUSED')).trim() === image, 'IMAGE_ID_REFUSED');
   let cases = 0;
@@ -197,7 +264,7 @@ export async function main(argv = process.argv.slice(2)) {
   }
   need(command('git', ['status', '--porcelain', '--untracked-files=all'], env, 'SOURCE_REFUSED').trim() === '', 'SOURCE_REFUSED');
   need(cases === 2, 'RECEIPT_REFUSED');
-  await writeFile(path.join(temporary, 'result.json'), JSON.stringify(resultReceipt(source, version, image, hashes, run, removed)) + '\n', { flag: 'wx', mode: 0o600 });
+  await writeFile(path.join(temporary, 'result.json'), JSON.stringify(resultReceipt(source, version, image, hashes, run, removed, privateBuildx?.receipt ?? null)) + '\n', { flag: 'wx', mode: 0o600 });
   // Keep the private source-built image/context/result for audit. Never prune
   // images or enumerate/delete another workload to clean a test environment.
   console.log('ACTION_ENGINE_NATIVE_PASS cases=2 scope=DISPOSABLE_PROTOCOL_ONLY');
