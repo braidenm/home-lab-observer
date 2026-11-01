@@ -15,6 +15,12 @@
 - [ ] Freeze versioned action/grant/result/audit contracts, credential audiences and standalone-owner authentication.
 - [ ] Specify remote freshness/revocation protocol and request replay-window semantics.
 - [ ] Implement/test synthetic policy matrix and durable ledger with crash/storage/retention failure injection.
+- [ ] Approve the exact [dormant journal contract](action-journal.md)/ADR 028 and private core-metadata/fingerprint extension
+  before production code; do not claim the full Spec 011 broker is accepted.
+- [ ] TDD/implement the complete Linux-only SQLite adapter with fixed Provision/OpenExisting, canonical audit metadata,
+  two uncertainty-retaining permits, 1,000 records, 30-day retention/floor and no unknown-clear method.
+- [ ] Prove derived/measured DB+journal peak, maximal terminal completion, real private-fixture ENOSPC, commit uncertainty,
+  subprocess crash recovery and no replay/new-key bypass; root/independent review precedes any fixed Engine adapter.
 - [ ] Prove unknown outcomes cannot auto-retry, unlock silently or lose their dispatch audit.
 - [ ] Implement/test separate broker process, protected state and fixed local Docker adapter.
 - [ ] Prove start/stop/restart, grace and external-state-race semantics with disposable native fixtures.

@@ -65,8 +65,12 @@ grace bounds, expiry equality, both authorization checkpoints, depleted budgets,
 failure, duplicate terminal/unknown outcomes and context cancellation. Assert Engine call counts
 and journal ordering. Run focused/full Go tests and vet; Linux CI adds race detection once.
 
-Follow-on small PRs must implement the durable journal (existing SQLite library is a candidate,
-not silently approved storage), fixed Docker adapter and disposable-container acceptance,
+The next [complete dormant Linux journal](action-journal.md) and ADR 028 candidate specify the private metadata
+extension needed for audit/expiry. Preserve this core's exact version-1 fingerprint bytes and exclude replaceable
+delivery leases. Key-only hashes are not a complete durable audit contract. Exact document/port review precedes code;
+the existing dependency is not silently accepted for an installed action broker.
+
+Follow-on small PRs must implement that durable journal, fixed Docker adapter and disposable-container acceptance,
 then separately authenticated outbound delivery, OS/IPC isolation, local policy administration
 and authenticated uncertainty recovery. No installer or live control is enabled by this slice.
 Existing workloads are never fixtures. Native tests must create their own labelled disposable

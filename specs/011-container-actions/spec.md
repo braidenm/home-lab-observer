@@ -65,8 +65,10 @@ configuration changes, image pulls, daemon restart, host reboot or automatic rem
   or unrestricted user text. Fsync/transaction durability semantics must be proven before activation. Audit is not a
   forensic tamper guarantee against the host owner. If final audit persistence fails, retain unresolved dispatch intent
   and inhibit further work rather than report unaudited success.
-- **R9 Bounded persistence:** Proposed separate action store budget 32 MiB including WAL and 30-day terminal audit
-  retention, capped at 10,000 requests. Unresolved intents are never automatically evicted. Admission reserves capacity
+- **R9 Bounded persistence:** Proposed separate action store budget 32 MiB including database and active journal and
+  minimum 30-day terminal audit retention. The [dormant Linux journal candidate](action-journal.md) narrows the former
+  10,000-request proposal to 1,000 retained requests with rollback DELETE; full broker activation is not accepted.
+  Unresolved intents are never automatically evicted. Admission reserves logical capacity
   for terminal records; exhausted storage rejects new actions without deleting unresolved evidence. New requests expire
   within five minutes of creation; reject expired requests before treating a missing retained key as new. Identity and
   freshness evidence must be authenticated, not supplied by an untrusted browser clock. Document that this is bounded
