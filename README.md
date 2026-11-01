@@ -80,6 +80,10 @@ telemetry must not automatically grant control. Docker, operating-system service
 their own adapters and permission models; none will be exposed through a generic shell-command endpoint.
 See the [threat model](docs/security/threat-model.md) for the separation between observation and future control.
 
+An [unused typed coordinator](specs/011-container-actions/worker-core.md) now tests operation permissions,
+deadlines and intent-before-dispatch ordering with synthetic adapters. It has no Docker transport, durable store,
+listener or installed role; this is not a management release and grants no additional access to an installed agent.
+
 The [delivery roadmap](docs/delivery-plan.md) prioritizes completing real hosted connection/sharing acceptance, then separately permissioned Docker
 start, stop and restart. Kubernetes is deferred. Our [open-source comparison](docs/architecture-research/007-open-source-alignment.md)
 explains the established patterns informing installation, connectivity, monitoring and management boundaries.

@@ -15,6 +15,8 @@ Local policy binds one installation, owner, opaque target, engine generation, fu
 ID, capability/policy revisions and an independent operation allowlist. Full daemon identities
 stay private. Request actor/owner/install/target/revisions and grace must exactly match approved
 policy; names, inventory aliases, role names and caller-provided permission booleans are absent.
+The exact server reference is bound too. Internal journal fingerprints use a versioned fixed-scalar
+JSON shape and UTC timestamp strings, not a remote wire codec or an authentication proof.
 
 ## Processing contract
 
@@ -52,6 +54,9 @@ no logs or unbounded goroutines and makes no persistence/durability claim for sy
 All ports must honor their bounded context. Late acknowledgement/cancellation after intent is
 uncertain. A cancellation signal cannot forcibly stop an uncooperative adapter or daemon call;
 do not wrap it in a leaking goroutine or claim a hard wall-clock kill guarantee.
+Codes are STARTED/STOPPED/RESTARTED, ALREADY_RUNNING/ALREADY_STOPPED, DENIED,
+TARGET_STATE_CONFLICT, IDEMPOTENCY_CONFLICT, UNAVAILABLE, BUDGET_EXCEEDED and OUTCOME_UNKNOWN.
+Typed journal identity conflicts and unresolved-target fences never cause Engine calls.
 
 ## Acceptance and remaining gates
 
