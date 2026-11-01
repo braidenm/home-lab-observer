@@ -88,8 +88,9 @@ not forcibly interruptible. No ATTACH, savepoints, vacuum, backup, bulk import o
 Cap combined logical DB+journal bytes at 32 MiB; lock is zero length. Never equate journal_size_limit with peak growth.
 With at most 3,072 pages, no spill/savepoints and one main DB, the candidate bound budgets the 12,582,912-byte DB plus
 3,072 journal page images with eight-byte overhead and two 65,536-byte alignment/header allowances: 25,321,472 bytes.
-Pinned SQLite's MAX_SECTOR_SIZE is 65,536. This derived bound and actual maximum-state/transaction peak must both pass;
-if the schema/update pattern violates either assumption, revise the contract before acceptance rather than loosen tests.
+Pinned SQLite's MAX_SECTOR_SIZE is 65,536. Require both the derived worst-case bound and before/after-COMMIT samples
+of the maximal-schema state; these samples are not an exhaustive intermediate-peak measurement. If the schema/update
+pattern violates the derivation's assumptions or the hard ceiling, revise the contract before acceptance rather than loosen tests.
 
 At admission reserve logical room for both future event slots. Complete all 1,000 maximum-sized actions under the
 fixed DB cap in tests. This is NOT physical free-space reservation: external exhaustion/flush failure can still prevent
