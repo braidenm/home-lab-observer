@@ -123,7 +123,7 @@ not proof of every API between their advertised minimum and maximum. No producti
 Removing unused adapter code leaves journal evidence and observation untouched. Future rollback disables dispatch,
 preserves unknown fences and compatible journal readers, and never replays a request to compensate for cancellation.
 
-## Local implementation evidence (2026-11-01; native execution pending)
+## Local implementation evidence (2026-11-01)
 
 Accepted specs preceded code. The initial fixed-Unix contract tests failed without the adapter, then passed for
 exact routes/options, full IDs, version intersection, selected case-sensitive fields, malformed/oversized bodies,
@@ -134,9 +134,8 @@ and unknown outcomes across reopening without another inspect/mutation; unavaila
 
 Full Linux race plus final focused reruns/vet, complete Windows tests/vet, existing contracts (93 including thirteen new fixture policy tests),
 Foundation43 and diff checks pass locally. Ordinary Linux Engine tests have one intentional native opt-in skip;
-that is not actual Docker, rootful namespace, graceful/forced-exit or runtime compatibility proof. The manual harness
-is source for independent review; actual native Start/Stop/Restart success remains unproven. Exact source/harness
-review, scoped execution approval and actual native results remain required.
+that skip is not actual Docker, rootful namespace, graceful/forced-exit or runtime compatibility proof. The separately
+approved supervised native execution below supplies the bounded disposable-fixture evidence, not ordinary CI.
 
 Two supervised preflights refused before image build/container creation or native test execution: missing offline
 module metadata, then Windows path conversion through WSL's default shell. Cache preparation restored clean tracked
@@ -179,4 +178,25 @@ change is needed. Separately approved exact-ID recovery subsequently removed the
 force, followed by an independent exact-ID absence check; this is cleanup evidence, not native action proof.
 The focused harness regressions first failed on the mismatched create spelling/missing audit behavior, then passed
 16/16 with zero skips; all 96 Node contract tests and canonical contract validation pass after the correction.
-No production Go or strict ownership-predicate bytes changed, and no rerun is claimed by this source evidence.
+No production Go or strict ownership-predicate bytes changed in that harness correction.
+
+## Supervised disposable Linux proof
+
+The reviewed source `739ee6172636e8bb6860c437e4c914fd89242242` completed the separately approved manual Linux
+harness with exit0 and `ACTION_ENGINE_NATIVE_PASS cases=2 scope=DISPOSABLE_PROTOCOL_ONLY`. The bounded private receipt
+binds that source, the built image/test binaries, both captured full IDs and removal acknowledgements. Only synthetic
+fixture identities are held privately; no private paths, recovered identifiers or daemon response bodies are published.
+
+Actual compatibility evidence is **Docker29.1.3, linux/amd64, advertised API maximum1.52/minimum1.44, issued API1.45
+only**, with the pinned private Buildx0.38.1 prerequisite above. This is not proof of every advertised API version or
+another Docker implementation. The native coordinator + real journal + fixed adapter passed distinct start, restart
+and graceful stop in the first immutable fixture, then start and ignored-SIGTERM forced stop with the one-second grace
+in the second. Real journal cooldowns remained enabled. Retained replay did not restart again. Only one fixture existed
+at a time, with the reviewed image/full-ID/run-label and isolation-cap checks before every operation and removal.
+
+Both removals were acknowledged, and independent read-only checks of those two exact IDs confirmed absence against
+the same freshly verified daemon tuple. No existing workload was operated on; fixture images and private audit stages
+were not broadly pruned. This proves the scoped disposable protocol path, not an installed worker namespace, owner
+authentication, remote grants/revocation, action-credential isolation, recovery authority, Windows/macOS support or a
+release/canary acceptance gate. The adapter remains unused by any installed role. Fresh current-head PR CI, review and
+normal governed delivery are still required before merging this dormant source slice; no observation capability changes.

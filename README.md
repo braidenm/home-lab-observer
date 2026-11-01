@@ -86,10 +86,11 @@ deadlines and intent-before-dispatch ordering with synthetic adapters. The separ
 transport/store composition, listener or action role. This is not a management release and grants no additional
 access to an installed agent.
 
-The [fixed Linux Engine adapter contract](specs/011-container-actions/engine-adapter.md) is accepted for unused Linux
-implementation only after the separately reviewed dormant journal: exact typed operations and disposable proof,
-not an installed broker,
-permission grant, action release or approval to change an existing container. Current monitoring remains read-only.
+The [unused fixed Linux Engine adapter](specs/011-container-actions/engine-adapter.md) implements those exact typed
+operations. A separately approved local Linux proof passed two sequential owned disposable fixtures through the
+coordinator and real journal, using only API1.45 on Docker29.1.3; both exact fixtures were independently confirmed absent
+after cleanup. This is not an installed broker, permission grant, action release, Windows/macOS parity or approval to
+change an existing container. Current monitoring remains read-only.
 
 The [delivery roadmap](docs/delivery-plan.md) prioritizes completing real hosted connection/sharing acceptance, then separately permissioned Docker
 start, stop and restart. Kubernetes is deferred. Our [open-source comparison](docs/architecture-research/007-open-source-alignment.md)
