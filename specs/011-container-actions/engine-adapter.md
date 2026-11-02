@@ -182,10 +182,10 @@ No production Go or strict ownership-predicate bytes changed in that harness cor
 
 ## Supervised disposable Linux proof
 
-### Proposed separate external-state acceptance profile
+### Separate external-state acceptance profile
 
 Prepared 2026-11-02 against merged `c2f11b2ad1b3175e0394e27b0582906e63915c37`.
-This subsection is a test-only proposal awaiting exact review/spec-first commit before implementation. It does not
+Root reviewed this exact test-only plan before spec-first commit `0b2825324283cba1b2138380147cd489758ad2df`. It does not
 change the core, journal, Engine adapter, accepted ADRs, installed roles or authority. No new native run is claimed.
 The existing basic-operation proof below remains distinct and is not replaced by synthetic race coverage.
 
@@ -195,7 +195,8 @@ container at a time, exact captured full IDs and frozen operation/grace approval
 operation or test-name input is accepted. Keep the current 150-second Go test and 180-second orchestration limits
 per fixture; do not append race cases to the basic profile and quietly increase timeouts.
 
-`internal/actionengine/native_linux_test.go` owns a private test-only authority decorator. On exactly its second
+`internal/actionengine/native_races_linux_test.go` owns a private test-only authority decorator; the fixed entry
+remains in `native_linux_test.go`. On exactly its second
 checkpoint, after the core's real Inspect has returned, it performs one synchronous external operation through a
 second real fixed Engine adapter against the SAME verified fixture. Await acknowledgement and verify the resulting
 state before returning to the core. This represents another trusted local Docker actor, not remote authorization.
@@ -248,6 +249,20 @@ Root/independent review of the exact source and harness must precede a separatel
 Only that actual run, its bounded receipt and independent cleanup evidence can close the native race task.
 This does not prove remote permission, installed isolation, an atomic state transition, application health,
 cross-platform control or a release/canary gate. One small acceptance PR may contain these test/spec changes only.
+
+Local preparation evidence: the two new Node policy tests first failed while all sixteen existing cases passed;
+after the closed-profile implementation all eighteen pass with zero skips. The new private orchestration/ordinary
+Unix tests live in `internal/actionengine/native_races_linux_test.go`; existing native setup selects that profile
+without changing its default scenario. A bounded test-only HTTP observer delegates unchanged to the real transport
+and records worker POST status codes only, so an actual non-204 refusal cannot be confused with a transport timeout.
+The retained offline Go1.27.3 Windows toolchain crosscompiled the Linux test package and Linux vet passed.
+Root and an independent reviewer approved the exact six-file test-only freeze before ordinary Linux execution.
+With a clean environment, no native-phase variable, offline module verification and a task-private cache, the
+ordinary-user Linux `go test -race ./internal/actionengine -count=1 -timeout=3m` run passed (package 1.583 seconds).
+This includes four synthetic Unix orchestration subcases; both opt-in native entries remain skipped, not actual
+Docker proof. No dependencies were downloaded and no root or daemon operation was performed. Separately approved
+native execution and current-head delivery remain pending. No production adapter, journal, core, ownership
+predicate or scratch image source changed.
 
 The reviewed source `739ee6172636e8bb6860c437e4c914fd89242242` completed the separately approved manual Linux
 harness with exit0 and `ACTION_ENGINE_NATIVE_PASS cases=2 scope=DISPOSABLE_PROTOCOL_ONLY`. The bounded private receipt
