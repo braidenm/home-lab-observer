@@ -186,7 +186,8 @@ No production Go or strict ownership-predicate bytes changed in that harness cor
 
 Prepared 2026-11-02 against merged `c2f11b2ad1b3175e0394e27b0582906e63915c37`.
 Root reviewed this exact test-only plan before spec-first commit `0b2825324283cba1b2138380147cd489758ad2df`. It does not
-change the core, journal, Engine adapter, accepted ADRs, installed roles or authority. No new native run is claimed.
+change the core, journal, Engine adapter, accepted ADRs, installed roles or authority. The separately approved native
+race run is recorded below; it does not activate an installed worker.
 The existing basic-operation proof below remains distinct and is not replaced by synthetic race coverage.
 
 Add the closed manual `--external-state-races` profile to `scripts/test-action-engine-native.mjs`. Its absence keeps
@@ -260,9 +261,31 @@ Root and an independent reviewer approved the exact six-file test-only freeze be
 With a clean environment, no native-phase variable, offline module verification and a task-private cache, the
 ordinary-user Linux `go test -race ./internal/actionengine -count=1 -timeout=3m` run passed (package 1.583 seconds).
 This includes four synthetic Unix orchestration subcases; both opt-in native entries remain skipped, not actual
-Docker proof. No dependencies were downloaded and no root or daemon operation was performed. Separately approved
-native execution and current-head delivery remain pending. No production adapter, journal, core, ownership
+Docker proof. During that ordinary test run no dependencies were downloaded and no root or daemon operation was
+performed. Current-head delivery remains pending. No production adapter, journal, core, ownership
 predicate or scratch image source changed.
+
+### Actual external-state race evidence
+
+Reviewed clean source `593f0999bf398d0f7ed51b927f131b4f1c8967de` completed one separately authorized native run
+with exit0 and `ACTION_ENGINE_NATIVE_RACES_PASS assertions=3 fixtures=2 scope=DISPOSABLE_PROTOCOL_ONLY`.
+The bounded private receipt SHA256 is `30d9c0ddf1f79b5183c3f2788dc530bb23e2b2c7210337157cad237be71d03b8`.
+Root independently matched its source, image/test-binary hashes and both captured creation receipts. Actual tested
+compatibility was Docker29.1.3, linux/amd64, advertised API maximum1.52/minimum1.44, issued API1.45 only.
+
+All three cases above passed through the real coordinator, journal and fixed Engine adapters: the stale Stop
+no-op retained ALREADY_STOPPED despite external Start; the Stop and Start mutation races observed actual non-204
+responses and retained OUTCOME_UNKNOWN. This evidence does not assert a particular non-204 status such as HTTP304.
+Ordered checkpoints, real cooldown, same-journal reopen/replay and different-key unresolved-target fencing remained
+enabled. The same two sequential fixture modes, fixed isolation caps and 150/180-second limits were preserved.
+
+Both removals were acknowledged. Root separately verified a fresh daemon tuple and two successful exact-full-ID
+filtered queries with empty results, not merely removal acknowledgements. No existing workload was operated on;
+private stages, images and receipts remain retained without broad pruning. This closes only the scoped external-state
+race acceptance gap. It proves neither atomic state changes nor remote authorization, installed-worker isolation,
+application health, cross-platform support or a release/canary gate. Normal review and current-head CI remain required.
+
+### Earlier basic-operation evidence
 
 The reviewed source `739ee6172636e8bb6860c437e4c914fd89242242` completed the separately approved manual Linux
 harness with exit0 and `ACTION_ENGINE_NATIVE_PASS cases=2 scope=DISPOSABLE_PROTOCOL_ONLY`. The bounded private receipt
