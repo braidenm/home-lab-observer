@@ -1,6 +1,7 @@
 # Tasks
 
-**Status:** Proposed; unchecked items are future work, not delivered capabilities.
+**Status:** Local consumed ADR030 paired-runtime design accepted for implementation/tests only. Unchecked items
+are future work, not delivered capabilities; installation/production activation and broader Spec011 remain gated.
 
 - [x] Record owner's accepted first action set: independently granted start, stop and restart.
 - [x] Draft proposed scope, safety semantics, boundaries and primary-source research.
@@ -50,6 +51,9 @@
     record three race assertions over two sequential fixtures plus independently verified exact-ID cleanup.
     See [actual evidence and limitations](engine-adapter.md#actual-external-state-race-evidence); installed worker,
     remote permission, application health, release activation and current-head delivery are not asserted.
+- [x] PR163 (`5fd9e335`) delivered three controlled external-state assertions on two owned sequential native fixtures,
+  with independent exact cleanup; actual non204 uncertainty, not an exact304 or atomic-state-change claim. No rerun
+  or action activation is authorized by this completed acceptance evidence.
 - [ ] Integrate explicit enrollment, grant/revoke and execution transport without observation-credential reuse.
 - [ ] Add accessible permission-filtered UI and independent responsive UX review.
 - [ ] Document enable/disable/rotate/upgrade/recover/remove and known authority/health limitations.
@@ -57,3 +61,29 @@
 
 The repository's connected observation work remains ahead of this implementation. Kubernetes rollout actions require a
 separate future spec. No checklist completion here authorizes manipulating existing host containers.
+
+## Proposed complete packaged-worker delivery
+
+- [ ] Review/freeze [root admin codec](admin-recovery-ipc.md) and [journal v2 exact DDL/CAS](action-journal-v2.md)
+  with paired Platform vectors/authority before runtime TDD; preserve Proposed ADR027, accepted ADR028/029 and v1 evidence.
+- [ ] Implement consumed v2 admission/full16 binding, dedicated retained lookup and four-origin immutable ACK
+  transaction; test equal/changed replay, reserved-slot/fence counting, restart and no old-action redispatch.
+- [ ] Prove three bounded load streams and malformed/NUL/orphan/version refusal; prune50 plus ACK/expiry/terminal
+  retention/floor rollback cases; keep two-second SQL bounds and no mapping-history fallback.
+- [ ] TDD policy allocation after highest mapping is pruned: head stays monotonic, next fresh mapping cannot reuse
+  its revision; cover empty publication, unchanged reuse, multi-record canonical order and atomic LongMAX refusal.
+- [ ] Prove exact updated1000/2000/1000 max packing including remote32B digest, actual private ENOSPC, hot recovery,
+  lost/late COMMIT and every localACK/remoteHELD crash boundary without raising limits or claiming power-loss proof.
+
+- [ ] Review/accept ADR030 and [packaged-worker.md](packaged-worker.md), including trusted-worker residual and rare
+  root-plus-remote-owner reconciliation; freeze paired remote contracts before implementation.
+- [ ] Freeze exact IPC vectors, local approval storage, journal acknowledgement schema/CAS/size/rollback contract,
+  compatibility manifest and installed identity/filesystem/network profile; no signed-ticket framework or generic proxy.
+- [ ] First small consumed PR: runnable worker/broker against isolated real Platform protocol, actual TLS current checks
+  at both core checkpoints, separate root-admin ingress, retained lookup and owner acknowledgement using existing
+  core/journal/Engine; prove authority/revocation, IPC, crash/storage/result ambiguity and recovery on owned targets.
+- [ ] Second small consumed PR: installed enrollment/ADR052 renewal/profile/lifecycle bundle; prove disposable VM
+  identity/isolation, credential/policy drift, bounded stop/join, upgrade/rollback and unchanged observation. Both PRs
+  and paired Platform prerequisites pass before production activation; no unused-helper or giant all-feature PR.
+- [ ] Finish exact-source independent review, normal CI and release evidence; install disabled and explicitly gate
+  one disposable target before any existing workload or UI action enablement. No draft checklist authorizes execution.

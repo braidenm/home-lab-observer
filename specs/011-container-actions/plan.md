@@ -1,6 +1,7 @@
 # Proposed implementation plan
 
-**Status:** Proposed; documentation only. Deliver after connected observation, one reviewed slice per PR.
+**Status:** Local consumed ADR030 paired-runtime design accepted for implementation/tests; full feature and installed
+activation remain gated. Deliver after connected observation, one reviewed slice per PR.
 
 First review [ADR 027](../../docs/adr/027-bounded-action-dispatch-and-uncertainty.md): it reconciles proposed grace,
 immutable target/parameter binding and delivery-versus-dispatch recovery with the remote coordinator. It does not
@@ -18,7 +19,8 @@ clock, authorization service and durable-store failure seam. Module names and ex
 The broker alone owns the authority-bearing local socket/pipe. Its credentials and ledger must be inaccessible to the
 web and uploader roles. UI action affordances consume normalized capability/results, not Docker handles or raw responses.
 The remote application authenticates actors, but the broker validates installation/owner scope and its owner allowlist
-and checks fresh authorization at dispatch. Freeze the standalone-owner equivalent before implementation.
+and checks fresh authorization at dispatch. Standalone/local-only action authentication is deferred beyond the first
+connected package; existing standalone read-only operation is unchanged.
 
 ## Delivery order
 
@@ -27,7 +29,7 @@ Independent review of that slice precedes code; it does not approve the full exe
 
 1. Review Spec 011, resolve the three proposed architecture decisions and create a new ADR; do not edit accepted ADR 006.
 2. Freeze separate versioned request/result/grant/audit schemas, error vocabulary, state transition table and threat model.
-   Include grant-to-full-ID private mapping, signed freshness/replay semantics and crash recovery diagrams.
+   Include grant-to-full-ID private mapping, correlated fresh TLS authority checks/replay semantics and crash recovery diagrams.
 3. Implement policy and durable intent/dispatch/outcome state machine with only synthetic transports. Prove reservation,
    fsync failure, retention, unknown outcomes, revocation and per-target serialization before any daemon call exists.
 4. Implement fixed local Engine adapter and bounded selected-field decoding. Start, stop and restart are distinct typed
@@ -60,7 +62,20 @@ observation refactor. Synthetic faults precede separately approved exact disposa
 (at most two sequential graceful/ignore-signal modes with exact cleanup between). No installed
 broker, credentials, grants, owner reconciliation, action controls or activation follows from this dormant slice.
 
-## Deferred
+## Next complete executable cut (proposed)
+
+Review [packaged-worker.md](packaged-worker.md) and ADR030 before code. Deliver the existing core/journal/Engine
+through two small consumed vertical PRs rather than another unused adapter. Freeze paired remote authority/result/owner
+acknowledgement contracts, closed IPC, immutable approvals, reconciliation journal migration and exact installation
+profile together. First deliver the runnable two-process real-protocol fixture path including lookup/reconciliation;
+then the installed enrollment/renewal/profile/lifecycle bundle and disposable VM proof. Reuse existing helpers only
+where policy is identical. Both cuts and paired Platform gates precede production activation. Owner acknowledgement
+initially requires both root-local operation and fresh remote current-owner approval; no forced unknown clear.
+Owning proposed source contracts are [admin recovery IPC](admin-recovery-ipc.md) and [journal v2](action-journal-v2.md):
+exact members/DDL/CAS/floor first, then consumed runtime TDD and real capacity/crash/profile acceptance. Preserve
+accepted ADRs and v1 constructors; no automatic migration or new unbounded policy-history framework.
+
+### Deferred beyond the packaged cut
 
 Kubernetes Deployment rollout restart has separate UID/RBAC/patch-field/admission and rollout-health semantics; it is
 not another branch of the Docker adapter. Pod eviction, host/service commands, bulk actions, schedules and autonomous

@@ -1,11 +1,19 @@
 # Spec 011: Permissioned Docker container actions
 
-**Status:** Proposed for full architecture, security and owner review; not approved for implementation or activation
+**Status:** Full feature remains Proposed. Root/independent review accepts the ADR030 local consumed paired-runtime
+design for implementation/tests only; no installer, release or production activation approval.
 
 [ADR 027](../../docs/adr/027-bounded-action-dispatch-and-uncertainty.md) proposes the 2026-10-31 connected contract
-reconciliation below. Both remain Proposed; existing observation definitions and executable authority are unchanged.
+reconciliation below and remains Proposed; existing observation definitions and executable authority are unchanged.
 
 ## Outcome and sequencing
+
+The next executable proposal is the [complete packaged Linux worker/broker cut](packaged-worker.md), with
+[proposed ADR030](../../docs/adr/030-packaged-typed-action-workers.md). It preserves separate trusted action
+delivery and networkless execution, and includes owner-authenticated uncertainty recovery. Neither draft accepts
+the full broker, authorizes installation, or changes existing read-only profiles.
+The proposed exact [root-only recovery codec](admin-recovery-ipc.md) and [journal v2 DDL/CAS](action-journal-v2.md)
+select four-case recovery, bounded policy references and immutable ACK retention; existing v1 contracts remain unchanged.
 
 After connected read-only observation is delivered, an owner can explicitly enable a separate action broker and grant
 start, stop and restart independently for selected existing Docker containers. The owner has accepted these three
