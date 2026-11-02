@@ -16,11 +16,14 @@ function need(value, code) { if (!value) throw new Refusal(code); }
 export const buildxPin = Object.freeze({ version: 'v0.38.1', size: 68366498, sha256: 'e25d5cd675092bb5d1d03632fdc46cdf3fede7b514dc5f023a105e00d3ce5ad4' });
 export function nativeOptions(argv, platform) {
   need(argv[0] === '--allow-owned-fixtures', 'EXECUTION_NOT_APPROVED');
-  if (argv.length === 1) return { buildxSource: null };
-  need(argv.length === 3 && argv[1] === '--buildx-source' && platform === 'linux', 'ARGUMENTS_REFUSED');
-  const source = argv[2];
+  const race = argv[1] === '--external-state-races';
+  const tail = argv.slice(race ? 2 : 1);
+  const profile = race ? { externalStateRaces: true } : {};
+  if (tail.length === 0) return { buildxSource: null, ...profile };
+  need(tail.length === 2 && tail[0] === '--buildx-source' && platform === 'linux', 'ARGUMENTS_REFUSED');
+  const source = tail[1];
   need(typeof source === 'string' && path.posix.isAbsolute(source) && path.posix.normalize(source) === source && !source.includes('\0'), 'BUILDX_SOURCE_REFUSED');
-  return { buildxSource: source };
+  return { buildxSource: source, ...profile };
 }
 export function approvedBuildxSource(file, parent, digest) {
   need(file?.isFile() && !file.isSymbolicLink() && file.nlink === 1 && file.uid === 0 && (file.mode & 0o7777) === 0o700 && file.size === buildxPin.size &&
@@ -132,6 +135,22 @@ export function resultReceipt(source, version, image, hashes, run, fixtures, bui
   need(Buffer.byteLength(JSON.stringify(record), 'utf8') <= 2048, 'RECEIPT_REFUSED');
   return record;
 }
+export function raceResultReceipt(...args) {
+  const { cases, ...base } = resultReceipt(...args);
+  const record = { ...base, schema: 'hlo-owned-action-race-fixture/v1', profile: 'external-state-races',
+    assertions: 3, fixture_count: cases, scenarios: ['stale-noop', 'stop-unknown', 'start-unknown'] };
+  need(Buffer.byteLength(JSON.stringify(record), 'utf8') <= 2048, 'RECEIPT_REFUSED');
+  return record;
+}
+export function validateRaceOutput(output, mode) {
+  need(typeof output === 'string' && ['graceful', 'ignore'].includes(mode), 'NATIVE_MARKER_REFUSED');
+  const expected = mode === 'graceful' ? ['stale-noop', 'stop-unknown'] : ['start-unknown'];
+  const lines = output.split(/\r?\n/);
+  const actual = lines.filter(line => line.startsWith('HLO_ENGINE_NATIVE_RACE_PASS=')).map(line => line.slice('HLO_ENGINE_NATIVE_RACE_PASS='.length));
+  need(JSON.stringify(actual) === JSON.stringify(expected) && !lines.some(line => line.startsWith('HLO_ENGINE_NATIVE_CASE_PASS=')) &&
+    exactMarker(output, 'HLO_ENGINE_NATIVE_RACES_CASE_PASS=') === mode, 'NATIVE_MARKER_REFUSED');
+  return expected.length;
+}
 export function stageParent(platform, windowsTemporary) {
   need(platform === 'linux' || platform === 'win32', 'PLATFORM_REFUSED');
   return platform === 'linux' ? '/var/tmp' : windowsTemporary;
@@ -200,7 +219,11 @@ export function wslPathArgs(filename) {
   need(typeof filename === 'string' && /^[A-Za-z]:[\\/]/.test(filename) && !filename.includes('\0'), 'WSL_PATH_REFUSED');
   return ['-d', 'Ubuntu', '--user', 'root', '--exec', '/usr/bin/wslpath', '-a', '-u', filename];
 }
-export function wslNativeArgs(binary, variables) {
+export function nativeTestArgs(profile = 'basic') {
+  need(['basic', 'external-state-races'].includes(profile), 'NATIVE_ARGUMENTS_REFUSED');
+  return [profile === 'basic' ? '-test.run=^TestOwnedNativeFixture$' : '-test.run=^TestOwnedNativeStateRaces$', '-test.count=1', '-test.timeout=150s'];
+}
+export function wslNativeArgs(binary, variables, profile = 'basic') {
   need(typeof binary === 'string' && /^\/mnt\/[a-z]\/[A-Za-z0-9_./ -]+$/.test(binary) && !binary.includes('..'), 'WSL_PATH_REFUSED');
   const keys = Object.keys(variables);
   need(keys.every(key => ['HLO_ENGINE_NATIVE_PHASE', 'HLO_ENGINE_NATIVE_VERSION', 'HLO_ENGINE_NATIVE_ID', 'HLO_ENGINE_NATIVE_IMAGE', 'HLO_ENGINE_NATIVE_RUN'].includes(key)), 'NATIVE_ARGUMENTS_REFUSED');
@@ -210,11 +233,12 @@ export function wslNativeArgs(binary, variables) {
   need(phase === 'version' ? keys.length === 2 : keys.length === 5 && fullID(variables.HLO_ENGINE_NATIVE_ID) && imageID(variables.HLO_ENGINE_NATIVE_IMAGE) && runID(variables.HLO_ENGINE_NATIVE_RUN), 'NATIVE_ARGUMENTS_REFUSED');
   return ['-d', 'Ubuntu', '--user', 'root', '--exec', '/usr/bin/env', '-i',
     ...Object.entries(variables).map(([key, value]) => `${key}=${value}`), binary,
-    '-test.run=^TestOwnedNativeFixture$', '-test.count=1', '-test.timeout=150s'];
+    ...nativeTestArgs(profile)];
 }
 
 export async function main(argv = process.argv.slice(2)) {
   const options = nativeOptions(argv, process.platform);
+  const profile = options.externalStateRaces ? 'external-state-races' : 'basic';
   need(['linux', 'win32'].includes(process.platform) && process.arch === 'x64', 'PLATFORM_REFUSED');
   const env = cleanEnvironment(process.env);
   need(command('git', ['status', '--porcelain', '--untracked-files=all'], env, 'SOURCE_REFUSED').trim() === '', 'SOURCE_REFUSED');
@@ -265,9 +289,9 @@ export async function main(argv = process.argv.slice(2)) {
   }
   const native = (phase, extra = {}) => {
     const variables = { HLO_ENGINE_NATIVE_PHASE: phase, HLO_ENGINE_NATIVE_VERSION: version, ...extra };
-    const testArgs = ['-test.run=^TestOwnedNativeFixture$', '-test.count=1', '-test.timeout=150s'];
+    const testArgs = nativeTestArgs(profile);
     if (process.platform === 'win32') {
-      return command('wsl.exe', wslNativeArgs(linuxBinary, variables), env, 'NATIVE_FIXTURE_REFUSED', 180000);
+      return command('wsl.exe', wslNativeArgs(linuxBinary, variables, profile), env, 'NATIVE_FIXTURE_REFUSED', 180000);
     }
     return command(linuxBinary, testArgs, { ...env, ...variables }, 'NATIVE_FIXTURE_REFUSED', 180000);
   };
@@ -280,6 +304,7 @@ export async function main(argv = process.argv.slice(2)) {
   need(imageID(image), 'IMAGE_ID_REFUSED');
   need((await docker(['image', 'inspect', '--format', '{{.Id}}', image], 'IMAGE_ID_REFUSED')).trim() === image, 'IMAGE_ID_REFUSED');
   let cases = 0;
+  let raceAssertions = 0;
   const removed = [];
   for (const mode of ['graceful', 'ignore']) {
     need(versionTuple(await cliVersion()) === version && versionTuple(exactMarker(native('version'), 'HLO_ENGINE_NATIVE_VERSION=')) === version, 'DAEMON_MISMATCH');
@@ -300,7 +325,8 @@ export async function main(argv = process.argv.slice(2)) {
     try {
       await inspect();
       const output = native(mode, { HLO_ENGINE_NATIVE_ID: id, HLO_ENGINE_NATIVE_IMAGE: image, HLO_ENGINE_NATIVE_RUN: run });
-      need(exactMarker(output, 'HLO_ENGINE_NATIVE_CASE_PASS=') === mode, 'NATIVE_MARKER_REFUSED');
+      if (profile === 'external-state-races') raceAssertions += validateRaceOutput(output, mode);
+      else need(exactMarker(output, 'HLO_ENGINE_NATIVE_CASE_PASS=') === mode, 'NATIVE_MARKER_REFUSED');
       cases++;
     } catch (error) { primary = error; }
     try {
@@ -316,10 +342,13 @@ export async function main(argv = process.argv.slice(2)) {
   }
   need(command('git', ['status', '--porcelain', '--untracked-files=all'], env, 'SOURCE_REFUSED').trim() === '', 'SOURCE_REFUSED');
   need(cases === 2, 'RECEIPT_REFUSED');
-  await writeFile(path.join(temporary, 'result.json'), JSON.stringify(resultReceipt(source, version, image, hashes, run, removed, privateBuildx?.receipt ?? null)) + '\n', { flag: 'wx', mode: 0o600 });
+  need(profile === 'basic' || raceAssertions === 3, 'RECEIPT_REFUSED');
+  const receipt = profile === 'basic' ? resultReceipt : raceResultReceipt;
+  await writeFile(path.join(temporary, 'result.json'), JSON.stringify(receipt(source, version, image, hashes, run, removed, privateBuildx?.receipt ?? null)) + '\n', { flag: 'wx', mode: 0o600 });
   // Keep the private source-built image/context/result for audit. Never prune
   // images or enumerate/delete another workload to clean a test environment.
-  console.log('ACTION_ENGINE_NATIVE_PASS cases=2 scope=DISPOSABLE_PROTOCOL_ONLY');
+  console.log(profile === 'basic' ? 'ACTION_ENGINE_NATIVE_PASS cases=2 scope=DISPOSABLE_PROTOCOL_ONLY' :
+    'ACTION_ENGINE_NATIVE_RACES_PASS assertions=3 fixtures=2 scope=DISPOSABLE_PROTOCOL_ONLY');
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

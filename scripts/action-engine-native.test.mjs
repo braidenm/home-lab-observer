@@ -85,6 +85,46 @@ test('only Linux may opt into one pinned private Buildx source', () => {
     ['--allow-owned-fixtures', '--buildx-source', 'https://invalid.example/tool'], ['--allow-owned-fixtures', '--buildx-version', 'latest']]) assert.throws(() => nativeOptions(args, 'linux'));
   assert.throws(() => nativeOptions(['--allow-owned-fixtures', '--buildx-source', '/private/task/buildx'], 'win32'));
 });
+
+test('external state profile is closed and preserves the default selector and limits', () => {
+  assert.deepEqual(nativeOptions(['--allow-owned-fixtures', '--external-state-races'], 'linux'), { buildxSource: null, externalStateRaces: true });
+  assert.deepEqual(nativeOptions(['--allow-owned-fixtures', '--external-state-races', '--buildx-source', '/private/task/buildx'], 'linux'), { buildxSource: '/private/task/buildx', externalStateRaces: true });
+  for (const args of [
+    ['--allow-owned-fixtures', '--external-state-races', '--external-state-races'],
+    ['--allow-owned-fixtures', '--profile', 'foreign'],
+    ['--allow-owned-fixtures', '--external-state-races', '--test', 'foreign'],
+    ['--allow-owned-fixtures', '--buildx-source', '/private/task/buildx', '--external-state-races'],
+  ]) assert.throws(() => nativeOptions(args, 'linux'));
+  assert.deepEqual(native.nativeTestArgs('basic'), ['-test.run=^TestOwnedNativeFixture$', '-test.count=1', '-test.timeout=150s']);
+  assert.deepEqual(native.nativeTestArgs('external-state-races'), ['-test.run=^TestOwnedNativeStateRaces$', '-test.count=1', '-test.timeout=150s']);
+  assert.throws(() => native.nativeTestArgs('foreign'));
+  const variables = { HLO_ENGINE_NATIVE_PHASE: 'version', HLO_ENGINE_NATIVE_VERSION: '29.9.1|1.56|1.40|linux|amd64' };
+  assert.deepEqual(wslNativeArgs('/mnt/c/private/actionengine.test', variables, 'external-state-races').slice(-3), native.nativeTestArgs('external-state-races'));
+});
+
+test('race evidence requires exact profile scenarios and cannot accept the basic marker', () => {
+  const graceful = 'HLO_ENGINE_NATIVE_RACE_PASS=stale-noop\nHLO_ENGINE_NATIVE_RACE_PASS=stop-unknown\nHLO_ENGINE_NATIVE_RACES_CASE_PASS=graceful\n';
+  const ignore = 'HLO_ENGINE_NATIVE_RACE_PASS=start-unknown\nHLO_ENGINE_NATIVE_RACES_CASE_PASS=ignore\n';
+  assert.equal(native.validateRaceOutput(graceful, 'graceful'), 2);
+  assert.equal(native.validateRaceOutput(ignore, 'ignore'), 1);
+  for (const output of [graceful + 'HLO_ENGINE_NATIVE_RACE_PASS=stale-noop\n', graceful.replace('stop-unknown', 'foreign'),
+    graceful.replace('stop-unknown', 'start-unknown'), 'HLO_ENGINE_NATIVE_CASE_PASS=graceful\n',
+    graceful.replace('HLO_ENGINE_NATIVE_RACES_CASE_PASS=graceful\n', ''), graceful + 'HLO_ENGINE_NATIVE_CASE_PASS=graceful\n',
+    graceful + 'HLO_ENGINE_NATIVE_RACES_CASE_PASS=graceful\n']) assert.throws(() => native.validateRaceOutput(output, 'graceful'));
+  assert.throws(() => native.validateRaceOutput(ignore, 'foreign'));
+  const fixtures = [{ mode: 'graceful', fullID: expected.id, removed_acknowledged: true }, { mode: 'ignore', fullID: 'd'.repeat(64), removed_acknowledged: true }];
+  const record = native.raceResultReceipt('1'.repeat(40), '29.9.1|1.56|1.40|linux|amd64', expected.image,
+    { fixture: 'e'.repeat(64), test_binary: 'f'.repeat(64) }, expected.run, fixtures);
+  assert.equal(record.schema, 'hlo-owned-action-race-fixture/v1');
+  assert.equal(record.profile, 'external-state-races');
+  assert.equal(record.assertions, 3);
+  assert.equal(record.fixture_count, 2);
+  assert.equal(record.cases, undefined);
+  assert.deepEqual(record.scenarios, ['stale-noop', 'stop-unknown', 'start-unknown']);
+  assert.ok(Buffer.byteLength(JSON.stringify(record)) <= 2048);
+  assert.throws(() => native.raceResultReceipt('1'.repeat(40), '29.9.1|1.56|1.40|linux|amd64', expected.image,
+    { fixture: 'e'.repeat(64), test_binary: 'f'.repeat(64) }, expected.run, [fixtures[0], { ...fixtures[1], unexpected: true }]));
+});
 test('Buildx source requires exact private root-owned file metadata and code-owned hash', async () => {
   const file = () => ({ isFile: () => true, isSymbolicLink: () => false, nlink: 1, uid: 0, mode: 0o100700, size: buildxPin.size });
   const parent = () => ({ isDirectory: () => true, isSymbolicLink: () => false, uid: 0, mode: 0o40700 });

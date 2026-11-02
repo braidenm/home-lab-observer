@@ -21,6 +21,14 @@ import (
 // Only the separately reviewed Node orchestrator opts into this entry. Normal
 // CI never discovers a daemon or mutates anything. No production bypass API.
 func TestOwnedNativeFixture(t *testing.T) {
+	runOwnedNativeFixture(t, false)
+}
+
+func TestOwnedNativeStateRaces(t *testing.T) {
+	runOwnedNativeFixture(t, true)
+}
+
+func runOwnedNativeFixture(t *testing.T, races bool) {
 	phase := os.Getenv("HLO_ENGINE_NATIVE_PHASE")
 	if phase == "" {
 		t.Skip("owned native fixture execution requires separate approval")
@@ -89,6 +97,10 @@ func TestOwnedNativeFixture(t *testing.T) {
 		t.Fatal("native journal provision")
 	}
 	defer j.Close()
+	if races {
+		runOwnedStateRaces(t, owned, request, binding, dir, j)
+		return
+	}
 	ops := []actioncore.Operation{actioncore.Start, actioncore.Restart, actioncore.Stop}
 	if phase == "ignore" {
 		ops = []actioncore.Operation{actioncore.Start, actioncore.Stop}
