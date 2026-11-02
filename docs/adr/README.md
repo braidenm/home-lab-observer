@@ -31,5 +31,6 @@
 | [027](027-bounded-action-dispatch-and-uncertainty.md) | Proposed | Coordinate finite grace, immutable action targets/parameters and a durable unknown-outcome fence; no action activation |
 | [028](028-dormant-linux-action-journal.md) | Accepted for unused Linux implementation only | Private bounded SQLite action journal; unknown permits survive Close/crash/expiry, no reconciliation or activation |
 | [029](029-fixed-linux-action-engine.md) | Accepted for unused Linux implementation only | Fixed API1.45 action adapter; exact disposable execution and installed authority remain separately gated |
+| [030](030-packaged-typed-action-workers.md) | Accepted for local paired-runtime implementation/tests only | Separate trusted action worker/networkless broker, current authority and owner acknowledgement; installation/activation gated |
 
 Accepted ADRs are immutable except for status and supersession links. Material changes require a new ADR.
