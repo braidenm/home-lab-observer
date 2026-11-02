@@ -40,6 +40,13 @@
   installed confinement, a release/canary gate or cross-platform parity.
 - [ ] Exercise controlled external-state races on owned native fixtures; current fake HTTP304/state-race coverage and
   successful basic native operations do not prove this acceptance case or atomic state changes.
+  - [ ] Review/freeze the separate test-only external-state profile in `engine-adapter.md` and commit the spec first.
+  - [ ] Add the closed harness profile and real core/journal/Engine checkpoint cases: stale no-op, Stop race and
+    Start race; preserve both immutable fixture modes, ownership/caps, existing timeouts and real cooldown.
+  - [ ] Prove finite ordering/counters, retained replay after reopening the same journal and new-key UNKNOWN fence;
+    ordinary contract tests cover profile/receipt refusal and failure paths without claiming native execution.
+  - [ ] Obtain exact source/harness root/independent approval before separately authorized native execution;
+    record three race assertions over two sequential fixtures plus independently verified exact-ID cleanup.
 - [ ] Integrate explicit enrollment, grant/revoke and execution transport without observation-credential reuse.
 - [ ] Add accessible permission-filtered UI and independent responsive UX review.
 - [ ] Document enable/disable/rotate/upgrade/recover/remove and known authority/health limitations.

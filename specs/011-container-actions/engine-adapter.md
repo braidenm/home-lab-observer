@@ -182,6 +182,73 @@ No production Go or strict ownership-predicate bytes changed in that harness cor
 
 ## Supervised disposable Linux proof
 
+### Proposed separate external-state acceptance profile
+
+Prepared 2026-11-02 against merged `c2f11b2ad1b3175e0394e27b0582906e63915c37`.
+This subsection is a test-only proposal awaiting exact review/spec-first commit before implementation. It does not
+change the core, journal, Engine adapter, accepted ADRs, installed roles or authority. No new native run is claimed.
+The existing basic-operation proof below remains distinct and is not replaced by synthetic race coverage.
+
+Add the closed manual `--external-state-races` profile to `scripts/test-action-engine-native.mjs`. Its absence keeps
+the existing basic profile. Both use the same two sequential immutable image modes, graceful then ignore, one
+container at a time, exact captured full IDs and frozen operation/grace approval. No arbitrary scenario, endpoint,
+operation or test-name input is accepted. Keep the current 150-second Go test and 180-second orchestration limits
+per fixture; do not append race cases to the basic profile and quietly increase timeouts.
+
+`internal/actionengine/native_linux_test.go` owns a private test-only authority decorator. On exactly its second
+checkpoint, after the core's real Inspect has returned, it performs one synchronous external operation through a
+second real fixed Engine adapter against the SAME verified fixture. Await acknowledgement and verify the resulting
+state before returning to the core. This represents another trusted local Docker actor, not remote authorization.
+No fake daemon response/state, production callback, goroutine scheduling race or timing sleep establishes ordering.
+The external actor uses only the existing typed Start/Stop methods; no kill, exec, update, socket change or new image.
+
+| Fixture / request | Deterministic external change after core Inspect | Expected result |
+| --- | --- | --- |
+| Graceful / Stop from CREATED | External Start acknowledges; verify RUNNING before checkpoint returns | ALREADY_STOPPED; zero worker mutation calls, despite the now-running fixture |
+| Same graceful fixture / Stop from RUNNING, after real 30-second journal cooldown | External Stop with approved grace acknowledges; verify EXITED | One worker Stop attempt returns non-204; durable OUTCOME_UNKNOWN |
+| Ignore / Start from CREATED | External Start acknowledges; verify RUNNING | One worker Start attempt returns non-204; durable OUTCOME_UNKNOWN |
+
+The first result is deliberately the existing non-atomic contract: the no-op describes the inspected state, not
+lasting state or an atomic compare-and-mutate. Exact retained replay must return ALREADY_STOPPED without a worker
+inspection/mutation, even while the fixture is running. The other cases do not infer success from final state.
+Do not claim actual HTTP304 unless a private response-status observer delegates unchanged to the pinned real
+transport and records that exact finite status. Recording non-204 refusal alone is sufficient for this acceptance.
+No raw response/body/header or Docker error is retained or emitted.
+
+Keep independent bounded counters for worker Inspect/mutation and external mutation, plus a finite ordering trace.
+Test-only wrappers delegate unchanged to the REAL actioncore, actionjournal and actionengine implementations.
+Assert first authority -> real inspection -> second authority/external acknowledgement -> real persisted intent ->
+one worker dispatch for the mutation cases; the no-op has no intent or worker dispatch. The authority decorator
+fires once only; external failure or unexpected state fails the test and never returns authorization success.
+Ownership/cap verification is mandatory before and after each external mutation and before each worker mutation.
+An unexpected state/identity is a refusal, not permission to retry or repair it.
+
+Unknown is the final execution case for each fixture. Close and reopen the SAME journal directory/database, replay
+the exact request with a fresh valid delivery and prove retained UNKNOWN without worker Inspect/mutation. Then use
+a distinct action ID for that SAME target and prove the persistent unresolved-target fence, also without dispatch.
+Never replace the journal, alter its clock, clear a fence, change approval revisions/parameters within a fixture,
+or use cleanup as reconciliation. Preserve real cooldown and fresh locally measured request/delivery timestamps.
+
+All existing exact image/ID/run-label/isolation checks, empty Docker config, fixed daemon-tuple checks, offline
+build inputs, private persistent staging, fsynced creation-intent/captured-ID receipts and bounded closed outputs
+remain mandatory. Cleanup still requires exact ownership/caps and targets only the captured full ID; a failed
+ownership check retains the fixture. Independent exact-ID absence checks remain separate from removal acknowledgement.
+No third fixture, concurrent fleet, existing workload, host configuration, credential or production network is added.
+
+The race profile must emit a distinct closed success marker/receipt that binds profile `external-state-races`,
+three assertions, two sequential fixtures, source/image/test-binary hashes and both removal acknowledgements.
+The existing basic receipt/marker cannot be interpreted as race proof, nor vice versa. Reject missing/duplicate
+markers, unknown profiles, wrong counts, reused IDs, unexpected receipt keys and any failed scenario. Failed runs
+retain private diagnostics with finite categories only; no success receipt is written after refusal.
+
+Before native execution, ordinary tests cover closed option/argument/receipt selection, one-shot checkpoint ordering,
+external failure preventing worker dispatch, replay/new-key no-dispatch assertions and unchanged ownership/audit
+guards. Run proportional Go tests/vet/race and existing Node contract checks without widening ordinary CI scope.
+Root/independent review of the exact source and harness must precede a separately authorized disposable run.
+Only that actual run, its bounded receipt and independent cleanup evidence can close the native race task.
+This does not prove remote permission, installed isolation, an atomic state transition, application health,
+cross-platform control or a release/canary gate. One small acceptance PR may contain these test/spec changes only.
+
 The reviewed source `739ee6172636e8bb6860c437e4c914fd89242242` completed the separately approved manual Linux
 harness with exit0 and `ACTION_ENGINE_NATIVE_PASS cases=2 scope=DISPOSABLE_PROTOCOL_ONLY`. The bounded private receipt
 binds that source, the built image/test binaries, both captured full IDs and removal acknowledgements. Only synthetic
