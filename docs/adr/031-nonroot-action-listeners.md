@@ -1,6 +1,7 @@
 # ADR031: Non-root action listeners in broker-owned private leaves
 
 Status: Accepted for local paired-runtime implementation/tests after root and independent source review; installation and activation remain gated.
+Default product delivery path superseded by [ADR032](032-reuse-first-management.md); dormant-code safety contracts remain unchanged.
 Date: 2026-11-02.
 Supersedes only Spec011's root-owned listener-leaf requirement referenced by ADR030, not its other decisions.
 

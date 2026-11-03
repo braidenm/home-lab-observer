@@ -6,6 +6,13 @@ The project is intentionally public and self-contained. It does not contain, bui
 
 ## Project status
 
+**First-party experience, focused reuse:** keep the working monitoring/install/connect/share path and our own
+local and hosted dashboards. Learn from established projects and reuse focused libraries or compatible licensed
+code behind our interfaces; do not require Portainer, a separate management UI/login or another product API.
+Container management will reuse the existing typed Docker adapter and permissions rather than replace the product.
+See [ADR033](docs/adr/033-first-party-dashboard-and-management.md) and the
+[delivery plan](specs/011-container-actions/reuse-first-plan.md). Container controls are not installed or enabled.
+
 The preview includes the [Spec 005](specs/005-local-data-plane/spec.md) loopback service, bounded history,
 real trends and embedded local dashboard; [Spec 006](specs/006-container-observations/spec.md) opt-in container
 inventory and resource readings; and [Spec 009](specs/009-native-log-metadata/spec.md) opt-in Windows/Linux native log

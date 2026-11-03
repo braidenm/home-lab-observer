@@ -33,5 +33,11 @@
 | [029](029-fixed-linux-action-engine.md) | Accepted for unused Linux implementation only | Fixed API1.45 action adapter; exact disposable execution and installed authority remain separately gated |
 | [030](030-packaged-typed-action-workers.md) | Accepted for local paired-runtime implementation/tests only | Separate trusted action worker/networkless broker, current authority and owner acknowledgement; installation/activation gated |
 | [031](031-nonroot-action-listeners.md) | Accepted for local implementation/tests only | Fixed nonroot Unix listeners, role identities and protected root records; installed identity/isolation and activation remain gated |
+| [032](032-reuse-first-management.md) | Superseded by ADR033 | Historical optional upstream management direction; never activated |
+| [033](033-first-party-dashboard-and-management.md) | Accepted owner clarification; implementation gated | Our local/hosted dashboards; focused library/code reuse, no separate third-party management product |
 
 Accepted ADRs are immutable except for status and supersession links. Material changes require a new ADR.
+
+[ADR032: Reuse-first management](032-reuse-first-management.md) supersedes the default ADR030/031 delivery path;
+existing dormant implementations retain their safety contracts. No management feature is activated by that decision.
+ADR033 supersedes ADR032's provider selection without restoring the broad custom-runtime rollout.

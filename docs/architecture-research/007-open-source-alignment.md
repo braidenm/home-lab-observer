@@ -1,5 +1,8 @@
 # Open-source alignment for connected observation and Docker control
 
+Historical recommendation: the default build-versus-integrate choice is superseded by the
+[2026-11-03 reuse-first reassessment](009-reuse-first-product-scope.md). Existing security findings remain relevant.
+
 Research date: 2026-09-10. Scope: inform the next connectivity specification and
 [Spec 011](../../specs/011-container-actions/spec.md), not approve a wire protocol or enable remote actions.
 Kubernetes is deferred. The owner requests production-oriented choices aligned with comparable open-source projects.
