@@ -1,5 +1,10 @@
 # Buildable delivery slices for the dormant action runtime
 
+**Historical plan, superseded as the default roadmap on 2026-11-03 by
+[the reuse-first plan](reuse-first-plan.md) and [ADR032](../../docs/adr/032-reuse-first-management.md).**
+Preserve this implementation/review record; do not continue the ten-layer rollout solely to complete it.
+Its safety gates still apply if the dormant custom runtime is ever selected for activation.
+
 2026-11-03. Delivery plan; review and verify each reconstructed head before publication.
 
 The integrated local checkpoint is much larger than a useful review. Preserve its reviewed implementation
