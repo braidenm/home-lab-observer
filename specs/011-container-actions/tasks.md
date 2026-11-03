@@ -87,3 +87,72 @@ separate future spec. No checklist completion here authorizes manipulating exist
   and paired Platform prerequisites pass before production activation; no unused-helper or giant all-feature PR.
 - [ ] Finish exact-source independent review, normal CI and release evidence; install disabled and explicitly gate
   one disposable target before any existing workload or UI action enablement. No draft checklist authorizes execution.
+
+### Local implementation checkpoint (2026-11-02; not delivered or activated)
+
+ADR030's local paired-runtime decision and [ADR031's concrete non-root process profile](process-profile.md) have
+root and independent source approval. The installed identity, host-namespace bind, effective service confinement,
+reboot ordering and release gates remain open; accepting these documents does not satisfy those proofs.
+
+The fixed-origin worker HTTP/codec component and protected settings/active-credential reader passed independent
+source review and focused Linux race tests. The HTTP tests include lost-response/no-retry, claim ambiguity,
+cancellation/join and wrong snapshot-CAS revision refusal. Native file tests cover bounded reads, exact file
+properties, ACL/link/FIFO refusal and descriptor cleanup using private synthetic roots. They do not prove actual
+installed role/namespace admission or deterministically replace a pathname during the read.
+
+Broker/control, execution-commit guards and the fixed-role profile passed independent component review. The
+profile's foreign primary-group gap has three corrected regressions; the broker-returned BindExecution journal
+rejects acquisition without its original execution context. Mandatory protected-source tripwires now surround
+authority, Engine, journal and retained-report boundaries, with real temporary SQLite mapping-retention tests.
+A native reader test exposed a same-size in-place rewrite missed by coarse stat timestamps: the unchanged test
+failed before a bounded second-pread comparison fix, then passed ten race-enabled runs. Both buffers remain
+bounded and metadata/path/ACL checks remain required; this is not an atomic root-publication guarantee.
+
+After local environment recovery, the full native broker race suite passed on these sources (2.628s), as did
+native vet. Root independently reported the seven paired-package race suite plus journal/Engine race and vet
+passing. These use private synthetic Unix/SQLite/TLS/Engine fixtures, not new native Docker effects or installed
+role/namespace proof. The initial claim-receive processing/transfer distinction above remains a source-first
+implementation task. None of these receipts completes the runnable paired worker, real API permissions,
+packaged lifecycle, actual storage fault/maximum-packing acceptance or new disposable-container acceptance.
+
+The worker now composes its protected settings/active credential with the actual fixed-origin HTTP client and
+one sequential authenticated broker conversation. The same execution-disable latch survives paced reconnects;
+unsafe profile/peer drift terminates while an absent/refused broker retries at a fixed cancellation-aware pace.
+Protected ancestor descriptors, socket witnesses, ACL checks and kernel peer admission surround every dial,
+before any greeting. Cancel closes and joins the active conversation before closing the HTTP client. Independent
+four-file source review and the native worker race suite passed (1.680s); a later test-only ordering correction
+removed a cancellation scheduling race in the fixture and passed ten focused race runs (1.286s).
+
+The worker recovery consumer uses only the five fixed typed remote operations and the accepted root-initiated
+query graphs. Non-STATUS recovery permanently latches execution off; lost finalization permits only lookup,
+not mutation retry. Full receipt/binding/nonce/ordinal checks and cumulative native 90s/per-relay 5s limits remain.
+Independent three-file review and native race tests passed (1.589s), including denial, changed binding, canceled
+remote work, exact timing equality, suspend discontinuity and bounded query closure. These are component proofs:
+the broker still must retain its original admin-operation budget across quiescence and reconnects, and actual
+broker command entry point, root-admin orchestration and real paired API/Engine acceptance remain unfinished.
+
+The fixed worker command consumes RunWorker, admits no arguments or transport/trust/credential environment
+overrides, and reuses the identical existing manager-environment guard without observation authority. Its launch
+contract was committed before code; independent three-file review and native command/worker race tests passed
+(1.009s/1.652s). An actual compiled native invalid-argument launch under an empty environment plus the required
+safe GODEBUG returned22 with zero stdout/stderr bytes before profile access. This negative smoke is not installed
+identity, action enrollment, release identity or two-process/API/Docker acceptance.
+
+### Local recovery integration checkpoint (2026-11-03; not released)
+
+The fixed root CLI and broker launcher now consume the reviewed role admission and closed commands. The CLI
+requires a complete bounded receipt on stdin; it exposes neither a transport selector nor a generic command.
+Actual native invalid-argument smoke tests refuse before profile/socket access. Independent source review,
+native race tests and vet passed; these negative launch tests are not installed-profile acceptance.
+
+The broker's actual root ingress now consumes one read-only STATUS through the worker's authenticated BEGIN and
+the same single control capacity as snapshot publication. INIT/CONTINUE fence and join real non-relay owners,
+but still refuse before proposal/ACK/finalization. Cleanup releases capacity only after actual handler completion;
+canceling an operation or finishing its reply is not a join. Native budget/IPC/broker race tests passed with no
+skips, as did vet and independent thirteen-file review. This is local implementation, not a delivered capability.
+
+Consumed worker regressions also prove that an interrupted valid snapshot exchange retains only paced recovery,
+and that malformed initial frames remain terminal in either latch state. The same original recovery receive budget
+now permits bounded between-query ACK processing without widening frame transfer or HTTP limits. None of these
+changes automatically resumes execution. Four-origin SQLite/root recovery, paired real API/Docker acceptance,
+installed isolation/lifecycle, capacity/crash proofs and the stronger deployment reader floor remain open.

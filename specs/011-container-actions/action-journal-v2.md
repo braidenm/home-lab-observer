@@ -155,6 +155,23 @@ action at the same physical target; only RESERVED unknowns count in duplicate un
 
 ## Retention, capacity and compatibility acceptance
 
+### Consumed execution commit timing
+
+The runnable broker MUST select the explicit `BindExecution` path for new v2 execution. It requires the original
+action/digest-bound execution timing context before admission, INTENT and known-terminal writes, then rechecks
+that exact execution kind immediately before AND after each actual SQLite COMMIT. A recovery-kind token cannot
+authorize these commits; execution cannot authorize recovery ACK. These are local timing correlations, not
+remote consent. No new allowance starts at a write or retry. Existing raw `Bind` component-fixture semantics and
+v1 APIs remain unchanged, and production has no fallback from guarded binding to raw binding. Provision/open,
+ordinary retention prune and read-only expired-safe lookup do not accidentally require execution tokens.
+
+Missing/wrong-kind correlation refuses before mutation without poisoning otherwise valid storage. Once a write
+has begun, late/canceled/ambiguous commit fails and poisons the open store; stop new claims and use validated
+retained readback after reopen. A terminal that actually committed remains a known terminal, not fabricated
+QUIESCED_INTENT evidence or a rewritten UNKNOWN. A rolled-back terminal leaves its original INTENT uncertainty.
+No successful result/ACK is exposed from the uncertain call. The explicit pause-between-check-and-syscall race
+remains; these checks are not an atomic clock-plus-disk transaction or physical power-loss proof.
+
 UnACKed intent never prunes. Non-ACKed known terminals keep v1 terminal-time AND original-expiry30d rule. ACKed
 records require acknowledgedAt AND original ExpiresAt <= actual now-30d; known terminal additionally satisfies its
 terminal-time rule. No live attempt/reservation may prune. Delete at most50 actions, their <=100 events and50slots
