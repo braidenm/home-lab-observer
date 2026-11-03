@@ -1,6 +1,6 @@
 # ADR032: Reuse-first management instead of a bespoke control platform
 
-Status: Accepted product direction following owner request on 2026-11-03; implementation and deployment remain gated.
+Status: Superseded by [ADR033](033-first-party-dashboard-and-management.md) after the owner's explicit clarification on 2026-11-03. No Portainer integration was deployed.
 Supersedes ADR030/ADR031 as the default product delivery path, not their safety contracts for dormant code.
 
 ## Decision

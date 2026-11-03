@@ -1,5 +1,11 @@
 # Reuse-first reassessment
 
+**Historical assessment:** the owner explicitly rejected the separate Portainer UI/API
+direction on 2026-11-03. [ADR033](../adr/033-first-party-dashboard-and-management.md)
+now governs: first-party local/hosted views, focused library/code reuse and our
+existing typed Docker adapter. The original assessment below is preserved evidence,
+not a current provider selection or installation plan.
+
 Reviewed 2026-11-03 against the working repository and upstream primary documentation.
 This supersedes research007's recommendation to extend a custom management platform by default.
 It does not certify an upstream version or authorize an installation.

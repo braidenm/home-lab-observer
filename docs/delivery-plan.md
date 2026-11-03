@@ -1,8 +1,9 @@
 # Full-system dashboard delivery plan
 
-**2026-11-03 scope correction:** [ADR032](adr/032-reuse-first-management.md) and the
+**2026-11-03 owner clarification:** [ADR033](adr/033-first-party-dashboard-and-management.md) and the
 [reuse-first plan](../specs/011-container-actions/reuse-first-plan.md) now govern upcoming management delivery.
-Keep the working monitoring/connect/share path and prefer an optional upstream management integration.
+Keep the working monitoring/connect/share path and our own local/hosted dashboards. Reuse focused libraries
+and existing typed Docker operations; no separate third-party management UI, login or product API is selected.
 The older phases/evidence below remain historical context, not a requirement to finish a bespoke control platform.
 No existing safety contract, persisted state or installed permission is changed by this roadmap update.
 
