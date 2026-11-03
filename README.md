@@ -6,12 +6,12 @@ The project is intentionally public and self-contained. It does not contain, bui
 
 ## Project status
 
-**Reuse-first direction:** keep the working monitoring/install/connect/share path. General container management
-will use an optional upstream integration, initially Portainer, rather than completing a bespoke control platform
-before delivering a useful management screen. No fork or extra monitoring hub is required. Portainer has its own
-login and permissions; an authenticated link is only an interim step, not our in-app controls or delegated writes.
-See the [keep/modify/integrate assessment](docs/architecture-research/009-reuse-first-product-scope.md) and
-[three-milestone plan](specs/011-container-actions/reuse-first-plan.md). Container controls are not installed or enabled.
+**First-party experience, focused reuse:** keep the working monitoring/install/connect/share path and our own
+local and hosted dashboards. Learn from established projects and reuse focused libraries or compatible licensed
+code behind our interfaces; do not require Portainer, a separate management UI/login or another product API.
+Container management will reuse the existing typed Docker adapter and permissions rather than replace the product.
+See [ADR033](docs/adr/033-first-party-dashboard-and-management.md) and the
+[delivery plan](specs/011-container-actions/reuse-first-plan.md). Container controls are not installed or enabled.
 
 The preview includes the [Spec 005](specs/005-local-data-plane/spec.md) loopback service, bounded history,
 real trends and embedded local dashboard; [Spec 006](specs/006-container-observations/spec.md) opt-in container

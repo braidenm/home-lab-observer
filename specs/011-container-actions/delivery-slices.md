@@ -1,7 +1,7 @@
 # Buildable delivery slices for the dormant action runtime
 
 **Historical plan, superseded as the default roadmap on 2026-11-03 by
-[the reuse-first plan](reuse-first-plan.md) and [ADR032](../../docs/adr/032-reuse-first-management.md).**
+[the reuse-first plan](reuse-first-plan.md), now clarified by [ADR033](../../docs/adr/033-first-party-dashboard-and-management.md).**
 Preserve this implementation/review record; do not continue the ten-layer rollout solely to complete it.
 Its safety gates still apply if the dormant custom runtime is ever selected for activation.
 
