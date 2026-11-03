@@ -27,7 +27,8 @@ Proposed exact [root-only recovery IPC](admin-recovery-ipc.md) and [journal v2](
 recovery codec/state/CAS. Paired Platform Spec075 container-execution-v1/storage/composition contracts own HTTP
 members/current authority; these selected contracts govern over this summary. All remain Proposed, not runtime acceptance.
 
-Use one fixed pathname Unix socket in a root-owned private runtime directory. Distinct static worker/broker UIDs
+Use one fixed pathname Unix socket in the broker-owned private listener leaf under root-owned ancestors defined by
+[ADR031's fixed process profile](process-profile.md). Distinct static worker/broker UIDs
 and an exclusive IPC group are provisioned explicitly. No abstract sockets, TCP listener, socket activation, arbitrary
 paths, descriptor transfer or inherited listening descriptors. Authenticate both peers using SO_PEERCRED and
 validated socket/path ownership; verify actual process identity/group policy at startup. Owner-root remains trusted.
@@ -77,6 +78,10 @@ absolute no-write-after-deadline guarantee, add a host suspend inhibitor, or inv
 These are trusted-bridge assertions, not browser authority. Freeze the chain before code; prove it in acceptance tests.
 
 ## Two genuine current-authority checkpoints
+
+The reviewed [startup supplement](snapshot-startup.md) closes initial server-time delivery and restart snapshot
+CAS recovery with one observational worker head read and two closed control kinds. Control is a separate branch
+of a BEGIN connection, never an execution reservation or nonce; its completion always requires a new connection.
 
 Broker actioncore.Authority.Check sends a challenge tied to the entire immutable receipt, delivery lease and local
 approved binding revision, with checkpoint ordinal and fresh nonce. The worker obtains a NEW fixed-origin TLS
@@ -160,6 +165,39 @@ expired requests before journal lookup. Lookup cannot create an admission, execu
 Result transport retries the exact retained result only while the remote result contract permits; after lease/action
 expiry, record/report unconfirmed state through its separately defined read/reconciliation path, never a fabricated
 successful terminal update. Credential rotation may report an existing valid lease only for the same installation.
+
+The execution horizon does not consume the reserved reporting window. A read-only reporting timing check stays
+bound to the original execution conversation's native T0, immutable action/receipt and conservative T0+119s lease
+horizon (deadline equality refuses), including the original continuity checks. It may admit a joined retained
+result for IPC/HTTP reporting after the active execution horizon ends; it never creates an execution context or
+extends permission for Engine mutations, journal writes, another claim or another action. Use the original parent
+cancellation scope for this phase, not an already expired core execution context. Report transport remains bounded
+and non-retrying; neither successful IPC handoff nor EOF proves remote acceptance.
+
+For this reporting check only, continuity from the original snapshot-query send must cover the complete
+less-than5s control exchange, up-to15s readiness age after its receipt, and less-than119s reporting horizon:
+less than139s in total. Preserve the original origin and both continuity comparisons; do not reset the clock
+or widen existing execution/mutation/journal limits. Cancellation is rechecked after native sampling too.
+
+Worker execution receives distinguish bounded broker processing from frame transfer: waiting for a checkpoint
+challenge or the final result may include the original bounded inspection/Docker call. Bound that idle wait by
+the original conversation/lease phase, then retain the existing five-second whole-frame limit from the first
+header byte through the remaining header/body. Only challenge ordinals3/4 and result ordinal5 use this receive
+path; control/admin framing and all byte, ancillary-descriptor, cancellation and native-phase checks are unchanged.
+Do not extend Engine call limits or add a general caller-configurable idle timeout.
+
+The broker's initial claim delivery has the same processing-versus-transfer distinction, but a separate closed
+receive path: ONLY CLAIMED_EXECUTE or NO_CLAIM, worker ordinal2, under the existing execution nonce. Its idle wait
+uses the ORIGINAL preclaim T0+30s deadline, including approval send, HTTP claim and IPC; never read-start+30s.
+After the first header byte, complete the remaining header/body within min(original deadline, first-byte+5s).
+The fixed HTTP client's5s request limit and all other frame kinds/limits are unchanged. A named DeliveryContext
+and CheckDelivery retain the original UTC/Go-monotonic/BOOT samples, check continuity and parent cancellation
+before and after native sampling, and refuse deadline equality conservatively. They create no execution permit
+or authority and cannot restart the clock. Recheck before approval send/receive and after the complete frame,
+including NO_CLAIM before releasing its anonymous reservation; bindClaim still validates the one-use original
+claim/RTT. EOF, partial frames, timeout or cancellation never substitute for authenticated bodyless HTTP204.
+Test delayed first byte beyond5s processing (with shortened private test caps), partial header/body, original
+delivery boundary, cancel during native sampling, suspend/discontinuity, ancillary descriptors and branch misuse.
 
 ## Explicit owner acknowledgement of UNKNOWN
 

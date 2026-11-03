@@ -1,6 +1,7 @@
 # ADR 030: Separate trusted action delivery and networkless Docker execution
 
 Status: Accepted for local consumed paired-runtime design and implementation/tests only (2026-11-02 root/peer review).
+Listener-leaf ownership is superseded by [ADR031](031-nonroot-action-listeners.md); other decisions are unchanged.
 Date: 2026-11-01. Installation, release and production action activation remain gated; broader Spec011/ADR027 is not accepted.
 
 ## Question and current evidence

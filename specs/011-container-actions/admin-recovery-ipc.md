@@ -11,8 +11,9 @@ currently implemented endpoints. No generic admin RPC or alternative local-only 
 ## Ingress, limits and closed encoding
 
 Host pathname is fixed `/run/home-lab-observer-actions/admin/recovery.sock`, exposed at that same path only to
-the broker/admin CLI profile. Its root-owned directory is0700 and socket0600, no extended/default ACL, links or
-worker group access. Root provisions this directory; broker never accepts a caller path. Require Linux initial
+the broker/admin CLI profile. Under [ADR031's leaf ownership](process-profile.md), its broker-owned directory
+is0700 and socket0600 under root-controlled ancestry, no extended/default ACL, links or worker group access.
+Root provisions and assigns the fixed leaf to the broker; broker never accepts a caller path. Require Linux initial
 user namespace, no user-namespace remapping, and SO_PEERCRED UID0 on every accepted connection. CLI verifies the
 protected pathname and exact configured broker peer UID; PID alone is not identity. Reject observation/worker
 UIDs even when a supplementary group permits another socket. No abstract/TCP/socket-activation ingress.
@@ -34,6 +35,17 @@ at ordinal"2" with that nonce; broker replies at ordinal"3" then closes. No unso
 resumption of a connection. HELLO does not reserve an execution nonce. Framing deadline5s per frame, whole
 operation<=90s CLOCK_BOOTTIME with shorter remote/ACK deadlines below; no human approval wait holds a connection.
 Timeout/disconnect is not rollback evidence. Retry uses STATUS or the same immutable inputs on a NEW connection.
+
+Only the CLI's final RECOVERY_STATE/REFUSED ordinal3 receive separates broker-processing idle time from frame
+transfer: wait under the ORIGINAL root-operation90s deadline, then finish header/body within min(that deadline,
+first-header-byte+5s). HELLO and root-command frames retain their existing5s limits. Each side retains its own
+original UTC/Go-monotonic/BOOT stamp before its first protocol I/O (CLI before connecting, broker before HELLO).
+Named Clock.AdminContext/CheckAdmin use that stamp, native continuity and parent cancellation before/after sampling;
+they refuse90s equality and create no execution/recovery token or authority. Reconnect within an operation, worker
+relay startup or a response cannot restart it. A separately initiated root command is a new operation. Broker checks
+the same original stamp throughout quiescence/relay work and passes it unchanged to AcceptRecovery before actual ACK.
+The CLI also validates exact HELLO nonce/closed response kind and rechecks native timing after the entire frame;
+late/partial/EOF/canceled responses never prove absence of a committed ACK. No generic idle duration is exposed.
 
 | Root command | Exact payload (ordered) | Successful response kind/payload |
 | --- | --- | --- |
@@ -61,6 +73,37 @@ Failure kind REFUSED payload exactly `{code}`: INVALID, BUSY, BINDING_MISMATCH, 
 NOT_QUIESCED, INSPECTION_UNAVAILABLE, REMOTE_UNAVAILABLE, OWNER_REQUIRED, FULL, RECOVERY_REQUIRED.
 Unsupported version/malformed framing may close without reply. Any failure after potential local commit returns
 RECOVERY_REQUIRED; absence of a reply never means absence of ACK. Errors do not clear global permits.
+
+## Fixed local root command
+
+The Linux `observer-action-admin` command exposes only `init <mapping_revision>`, `status`, and
+`continue <recovery_id> <prepare_id> <approval_revision>`. Read one complete closed HTTP RequestReceipt JSON
+from standard input and derive its canonical remote digest locally; no operator-supplied digest, owner token,
+URL, Docker identifier, file path or shell command. The first headless profile accepts only a regular-file or
+pipe stdin, not a terminal/socket/device. Interactive selection and receipt history are later UX work.
+
+Verify the actual host-root profile before input, then capture ONE native admin origin before preparation and
+connecting. Reopen ONLY the kernel `/proc/self/fd/0` reference with nonblocking/CLOEXEC flags, verify its type and
+device/inode against stdin and require a regular file's offset0; never mutate the parent's descriptor flags or
+follow an input pathname. Read at most16384 bytes plus one refusal byte, waiting in cancellation-aware <=100ms
+polls with a five-second awake input deadline inside the original native90s operation budget. No blocked-reader
+goroutine, detached read or reset of the original90s after suspend. Denied reopen, incomplete/oversized/invalid
+input or profile drift refuses before connecting; clear the temporary raw input buffer and never echo rejected input.
+
+Use ONLY DialAdminBroker, exact HELLO nonce, one command and ReadAdminResponse under that original context;
+recheck native time before/after protocol phases and validate full action/digest/remote binding before output.
+Stdout contains only the validated canonical admin response envelope; a STATE is a successful query/ceremony
+response, not proof of application health or a released remote lane. Other errors print a finite static category
+without values/causes; an uncertain operation directs the owner to STATUS, never automatic retry or resume.
+The CLI consumes no environment-selected paths, credentials, providers or transport: ordinary root-shell metadata
+may remain ambient but cannot override the fixed local port. It has no HTTP/Engine client or observation secret.
+Source/private-pipe/actual-binary tests must cover partial input, cancellation, size/type/offset/descriptor bounds,
+wrong peer/nonce/action/digest, late reply, finite output, and preservation of parent stdin flags.
+
+Reviewed2026-11-03: [Linux procfd](https://man7.org/linux/man-pages/man5/proc_pid_fd.5.html) describes the fixed
+stdin reference and its independent reopen permissions; [poll](https://man7.org/linux/man-pages/man2/poll.2.html)
+describes readable/hangup handling and finite waits. This is local-runtime implementation scope only, not an
+installer, a production enrollment/secret workflow or permission to activate a server's controls.
 
 ## Broker-owned worker relay (not worker initiation)
 
@@ -99,6 +142,21 @@ within the existing75s stop bound, and holds exclusive journal/policy ownership.
 closing live storage or claiming quiescence. Worker may retain an unreceived claim remotely; no nonce can resume
 it. No automatic service restart or global host setting is changed. Admin disconnect does not resume claims.
 To resume, root explicitly stops and joins both action services, then restarts the unchanged verified profile.
+
+Use one bounded owned-handler registry, not a goroutine waiting indefinitely on a WaitGroup. Install a nonblocking
+process-local execution-admission fence BEFORE waiting for state locks or canceling work; new execution/control
+registration and existing execution boundaries must observe it. Acquire any remaining state mutex within the
+original budget or refuse; an unbounded Mutex.Lock cannot hide behind a75s timer. The registry owns at most the
+three accepted worker handlers and their cancellation/completion signals, with no I/O while holding its own lock.
+Capture ONE original stop/quiescence stamp before cancellation. Named Clock.QuiescenceContext/CheckQuiescence
+retain its UTC/Go-monotonic/BOOT origin, check cancellation before/after sampling and refuse75s equality. Share
+that75s budget across all joins, also bounded by the original root90s operation; never restart it per handler or
+reconnect. Process shutdown uses the same registry and one original stop stamp. No action/recovery permit is created.
+An uncanceled cleanup parent may be used ONLY to cancel/join/close already owned resources, never to extend ACK,
+Engine, query or root-operation permission. Root cancellation invalidates its pending relay/evidence. If any handler
+is unjoined at refusal/deadline, return finite RECOVERY_REQUIRED and keep Engine/journal open; neither success nor
+the passage of time proves quiescence. Actual installed75s termination/profile acceptance remains separately gated.
+
 Startup reopens existing journal and protected policy, validates complete binding/integrity and counts persisted
 unknown fences/permits/capacity before offering fresh BEGIN. Restart discards every old execution/admin/relay nonce
 and cannot resume an old action or interrupted approval check. Partial local ACK/remote HELD remains recoverable
