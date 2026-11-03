@@ -34,6 +34,22 @@ and contract tests for any new utility dependency. No new library or fork is sel
 Do not claim delegated writes, cross-platform control parity or production readiness from a helper,
 mocked response or green unit suite. Require exact-package disposable acceptance and rollback instructions.
 
+## Selected existing worker source delivery
+
+The selected connected path reuses the existing `RunWorker`, not a replacement transport or framework. After
+the fixed-origin client and protected credential/role readers, deliver its fixed command, conversation/loop,
+closed Unix framing and named protected broker dial as one coherent source cut. Preserve the existing snapshot,
+claim/current-check/report and recovery-relay branches, execution-disable latches, native timing checks and
+no-mutation-retry rules. Do not add broker, journal-v2, timing-budget package, installer or dependency changes.
+
+Source acceptance uses ordinary Windows checks and bounded Linux race/vet checks over the actual worker,
+framing, profile and command, with private synthetic files/socketpairs and the existing synthetic protocol
+fixtures. Prove bodyless no-claim versus uncertain claim, both correlated current checks, retained reporting,
+recovery-only latches, wrong branch/peer, ancillary-FD cleanup, cancellation/join and unsupported-platform refusal.
+This delivers command source, not installed service identities, effective confinement, a matching runnable
+broker or live owner controls. All existing activation/recovery/isolation and exact-package acceptance gates
+remain unchanged; no first-release recovery choice, production credential workflow or canary approval is implied.
+
 ## Immediate tasks
 
 - [x] Inventory existing working components and assess upstream products using primary docs and licenses.
@@ -42,6 +58,7 @@ mocked response or green unit suite. Require exact-package disposable acceptance
 - [ ] Independently review this clarification and merge its small documentation PR through required checks.
 - [ ] Verify current owner install/view/share acceptance without reinstalling or widening data collection.
 - [ ] Audit only missing wiring for one owner-authorized disposable operation; reuse existing code, not new layers.
+- [ ] Deliver/review the selected existing worker source cut above; keep installed/live-control gates separate.
 - [ ] Deliver milestone2 before adding our own separately permissioned start/stop/restart buttons.
 - [ ] Specify bounded container logs separately, then implement our own view.
 
