@@ -35,6 +35,7 @@
 | [031](031-nonroot-action-listeners.md) | Accepted for local implementation/tests only | Fixed nonroot Unix listeners, role identities and protected root records; installed identity/isolation and activation remain gated |
 | [032](032-reuse-first-management.md) | Superseded by ADR033 | Historical optional upstream management direction; never activated |
 | [033](033-first-party-dashboard-and-management.md) | Accepted owner clarification; implementation gated | Our local/hosted dashboards; focused library/code reuse, no separate third-party management product |
+| [034](034-locked-uncertain-outcomes-first-release.md) | Accepted owner scope; implementation gated | First controls release retains uncertainty locks; complete recovery deferred without an unlock/reset path |
 
 Accepted ADRs are immutable except for status and supersession links. Material changes require a new ADR.
 

@@ -3,6 +3,10 @@
 **Status:** Full feature remains Proposed. Root/independent review accepts the ADR030 local consumed paired-runtime
 design for implementation/tests only; no installer, release or production activation approval.
 
+First-release scope approved 2026-11-04: [ADR034](../../docs/adr/034-locked-uncertain-outcomes-first-release.md)
+defers the larger recovery workflow and keeps uncertain targets locked for manual investigation, with no unlock/reset
+or automatic retry. It governs over recovery-first sequencing below; permission, durability and isolation remain required.
+
 [ADR 027](../../docs/adr/027-bounded-action-dispatch-and-uncertainty.md) proposes the 2026-10-31 connected contract
 reconciliation below and remains Proposed; existing observation definitions and executable authority are unchanged.
 

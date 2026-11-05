@@ -176,6 +176,13 @@ The separate connected packages support only Ubuntu 24.04/systemd 255/amd64. The
 the process/Docker package needs its own hosted rollout and consent. Connected Windows/macOS, remote logs,
 unattended lifecycle and management controls are not provided by those local-preview downloads.
 
+## Container control status
+
+Connected Docker controls are under development in our own UI/API. The first release will offer separately approved
+start/stop/restart to the server owner. An unconfirmed outcome will lock further controls for manual investigation;
+there is no automatic retry or reset. See [the decision and remaining acceptance](docs/adr/034-locked-uncertain-outcomes-first-release.md).
+The current observation downloads do not install or enable these controls.
+
 ## License
 
 [MIT](LICENSE)

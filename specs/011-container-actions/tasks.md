@@ -3,6 +3,10 @@
 **Status:** Local consumed ADR030 paired-runtime design accepted for implementation/tests only. Unchecked items
 are future work, not delivered capabilities; installation/production activation and broader Spec011 remain gated.
 
+First-release recovery scope follows owner-approved [ADR034](../../docs/adr/034-locked-uncertain-outcomes-first-release.md).
+Recovery ACK/finalize tasks below are deferred, not prerequisites for initial first-release rollout: uncertain outcomes stay
+locked with no supported unlock. Existing authority/isolation/storage and exact-package acceptance tasks are not waived.
+
 - [x] Record owner's accepted first action set: independently granted start, stop and restart.
 - [x] Draft proposed scope, safety semantics, boundaries and primary-source research.
 - [x] Draft coordinated finite-grace/immutable-target/unknown-dispatch proposal in
