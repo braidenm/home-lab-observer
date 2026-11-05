@@ -30,10 +30,13 @@ nor bind private Engine generation/full IDs. Root trust and supported-flow limit
 
 ## Acceptance and tasks
 
-- [ ] RED: changed target/alias/operation/grace/revisions/count must produce zero POSTs through the real TLS client.
-- [ ] GREEN: null first head, unchanged READY/EMPTY and expired UNAVAILABLE heads retain exact one-POST CAS behavior.
-- [ ] Cooldown-only differences do not change the digest; partial/malformed head refuses without panic.
-- [ ] Concurrent CAS conflict and lost publication response remain finite failures with no retry.
+- [x] RED: changed target/alias/operation/grace/revisions/count reached POST through the real TLS client before the fix.
+- [x] GREEN: null first head, unchanged READY/EMPTY and expired UNAVAILABLE heads retain exact one-POST CAS behavior.
+- [x] Cooldown-only differences do not change the digest; partial/malformed head refuses without panic.
+- [x] Concurrent CAS conflict and lost publication response remain finite failures with no retry.
 - [ ] Focused protocol/client/worker tests, Linux race/vet, independent review and current-head CI before merge.
 
 No Engine call, migration, new domain fact, journal reset, credential or host/flag change is part of this slice.
+
+Local verification: all protocol/client/worker tests and vet pass on Windows; the same three packages pass ordinary-user
+Linux race tests and vet (1.812s, 2.133s and 7.023s respectively). No existing test assertion or timeout was relaxed.

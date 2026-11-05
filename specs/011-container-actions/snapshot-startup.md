@@ -3,6 +3,10 @@
 2026-11-02. Accepted for local paired-runtime implementation and tests after root/independent design review.
 This is a narrow supplement to the typed action protocol, not installation, release or live-control approval.
 
+For ADR034's first connected profile, [fixed-approval-profile.md](fixed-approval-profile.md) additionally requires
+the existing head digest to match the entire proposed public entry set before POST, even after head expiry.
+Policy edits/replacement are unavailable in that profile; CAS refresh renews only unchanged approvals.
+
 ## Missing composition edges
 
 The worker must recover the current publication CAS head after restart without assuming that a lost POST failed.
