@@ -1,5 +1,9 @@
 # Tasks
 
+- [ ] Review/implement the [guarded v1 broker contract](guarded-v1-broker.md) as one consumed ADR034 source cut;
+  prove affected-target restart/new-key locks without journal-v2, recovery ingress or a new barrier store.
+  Its local source tests do not complete paired/installed/activation gates.
+
 **Status:** Local consumed ADR030 paired-runtime design accepted for implementation/tests only. Unchecked items
 are future work, not delivered capabilities; installation/production activation and broader Spec011 remain gated.
 

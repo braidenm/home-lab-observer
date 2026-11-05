@@ -17,6 +17,10 @@ the architecture. The owner delegates production-oriented decisions; retain inde
 
 ## Boundaries
 
+The current ADR034 first-release implementation contract is [guarded-v1-broker.md](guarded-v1-broker.md):
+one consumed guarded v1 executor/worker ingress, target-scoped durable uncertainty and no recovery rollout.
+Its focused plan/tasks and review gate precede runtime code; earlier complete-recovery steps remain deferred.
+
 Keep `internal/containerobs` and read-only APIs unchanged. Future modules separate grant policy, durable action ledger,
 typed broker transport, fixed Docker adapter and presentation. Constructor-injected interfaces allow a synthetic engine,
 clock, authorization service and durable-store failure seam. Module names and exported APIs are not frozen by this plan.
