@@ -47,6 +47,9 @@ recoverability is deliberately reduced, not solved. No new schema, event, enum o
 Docker access remains root-equivalent. Keep the trusted outbound worker separate from the networkless typed broker,
 protected identities/IPC/settings, deadline/concurrency/storage bounds and compatible reader floor. This scope choice
 does not authorize broad socket access, a one-process shortcut or weaker installation.
+These persistence rules constrain supported product flows. As in ADR030, host-root compromise or out-of-product
+manual destruction of all retained state is outside the trust boundary; this is not a claim to prevent a trusted
+host owner from wiping a machine. Product tools must never offer that wipe as recovery or adopt detected missing state.
 
 ## Evidence and pitfalls
 
