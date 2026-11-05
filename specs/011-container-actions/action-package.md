@@ -24,6 +24,9 @@ observed server or its workloads. No automatic uncertain-action retry, fence cle
 
 Proposed coherent sequence (not a chain of unused libraries):
 
+The exact first consumer contract is [credential-setup-worker.md](credential-setup-worker.md); it still requires
+root/independent review and a spec-first commit before runtime authoring.
+
 1. **Consumed ACTION credential setup:** closed lifecycle codecs/client, protected atomic handoff store, one
    worker-identity bootstrap mode of the setup command, and renewal integrated at quiet boundaries of the existing worker loop.
    Tests cover real typed TLS and private filesystem faults. It is source-only until the package consumes it.
