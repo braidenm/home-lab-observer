@@ -58,6 +58,9 @@ and exact-package gates remain unchanged. Source delivery does not imply live ca
 
 ## First connected controls acceptance
 
+The precise source-only broker cut is [guarded-v1-broker.md](guarded-v1-broker.md). It consumes the delivered worker
+and unchanged v1 journal contract, retaining native guards and target locks without installing recovery machinery.
+
 Reuse the delivered worker and existing typed Engine/core/journal with only the missing guarded broker composition.
 Complete one disposable owner-authorized journey, then independently exercise START, STOP and RESTART. Prove denied
 users/resources/read-only shares and unapproved operations cause no Engine calls. API acceptance is queued, not complete.
