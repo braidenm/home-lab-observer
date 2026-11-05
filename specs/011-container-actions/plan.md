@@ -17,6 +17,11 @@ the architecture. The owner delegates production-oriented decisions; retain inde
 
 ## Boundaries
 
+Next source-first proposal: [action-package.md](action-package.md) inventories the existing ACTION endpoints and
+the three-role stopped package/setup work after PR175. Its local/source checkpoint is delivered; enrollment,
+effective installed confinement, paired API/Engine faults and the exact-package canary remain open. No code or
+host action is authorized by this proposed package plan.
+
 The current ADR034 first-release implementation contract is [guarded-v1-broker.md](guarded-v1-broker.md):
 one consumed guarded v1 executor/worker ingress, target-scoped durable uncertainty and no recovery rollout.
 Its focused plan/tasks and review gate precede runtime code; earlier complete-recovery steps remain deferred.

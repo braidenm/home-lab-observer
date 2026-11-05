@@ -1,8 +1,12 @@
 # Tasks
 
-- [ ] Review/implement the [guarded v1 broker contract](guarded-v1-broker.md) as one consumed ADR034 source cut;
-  prove affected-target restart/new-key locks without journal-v2, recovery ingress or a new barrier store.
-  Its local source tests do not complete paired/installed/activation gates.
+- [x] Review/implement and deliver the [guarded v1 broker contract](guarded-v1-broker.md) as one consumed ADR034
+  source cut: PR175 merged4193c3d after18 current-head checks. Local native Unix/SQLite/owned-handler, retained
+  uncertainty and actual-COMMIT/Write guards passed with synthetic authority/actuation, not installed proof.
+- [ ] Complete paired lost-claim/result, affected-target restart/expiry/new-key/native-alias lock and unrelated-target
+  acceptance; local source tests do not complete paired/installed/activation gates.
+- [ ] Review/freeze [action-package.md](action-package.md), then implement the consumed ACTION credential lifecycle
+  and three-role stopped package; real owner enrollment, effective isolation and exact-package canary remain open.
 
 **Status:** Local consumed ADR030 paired-runtime design accepted for implementation/tests only. Unchecked items
 are future work, not delivered capabilities; installation/production activation and broader Spec011 remain gated.
