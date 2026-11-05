@@ -79,5 +79,24 @@ func MatchSnapshotHead(q SnapshotQuery, v SnapshotView) error {
 	if ValidateSnapshotQuery(q) != nil || q.ServerID != v.ServerID || q.OwnerUserID != v.OwnerUserID || q.ConnectorInstanceID != v.ConnectorInstanceID {
 		return ErrInvalid
 	}
+	// The first connected profile cannot replace its public approvals on restart.
+	// SnapshotHead already decoded the complete view; retain explicit nil checks
+	// here so a partial typed view cannot panic or become initial publication.
+	if v.SnapshotRevision == nil {
+		if v.SnapshotDigest != nil || v.AdvertisedAt != nil || v.ExpiresAt != nil || v.Readiness != "UNAVAILABLE" || len(v.Entries) != 0 {
+			return ErrInvalid
+		}
+		return nil
+	}
+	if v.SnapshotDigest == nil || v.AdvertisedAt == nil || v.ExpiresAt == nil {
+		return ErrInvalid
+	}
+	// Publication ID and observational cooldowns are not in this preimage. An
+	// expired head hides its entries but retains the authenticated digest/times.
+	r := SnapshotReceipt{"00000000000000000000000000000000", *v.SnapshotRevision, *v.SnapshotDigest, *v.AdvertisedAt, *v.ExpiresAt}
+	digest, err := SnapshotDigest(q.ServerID, q.OwnerUserID, q.ConnectorInstanceID, r, q.Entries)
+	if err != nil || digest != *v.SnapshotDigest {
+		return ErrInvalid
+	}
 	return nil
 }
