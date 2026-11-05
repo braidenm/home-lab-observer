@@ -6,6 +6,11 @@ Historical runtime base: merged Observer `c2f11b2`; `5fd9e335` subsequently deli
 Decision proposal: [ADR030](../../docs/adr/030-packaged-typed-action-workers.md).
 This is a complete executable vertical cut, not another unused primitive or authority to enable production actions.
 
+First connected release scope now follows [ADR034](../../docs/adr/034-locked-uncertain-outcomes-first-release.md)
+(owner approved 2026-11-04): recovery ACK/finalize is deferred, with uncertain outcomes durably locked and no supported
+unlock/reset/retry. Recovery-first ordering below describes the fuller deferred package. Authentication, process
+separation, installed isolation, timing, storage and reader-floor requirements are not relaxed.
+
 ## Product and trust boundary
 
 First installed profile is Linux/amd64, rootful local Docker with API1.45 compatibility, systemd255-compatible

@@ -3,6 +3,11 @@
 **Status:** Local consumed ADR030 paired-runtime design accepted for implementation/tests; full feature and installed
 activation remain gated. Deliver after connected observation, one reviewed slice per PR.
 
+First-release amendment (owner approved 2026-11-04): [ADR034](../../docs/adr/034-locked-uncertain-outcomes-first-release.md)
+and the [current delivery plan](reuse-first-plan.md) defer the complete recovery workflow, not uncertainty locks.
+They govern over recovery-first ordering below for the first connected release. No reset/unlock or automatic retry;
+installed identity/isolation, exact-package, reader compatibility and owner/operation checks remain required.
+
 First review [ADR 027](../../docs/adr/027-bounded-action-dispatch-and-uncertainty.md): it reconciles proposed grace,
 immutable target/parameter binding and delivery-versus-dispatch recovery with the remote coordinator. It does not
 approve the remaining broker isolation/authentication choices or add executable authority to observation roles.

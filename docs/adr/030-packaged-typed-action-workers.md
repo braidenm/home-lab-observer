@@ -1,6 +1,7 @@
 # ADR 030: Separate trusted action delivery and networkless Docker execution
 
 Status: Accepted for local consumed paired-runtime design and implementation/tests only (2026-11-02 root/peer review).
+First-release complete recovery prerequisite superseded by [ADR034](034-locked-uncertain-outcomes-first-release.md); uncertainty fences and other safety contracts remain.
 Default product delivery path superseded by [ADR032](032-reuse-first-management.md); dormant-code safety contracts remain unchanged.
 Listener-leaf ownership is superseded by [ADR031](031-nonroot-action-listeners.md); other decisions are unchanged.
 Date: 2026-11-01. Installation, release and production action activation remain gated; broader Spec011/ADR027 is not accepted.

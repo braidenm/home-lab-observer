@@ -4,6 +4,12 @@
 This replaces the Portainer destination/provider plan, not the safety rules of an activated action worker.
 It does not restore a ten-layer prerequisite rollout.
 
+The owner approved [ADR034's locked-outcome first release](../../docs/adr/034-locked-uncertain-outcomes-first-release.md)
+on 2026-11-04. It supersedes the earlier complete two-sided recovery prerequisite only: uncertain target outcomes
+stay durably locked for manual investigation, with no supported unlock, automatic retry or clear. Process isolation,
+fresh permissions, exact local mapping, durable intent, reader compatibility and installed acceptance remain required.
+Older recovery-first passages describe the deferred fuller release, not the current minimum delivery scope.
+
 ## Keep the working path
 
 Continue native observation, existing installation/downloads, the local dashboard, connected Linux inventory,
@@ -47,18 +53,28 @@ framing, profile and command, with private synthetic files/socketpairs and the e
 fixtures. Prove bodyless no-claim versus uncertain claim, both correlated current checks, retained reporting,
 recovery-only latches, wrong branch/peer, ancillary-FD cleanup, cancellation/join and unsupported-platform refusal.
 This delivers command source, not installed service identities, effective confinement, a matching runnable
-broker or live owner controls. All existing activation/recovery/isolation and exact-package acceptance gates
-remain unchanged; no first-release recovery choice, production credential workflow or canary approval is implied.
+broker or live owner controls. ADR034 now defines the first-release recovery scope; other activation/isolation
+and exact-package gates remain unchanged. Source delivery does not imply live canary acceptance.
+
+## First connected controls acceptance
+
+Reuse the delivered worker and existing typed Engine/core/journal with only the missing guarded broker composition.
+Complete one disposable owner-authorized journey, then independently exercise START, STOP and RESTART. Prove denied
+users/resources/read-only shares and unapproved operations cause no Engine calls. API acceptance is queued, not complete.
+After lost claim/report or ambiguous dispatch, preserve both sides' evidence and refuse repeat/new-key execution after
+restart/expiry. Do not add recovery ACK/finalize, a generic proxy or new fault framework. The combined journey and
+effective installed profile remain open; the earlier Engine-only proof is not a substitute.
 
 ## Immediate tasks
 
 - [x] Inventory existing working components and assess upstream products using primary docs and licenses.
 - [x] Record keep/modify/integrate/fork decisions and supersede the default custom-runtime delivery plan.
 - [x] Withdraw unmerged Platform Portainer navigation PR530; no installation or activation occurred.
-- [ ] Independently review this clarification and merge its small documentation PR through required checks.
+- [x] Independently review/merge the first-party clarification (PR169); ADR034 is a separate scope amendment.
 - [ ] Verify current owner install/view/share acceptance without reinstalling or widening data collection.
 - [ ] Audit only missing wiring for one owner-authorized disposable operation; reuse existing code, not new layers.
-- [ ] Deliver/review the selected existing worker source cut above; keep installed/live-control gates separate.
+- [x] Deliver/review the selected existing worker source cut (PR172); installed/live-control gates remain separate.
+- [ ] Review/merge ADR034 and matching Platform scope; prove retained uncertainty without an unlock workflow.
 - [ ] Deliver milestone2 before adding our own separately permissioned start/stop/restart buttons.
 - [ ] Specify bounded container logs separately, then implement our own view.
 
