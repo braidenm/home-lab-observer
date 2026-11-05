@@ -1,6 +1,7 @@
 # Guarded v1 broker: locked-outcome first release
 
-Status: Proposed implementation contract for root/independent review; no runtime authoring, installation or activation approval.
+Status: Accepted for this bounded local implementation and tests only. Runtime source remains under review;
+installation and activation are not approved.
 Implements [ADR034](../../docs/adr/034-locked-uncertain-outcomes-first-release.md), not the deferred recovery workflow.
 The delivered worker is the consumer. This is one runnable broker/executor cut, not separately published primitives.
 
@@ -115,7 +116,7 @@ unavailable/recovery-required result and preserves resources/evidence; no restar
 
 ## Plan, acceptance and delivery gates
 
-- [ ] Approve this contract and its exact reuse/adaptation closure; commit the owning spec before runtime code.
+- [x] Approve this contract and its exact reuse/adaptation closure; commit the owning spec before runtime code.
 - [ ] Integrate the independently reviewed consumed worker head barrier before broker publication. Its tests cover
   READY/expired/EMPTY unchanged heads; changed target/alias/operation/grace/policy/capability revision/addition/removal
   with zero POST; cooldown-only changes; initial nil head; malformed typed heads without panic; and CAS failure with
@@ -140,3 +141,15 @@ unavailable/recovery-required result and preserves resources/evidence; no restar
 Installation/provisioning, effective service isolation, compatible runtime/reader floors, upgrade/rollback and the
 exact-package disposable canary remain separate activation gates. No host action, secret handoff, enabled flag or
 workload mutation is authorized by this source contract. Existing physical v1 evidence is not a new v2/fault claim.
+
+Local test finding: the existing full server-time bracket already refuses whole claims near30s. The explicit
+AcceptClaim own-capture equality check is therefore defense-in-depth/contract alignment, not a demonstrated
+reachable authorization hole. A failed initial just-before30s positive fixture exposed this stricter availability
+condition; preserve the bracket and an ordinary valid inside1s control rather than widen clocks to manufacture RED.
+
+Local source receipt: the coherent worker-only broker reuses approximately3257 new production lines plus tests;
+the explicitly reviewed ceiling exception retains the pinned-inode listener and joined shutdown, not a new scope.
+The source includes no admin ingress, journal-v2, recovery workflow, installer or new dependency. Actual ordinary-user
+Linux SQLite/Unix tests exercise three operations with two fresh checks, same-action retained reports and bounded
+owned shutdown; Engine actuation, role ownership and remote permission in these fixtures are synthetic. This is not
+installed isolation, paired-server acceptance or a live-Docker/canary result. Those gates above remain open.

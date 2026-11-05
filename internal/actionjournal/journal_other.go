@@ -16,3 +16,9 @@ func (*Journal) Acquire(context.Context, actioncore.Key) (actioncore.Attempt, er
 }
 func (*Journal) Prune(context.Context) error { return ErrUnsupported }
 func (*Journal) Close() error                { return nil }
+func (*Journal) AdmissionSnapshot(context.Context) (AdmissionSnapshot, error) {
+	return AdmissionSnapshot{}, ErrUnsupported
+}
+func (*Journal) BindExecution(actioncore.Key, [32]byte) (actioncore.Journal, error) {
+	return nil, ErrUnsupported
+}

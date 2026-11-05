@@ -41,10 +41,11 @@ type record struct {
 	reason                     string
 }
 type attempt struct {
-	j       *Journal
-	r       record
-	closed  bool
-	mutable bool
+	j         *Journal
+	r         record
+	closed    bool
+	mutable   bool
+	execution *executionCommit
 }
 
 func Provision(ctx context.Context, dir string, b Binding) (*Journal, error) {
@@ -168,6 +169,13 @@ func open(ctx context.Context, dir string, b Binding, create bool) (_ *Journal, 
 	return j, nil
 }
 func (j *Journal) transaction(ctx context.Context, body func() error) error {
+	return j.transactionGuarded(ctx, nil, body)
+}
+
+func (j *Journal) transactionGuarded(ctx context.Context, guard *executionCommit, body func() error) error {
+	if guard != nil && guard.check(ctx) != nil {
+		return ErrRecovery
+	}
 	if _, e := j.conn.ExecContext(ctx, `BEGIN IMMEDIATE`); e != nil {
 		j.failed = true
 		return ErrRecovery
@@ -176,9 +184,19 @@ func (j *Journal) transaction(ctx context.Context, body func() error) error {
 	if err == nil && j.beforeCommit != nil {
 		err = j.beforeCommit()
 	}
+	if err == nil && guard != nil {
+		err = guard.check(ctx) // AFTER the fault seam, immediately before real SQL COMMIT.
+	}
 	if err == nil {
 		if _, e := j.conn.ExecContext(ctx, `COMMIT`); e == nil {
-			if j.afterCommit == nil || j.afterCommit() == nil {
+			var observed, post error
+			if j.afterCommit != nil {
+				observed = j.afterCommit()
+			}
+			if guard != nil {
+				post = guard.check(ctx) // Actual COMMIT may already be durable; failure is uncertainty.
+			}
+			if observed == nil && post == nil {
 				return nil
 			}
 		}
@@ -199,6 +217,13 @@ func (j *Journal) transaction(ctx context.Context, body func() error) error {
 }
 func (j *Journal) usable() bool { return !j.failed && j.conn != nil }
 func (j *Journal) Acquire(ctx context.Context, k actioncore.Key) (actioncore.Attempt, error) {
+	return j.acquire(ctx, k, nil)
+}
+
+func (j *Journal) acquire(ctx context.Context, k actioncore.Key, guard *executionCommit) (actioncore.Attempt, error) {
+	if guard != nil && guard.check(ctx) != nil {
+		return nil, ErrRecovery
+	}
 	raw, e := actioncore.CanonicalJournalMetadata(k)
 	req := k.Metadata.Request
 	if e != nil || req.ServerID != j.binding.ServerID || req.InstallationID != j.binding.InstallationID || req.OwnerID != j.binding.OwnerID {
@@ -214,7 +239,7 @@ func (j *Journal) Acquire(ctx context.Context, k actioncore.Key) (actioncore.Att
 	bounded, cancel := context.WithTimeout(ctx, operationTimeout)
 	defer cancel()
 	var result *attempt
-	e = j.transaction(bounded, func() error {
+	e = j.transactionGuarded(bounded, guard, func() error {
 		r, e := j.read(bounded, k.ActionID)
 		exists := e == nil
 		if e != nil && !errors.Is(e, sql.ErrNoRows) {
@@ -225,7 +250,7 @@ func (j *Journal) Acquire(ctx context.Context, k actioncore.Key) (actioncore.Att
 				return actioncore.ErrIdentityConflict
 			}
 			if !r.terminal.IsZero() || !r.intent.IsZero() {
-				result = &attempt{j: j, r: r}
+				result = &attempt{j: j, r: r, execution: guard}
 				return nil
 			}
 		}
@@ -244,7 +269,7 @@ func (j *Journal) Acquire(ctx context.Context, k actioncore.Key) (actioncore.Att
 				r.terminal = now
 				r.code = actioncore.Denied
 				r.reason = "EXPIRED_UNDISPATCHED"
-				result = &attempt{j: j, r: r}
+				result = &attempt{j: j, r: r, execution: guard}
 				return nil
 			}
 			return actioncore.ErrIdentityConflict
@@ -300,7 +325,7 @@ func (j *Journal) Acquire(ctx context.Context, k actioncore.Key) (actioncore.Att
 			}
 			r = record{key: k, raw: raw, admitted: now}
 		}
-		result = &attempt{j: j, r: r, mutable: true}
+		result = &attempt{j: j, r: r, mutable: true, execution: guard}
 		return nil
 	})
 	if e != nil {

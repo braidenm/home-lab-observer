@@ -28,6 +28,9 @@ func (a *attempt) Finish(ctx context.Context, code actioncore.Code) error {
 	return a.transition(ctx, code, false)
 }
 func (a *attempt) transition(ctx context.Context, code actioncore.Code, intent bool) error {
+	if a.execution != nil && a.execution.check(ctx) != nil {
+		return ErrRecovery
+	}
 	j := a.j
 	if !j.mu.TryLock() {
 		return ErrBusy
@@ -39,7 +42,7 @@ func (a *attempt) transition(ctx context.Context, code actioncore.Code, intent b
 	bounded, cancel := context.WithTimeout(ctx, operationTimeout)
 	defer cancel()
 	now := j.now().UTC()
-	e := j.transaction(bounded, func() error {
+	e := j.transactionGuarded(bounded, a.execution, func() error {
 		actual, e := j.read(bounded, a.r.key.ActionID)
 		if e != nil || !bytes.Equal(actual.raw, a.r.raw) || stamp(actual.admitted) != stamp(a.r.admitted) || stamp(actual.intent) != stamp(a.r.intent) || !actual.terminal.IsZero() || now.Before(actual.admitted) || (!actual.intent.IsZero() && now.Before(actual.intent)) {
 			return ErrRecovery
