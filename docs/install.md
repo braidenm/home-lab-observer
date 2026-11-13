@@ -37,6 +37,11 @@ Match the archive filename and SHA-256 to that release's `SHA256SUMS` **before**
 checksums from an unrelated site. The release manifest includes exact versioned URLs, sizes, hashes and content profiles
 for all six archives.
 
+The [Preview 3 publication run](https://github.com/braidenm/home-lab-observer/actions/runs/34528402601)
+tested the native artifact and offline installer on all six targets. The [runtime checks for that release commit](https://github.com/braidenm/home-lab-observer/actions/runs/34527768978)
+also exercised real Linux Docker observations. These are release checks, not a guarantee that your account can read
+Docker or native logs on your machine. The linked Docker and log guides explain their opt-in permissions.
+
 Windows/macOS previews do not yet have publisher signing/notarization. A checksum checks bytes against a release you
 trust; it does not establish publisher identity. Build attestations can separately verify the GitHub repository/workflow.
 Do not disable Defender, Gatekeeper or other system-wide protection. If your policy requires a publisher-signed binary,
