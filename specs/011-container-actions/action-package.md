@@ -117,6 +117,12 @@ Frozen resources include only worker/broker units, bootstrap properties, bounded
 handoff/initial-policy schemas and instructions. Exact final filenames/bytes/digest precede pack implementation.
 No admin command/socket/unit, journal-v2, ACK, updater, downloader, shell or generic service manager.
 
+The three launchers require an embedded connected v2 identity with their exact action role and the digest of
+the immutable ASCII contract marker `ubuntu24.04-systemd255-amd64-actions-v1-canary:identity-v1` (no newline).
+Missing, mismatched and non-Linux/amd64 identities refuse before accessing configuration or credentials.
+This marker identifies the binary contract only; the eventual package manifest separately binds every resource
+and binary byte. It is not a signature or a claim that an installation has passed acceptance.
+
 Root-owned `/opt/home-lab-observer-actions/releases/<manifestSHA>` holds verified immutable payload; separate
 root-owned installed record and worker-root/broker-root skeletons use existing protected publication patterns.
 Keep ADR031 exact role/path/mode/ACL rules. Resolve unique numeric IDs and reject foreign primary/supplementary
