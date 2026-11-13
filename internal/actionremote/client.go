@@ -151,6 +151,10 @@ func (c *Client) request(parent context.Context, method, suffix string, body []b
 }
 
 func (c *Client) requestCorrelated(parent context.Context, method, suffix string, body []byte, correlationID string) (int, []byte, error) {
+	return c.requestTyped(parent, method, suffix, body, correlationID, nil)
+}
+
+func (c *Client) requestTyped(parent context.Context, method, suffix string, body []byte, correlationID string, setup *lifecycleAuth) (int, []byte, error) {
 	if c == nil || c.client == nil || c.credentials == nil || c.lifetime == nil || parent == nil || parent.Err() != nil || len(body) > actionprotocol.MaxEnvelopeBytes {
 		return 0, nil, ErrUnavailable
 	}
@@ -165,15 +169,28 @@ func (c *Client) requestCorrelated(parent context.Context, method, suffix string
 	ctx, cancel := context.WithTimeout(parent, requestTimeout)
 	stop := context.AfterFunc(c.lifetime, cancel)
 	defer func() { stop(); cancel() }()
-	credential, err := c.credentials.Credential(ctx, c.binding)
-	if err != nil {
-		return 0, nil, ErrCredential
-	}
-	if _, err = NewCredential(credential.secret); err != nil {
-		return 0, nil, ErrCredential
+	var authorization string
+	if setup == nil {
+		credential, err := c.credentials.Credential(ctx, c.binding)
+		if err != nil {
+			return 0, nil, ErrCredential
+		}
+		if _, err = NewCredential(credential.secret); err != nil {
+			return 0, nil, ErrCredential
+		}
+		authorization = "ActionConnector " + credential.secret
+	} else {
+		var err error
+		authorization, err = setup.header()
+		if err != nil {
+			return 0, nil, ErrCredential
+		}
 	}
 	target := c.origin
 	target.Path = "/v1/connectors/home-lab/servers/" + c.binding.ServerID + "/container-actions" + suffix
+	if setup != nil {
+		target.Path = "/v1/connectors/home-lab/servers/" + c.binding.ServerID + "/action-credentials" + suffix
+	}
 	var reader io.Reader
 	if body != nil {
 		reader = bytes.NewReader(body)
@@ -183,7 +200,7 @@ func (c *Client) requestCorrelated(parent context.Context, method, suffix string
 		return 0, nil, ErrInvalid
 	}
 	req.GetBody = nil
-	req.Header.Set("Authorization", "ActionConnector "+credential.secret)
+	req.Header.Set("Authorization", authorization)
 	req.Header.Set("X-Home-Lab-Connector-Instance", c.binding.ConnectorInstanceID)
 	req.Header.Set("Accept", "application/json")
 	if body != nil {
@@ -207,6 +224,11 @@ func (c *Client) requestCorrelated(parent context.Context, method, suffix string
 		return 0, nil, ErrUnavailable
 	}
 	switch response.StatusCode {
+	case http.StatusBadRequest:
+		if setup != nil {
+			return 0, nil, ErrInvalid
+		}
+		return 0, nil, ErrUnavailable
 	case http.StatusUnauthorized:
 		return 0, nil, ErrCredential
 	case http.StatusForbidden:
@@ -225,6 +247,10 @@ func (c *Client) requestCorrelated(parent context.Context, method, suffix string
 		}
 		return http.StatusNoContent, nil, nil
 	case http.StatusOK:
+	case http.StatusCreated:
+		if setup == nil {
+			return 0, nil, ErrUnavailable
+		}
 	default:
 		return 0, nil, ErrUnavailable
 	}
@@ -237,7 +263,7 @@ func (c *Client) requestCorrelated(parent context.Context, method, suffix string
 	if err != nil || ctx.Err() != nil || len(raw) > actionprotocol.MaxEnvelopeBytes {
 		return 0, nil, ErrUnavailable
 	}
-	return http.StatusOK, raw, nil
+	return response.StatusCode, raw, nil
 }
 
 func (c *Client) Close() error {

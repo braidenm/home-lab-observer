@@ -5,8 +5,10 @@
   uncertainty and actual-COMMIT/Write guards passed with synthetic authority/actuation, not installed proof.
 - [ ] Complete paired lost-claim/result, affected-target restart/expiry/new-key/native-alias lock and unrelated-target
   acceptance; local source tests do not complete paired/installed/activation gates.
-- [ ] Review/freeze [action-package.md](action-package.md), then implement the consumed ACTION credential lifecycle
-  and three-role stopped package; real owner enrollment, effective isolation and exact-package canary remain open.
+- [x] Review/freeze [action-package.md](action-package.md) direction and the exact consumed credential cut1
+  [contract](credential-setup-worker.md); spec-first d3aaf3d precedes local runtime/tests.
+- [ ] Complete full credential-consumer source review/current-head CI and the three-role stopped package;
+  real owner enrollment, effective isolation, paired interoperability and exact-package canary remain open.
 
 **Status:** Local consumed ADR030 paired-runtime design accepted for implementation/tests only. Unchecked items
 are future work, not delivered capabilities; installation/production activation and broader Spec011 remain gated.

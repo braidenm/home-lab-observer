@@ -39,7 +39,7 @@ func TestInterruptedSelectedSnapshotKeepsOnlyPacedRecoveryAvailable(t *testing.T
 	defer cancel()
 	dials, pauses := 0, 0
 	brokers := make(chan error, 2)
-	err := runWorkerLoop(ctx, w, func(ctx context.Context) (*net.UnixConn, error) {
+	err := runWorkerLoop(ctx, w, readyWorkerLifecycleFixture(t), func(ctx context.Context) (*net.UnixConn, error) {
 		dials++
 		if dials > 2 {
 			return nil, ErrUnsafe
@@ -108,7 +108,7 @@ func TestWorkerLoopLatchAndPace(t *testing.T) {
 	defer cancel()
 	dials, pauses := 0, 0
 	brokers := make(chan error, 2)
-	err := runWorkerLoop(ctx, w, func(ctx context.Context) (*net.UnixConn, error) {
+	err := runWorkerLoop(ctx, w, readyWorkerLifecycleFixture(t), func(ctx context.Context) (*net.UnixConn, error) {
 		dials++
 		client, broker := conversationPair(t)
 		go func(index int) {
@@ -164,7 +164,7 @@ func TestWorkerLoopRetriesOnlyAbsentBroker(t *testing.T) {
 		w, _, _ := recoveryWorkerFixture(t)
 		ctx, cancel := context.WithCancel(context.Background())
 		dials, pauses := 0, 0
-		err := runWorkerLoop(ctx, w, func(context.Context) (*net.UnixConn, error) {
+		err := runWorkerLoop(ctx, w, readyWorkerLifecycleFixture(t), func(context.Context) (*net.UnixConn, error) {
 			dials++
 			if unsafe {
 				return nil, ErrUnsafe
@@ -184,8 +184,9 @@ func TestWorkerLoopCancelJoinsConversation(t *testing.T) {
 	defer cancel()
 	client, broker := conversationPair(t)
 	done := make(chan error, 1)
+	lifecycle := readyWorkerLifecycleFixture(t)
 	go func() {
-		done <- runWorkerLoop(ctx, w, func(context.Context) (*net.UnixConn, error) { return client, nil }, workerPace)
+		done <- runWorkerLoop(ctx, w, lifecycle, func(context.Context) (*net.UnixConn, error) { return client, nil }, workerPace)
 	}()
 	if _, err := actionipc.Read(ctx, broker); err != nil {
 		t.Fatal("greeting")
@@ -210,7 +211,7 @@ func TestWorkerUnselectedEOFDoesNotStrandLaterRecovery(t *testing.T) {
 	defer cancel()
 	dials, pauses := 0, 0
 	brokers := make(chan error, 2)
-	err := runWorkerLoop(ctx, w, func(ctx context.Context) (*net.UnixConn, error) {
+	err := runWorkerLoop(ctx, w, readyWorkerLifecycleFixture(t), func(ctx context.Context) (*net.UnixConn, error) {
 		dials++
 		client, broker := conversationPair(t)
 		go func(index int) {
@@ -270,7 +271,7 @@ func testWorkerPartialSelectionRemainsTerminalWithoutClaim(t *testing.T, latched
 	defer cancel()
 	brokerDone := make(chan error, 1)
 	dials, pauses := 0, 0
-	err := runWorkerLoop(ctx, w, func(ctx context.Context) (*net.UnixConn, error) {
+	err := runWorkerLoop(ctx, w, readyWorkerLifecycleFixture(t), func(ctx context.Context) (*net.UnixConn, error) {
 		dials++
 		client, broker := conversationPair(t)
 		go func() {

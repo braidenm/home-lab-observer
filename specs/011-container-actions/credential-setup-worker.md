@@ -1,6 +1,7 @@
 # Consumed ACTION bootstrap and quiet worker renewal
 
-Status: Proposed exact cut1 contract; root/independent review and spec-first commit REQUIRED before runtime.
+Status: Root/independent R2 design accepted for this local cut1 implementation/tests only; source-first commit
+d3aaf3d preceded runtime. Full source review/current-head CI, package and installed/paired gates remain open.
 Parent [package plan](action-package.md), local docs commit1db863c; Observer base4193c3d / paired API sourceb07a2335.
 This cut consumes the existing RunWorker, protected role/settings/credential readers and fixed-origin HTTP client.
 It is not an installer, live enrollment procedure, new authority, recovery workflow or an unused client-only PR.
@@ -205,3 +206,19 @@ proof, new full context, Docker/VM/host identities or real credential. Tests mus
 failure from an actually completed rename/remote transition; raw secret canaries must be absent from every sink.
 Paired real HTTP codec interoperability and full installed artifact/role/renewal/Engine acceptance remain package
 gates. Existing server APIs are evidence of a contract, not proof this new client already interoperates.
+
+### Local source acceptance checkpoint (2026-11-05 UTC)
+
+The actual RunWorker now holds the credential lease and uses the READY/hash/expiry provider without an old-reader
+fallback. It performs sequential lifecycle maintenance before BEGIN, after the preceding conversation/cancellation
+callback/connection has joined; the same execution-disable latch remains. The third executable implements only
+the closed worker-role exchange mode, not package management, broker provisioning or an installed service.
+
+Local synthetic TLS and private-file tests cover numeric/time codecs, purpose separation, exact finite HTTP
+categories/no retry, durable attempt ordering, separate-process flock exclusion, same-byte inode replacement,
+all six renewal publication failures, positive new/old status resolution and actual post-active-rename restart.
+The first expanded run exposed a test-only missing import (no worker test ran); it was corrected, not skipped.
+Fresh full Linux race runs passed worker8.440s, remote2.396s, setup-command1.009s and worker-command1.010s; vet
+passed those four packages. Source and final independent review are separate from these local receipts.
+No actual Platform credential, service account, installed confinement, package artifact, VM or Docker operation
+was used. Existing HTTP interoperability and exact-package gates above are deliberately not checked complete.

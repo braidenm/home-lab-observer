@@ -1,7 +1,7 @@
 # First connected action package and provisioning plan
 
-Status: Proposed for root/independent review; DOCUMENTATION ONLY. No runtime, package build, download,
-VM, host, credential, service or activation approval. Baselines: Observer4193c3d (#175), paired Platform
+Status: Package direction accepted; only the linked cut1 credential consumer is approved for local authoring/tests.
+No package build, download, VM, host, credential, service or activation approval. Baselines: Observer4193c3d (#175), paired Platform
 b07a2335 (fresh main inspection, 2026-11-04 local / 2026-11-05 UTC). Use actual reviewed merged inputs at delivery.
 This implements [ADR034](../../docs/adr/034-locked-uncertain-outcomes-first-release.md), preserving
 [ADR030](../../docs/adr/030-packaged-typed-action-workers.md) and [ADR031](../../docs/adr/031-nonroot-action-listeners.md).
@@ -24,8 +24,9 @@ observed server or its workloads. No automatic uncertain-action retry, fence cle
 
 Proposed coherent sequence (not a chain of unused libraries):
 
-The exact first consumer contract is [credential-setup-worker.md](credential-setup-worker.md); it still requires
-root/independent review and a spec-first commit before runtime authoring.
+The exact first consumer contract is [credential-setup-worker.md](credential-setup-worker.md); root/independent R2
+review accepted that narrow design and source-first d3aaf3d preceded its local runtime authoring. Local source/test
+receipts live there; they do not approve the remaining package cuts or installed authority.
 
 1. **Consumed ACTION credential setup:** closed lifecycle codecs/client, protected atomic handoff store, one
    worker-identity bootstrap mode of the setup command, and renewal integrated at quiet boundaries of the existing worker loop.
