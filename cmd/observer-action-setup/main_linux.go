@@ -10,10 +10,16 @@ import (
 
 	"github.com/braidenm/home-lab-observer/internal/actionbroker"
 	"github.com/braidenm/home-lab-observer/internal/actionworker"
+	"github.com/braidenm/home-lab-observer/internal/connectedidentity"
 	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
 )
 
+var releaseIdentity string
+
 func main() {
+	if _, err := connectedidentity.Resolve(releaseIdentity, "action-setup"); err != nil {
+		os.Exit(22)
+	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	code := run(ctx, os.Args, os.Environ(), actionworker.RunExchange, actionbroker.ProvisionJournal)
 	cancel()

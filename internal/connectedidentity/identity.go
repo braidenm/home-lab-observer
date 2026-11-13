@@ -4,6 +4,8 @@ package connectedidentity
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"regexp"
@@ -16,6 +18,13 @@ import (
 
 const MaxRecordBytes = 256
 const MaxFileBytes = 200 << 20
+
+const actionIdentityContract = "ubuntu24.04-systemd255-amd64-actions-v1-canary:identity-v1"
+
+func ActionContractDigest() string {
+	digest := sha256.Sum256([]byte(actionIdentityContract))
+	return hex.EncodeToString(digest[:])
+}
 
 var ErrInvalid = errors.New("connected_identity_invalid")
 var versionPattern = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*$`)
@@ -43,6 +52,8 @@ func (i Identity) Validate() error {
 
 func validRoleContract(role, contract string) bool {
 	switch role {
+	case "action-worker", "action-broker", "action-setup":
+		return contract == ActionContractDigest()
 	case "collector", "uploader", "install":
 		return contract == "" || connectedcompat.Known(contract)
 	case "rich-collector", "rich-uploader", "rich-install":
