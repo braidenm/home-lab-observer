@@ -131,6 +131,13 @@ using the actual Provision API in a closed networkless transient provisioning mo
 Root-created/chowned SQLite state is not a substitute for its owner checks. Worker/broker normal startup remains
 OpenExisting only; any existing/missing-after-install/corrupt/foreign state refuses instead of reprovisioning.
 
+The setup binary accepts exactly `provision-journal` for this step, with the same manager environment guard as
+`exchange`. It accepts no paths, binding arguments or input. The broker's existing protected policy/Engine loader
+supplies the installation binding and verifies the broker identity. This command creates only the v1 journal in
+the prepared private directory; it opens no listener or Engine connection and never removes retained files.
+The stopped installer must invoke it inside the broker view before allowing normal service startup. The command
+is not an installer or an acceptance receipt on its own.
+
 Runtime proposal: two disabled `Type=exec` services, Restart=no, no socket activation/inherited FDs; zero core dumps,
 capability sets empty, NoNewPrivileges, fixed executable allowlist, protected RootDirectory views and restrictive
 syscalls. Worker alone sees fixed first-party HTTPS origin, reviewed CA/DNS/host inputs, own credential directory
