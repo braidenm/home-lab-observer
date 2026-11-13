@@ -31,7 +31,7 @@ func TestSetupClosedExchangeLaunch(t *testing.T) {
 					return context.Canceled
 				}
 				return nil
-			})
+			}, nil)
 			if mode == "valid" {
 				if code != 0 || calls != 1 {
 					t.Fatal("closed exchange refused")
@@ -42,6 +42,24 @@ func TestSetupClosedExchangeLaunch(t *testing.T) {
 				}
 			} else if code != 22 || calls != 0 {
 				t.Fatal("override reached input/secret consumer")
+			}
+		})
+	}
+}
+
+func TestSetupProvisionDispatch(t *testing.T) {
+	for _, verb := range []string{"provision-journal", "install"} {
+		t.Run(verb, func(t *testing.T) {
+			calls := 0
+			code := run(context.Background(), []string{"observer-action-setup", verb}, []string{"GODEBUG=netdns=go"},
+				func(context.Context) error { t.Fatal("unexpected exchange"); return nil },
+				func(context.Context) error { calls++; return nil })
+			if verb == "provision-journal" {
+				if code != 0 || calls != 1 {
+					t.Fatal("closed provisioning command was not dispatched")
+				}
+			} else if code != 22 || calls != 0 {
+				t.Fatal("unsupported command reached provisioning")
 			}
 		})
 	}
