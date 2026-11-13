@@ -123,6 +123,10 @@ Missing, mismatched and non-Linux/amd64 identities refuse before accessing confi
 This marker identifies the binary contract only; the eventual package manifest separately binds every resource
 and binary byte. It is not a signature or a claim that an installation has passed acceptance.
 
+The binary build step uses clean pinned Linux/amd64 source and Go 1.27.3, builds all three roles twice, and
+publishes the matching binaries and a checksum list into a new local output directory. This intermediate
+output is not an installable release: it contains no units, installer, host configuration or credentials.
+
 Root-owned `/opt/home-lab-observer-actions/releases/<manifestSHA>` holds verified immutable payload; separate
 root-owned installed record and worker-root/broker-root skeletons use existing protected publication patterns.
 Keep ADR031 exact role/path/mode/ACL rules. Resolve unique numeric IDs and reject foreign primary/supplementary
