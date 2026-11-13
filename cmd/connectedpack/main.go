@@ -72,6 +72,25 @@ func run(args []string) error {
 	if f.Parse(args) != nil || f.NArg() != 0 {
 		return connectedbundle.ErrInvalid
 	}
+	if *profile == "actions" {
+		if *mode != "identity" || *binaries != "" || *output != "" {
+			return connectedbundle.ErrInvalid
+		}
+		switch *role {
+		case "action-worker", "action-broker", "action-setup":
+		default:
+			return connectedbundle.ErrInvalid
+		}
+		record, err := connectedidentity.Encode(connectedidentity.Identity{
+			Role: *role, Version: *version, Commit: *commit, OS: "linux", Arch: "amd64",
+			ContractSHA256: connectedidentity.ActionContractDigest(),
+		})
+		if err != nil {
+			return err
+		}
+		fmt.Print(record)
+		return nil
+	}
 	var spec packSpec
 	switch *profile {
 	case "numeric":
