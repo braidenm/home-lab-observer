@@ -31,9 +31,13 @@ func RunWorker(ctx context.Context) error {
 	if err != nil {
 		return ErrUnsafe
 	}
-	credentials, err := NewActiveCredentials(ctx, s)
+	credentials, err := openCredentialLifecycle(ctx, s)
 	if err != nil {
-		return ErrUnsafe
+		return ErrCredentialRecovery
+	}
+	defer credentials.close()
+	if credentials.maintain(ctx) != nil {
+		return ErrCredentialRecovery
 	}
 	client, err := actionremote.New(s.Origin, s.Binding, credentials)
 	if err != nil {
@@ -41,7 +45,7 @@ func RunWorker(ctx context.Context) error {
 	}
 	defer client.Close()
 	w := &conversationClient{remote: client, binding: s.Binding}
-	return runWorkerLoop(ctx, w, func(ctx context.Context) (*net.UnixConn, error) { return dialBroker(ctx, i) }, workerPace)
+	return runWorkerLoop(ctx, w, credentials, func(ctx context.Context) (*net.UnixConn, error) { return dialBroker(ctx, i) }, workerPace)
 }
 
 func workerPace(ctx context.Context) error {
@@ -57,11 +61,20 @@ func workerPace(ctx context.Context) error {
 
 // Synthetic socket tests can supply only these private process-boundary seams.
 // Production always uses dialBroker, the same conversation/latch and fixed pace.
-func runWorkerLoop(ctx context.Context, w *conversationClient, connect func(context.Context) (*net.UnixConn, error), pace func(context.Context) error) error {
-	if ctx == nil || w == nil || connect == nil || pace == nil {
+func runWorkerLoop(ctx context.Context, w *conversationClient, credentials *credentialLifecycle, connect func(context.Context) (*net.UnixConn, error), pace func(context.Context) error) error {
+	if ctx == nil || w == nil || credentials == nil || connect == nil || pace == nil {
 		return ErrUnsafe
 	}
 	for ctx.Err() == nil {
+		// The preceding converse, cancellation callback and connection have
+		// actually joined. This SAME lifecycle owns the lease for the loop;
+		// credential work cannot run concurrently with a report or clear w's latch.
+		if credentials.maintain(ctx) != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return ErrCredentialRecovery
+		}
 		c, err := connect(ctx)
 		if ctx.Err() != nil {
 			if c != nil {
