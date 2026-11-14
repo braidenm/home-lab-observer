@@ -1,0 +1,51 @@
+[Unit]
+Description=Home Lab Observer Docker action broker
+
+[Service]
+Type=exec
+WorkingDirectory=/
+UMask=0077
+StandardInput=null
+StandardOutput=null
+StandardError=null
+Environment=GODEBUG=netdns=go
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateUsers=no
+PrivateIPC=yes
+ProtectSystem=strict
+DevicePolicy=closed
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=~@mount @module @raw-io @reboot @swap ptrace process_vm_readv process_vm_writev kcmp perf_event_open bpf userfaultfd io_uring_setup io_uring_enter io_uring_register mknod mknodat
+SystemCallErrorNumber=EPERM
+LimitCORE=0
+MemoryMax=256M
+TasksMax=64
+CPUQuota=50%
+KillMode=control-group
+Restart=no
+FileDescriptorStoreMax=0
+MountAPIVFS=no
+NoExecPaths=/
+User=home-lab-observer-action-broker
+Group=home-lab-observer-action-broker
+SupplementaryGroups=home-lab-observer-action-ipc @ENGINE_GID@
+RootDirectory=/var/lib/home-lab-observer-actions/broker-root
+ExecStart=/bin/observer-action-broker
+ExecPaths=/bin/observer-action-broker
+TimeoutStopSec=80s
+RestrictAddressFamilies=AF_UNIX
+PrivateNetwork=yes
+BindReadOnlyPaths=/opt/home-lab-observer-actions/releases/@MANIFEST_SHA256@/observer-action-broker:/bin/observer-action-broker
+BindReadOnlyPaths=/proc:/proc:norbind
+BindReadOnlyPaths=/etc/passwd /etc/group /etc/nsswitch.conf
+BindReadOnlyPaths=/run/home-lab-observer-actions/host-userns
+BindReadOnlyPaths=/etc/home-lab-observer-actions/engine.json /etc/home-lab-observer-actions/policy.json
+BindReadOnlyPaths=/run/docker.sock:/engine/docker.sock
+BindPaths=/var/lib/home-lab-observer-actions/journal /run/home-lab-observer-actions/worker
+ReadWritePaths=/var/lib/home-lab-observer-actions/journal /run/home-lab-observer-actions/worker
