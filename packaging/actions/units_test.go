@@ -1,10 +1,28 @@
 package actions
 
 import (
+	"net/netip"
 	"os"
 	"strings"
 	"testing"
 )
+
+func TestRenderUnitsUsesOnlyBoundedHostAddresses(t *testing.T) {
+	digest := strings.Repeat("a", 64)
+	host := netip.MustParseAddr("192.0.2.10")
+	worker, broker, err := RenderUnits(digest, 998, []netip.Addr{host, netip.MustParseAddr("2001:db8::2")})
+	if err != nil || !strings.Contains(worker, "IPAddressAllow=192.0.2.10/32 2001:db8::2/128\n") ||
+		!strings.Contains(broker, "SupplementaryGroups=home-lab-observer-action-ipc 998\n") ||
+		strings.Contains(worker+broker, "@MANIFEST_SHA256@") || strings.Contains(worker+broker, "@WORKER_EGRESS@") ||
+		strings.Contains(worker+broker, "@ENGINE_GID@") {
+		t.Fatal("invalid rendered units")
+	}
+	for _, hosts := range [][]netip.Addr{nil, {host, host}, {netip.IPv4Unspecified()}, {netip.MustParseAddr("fe80::1%eth0")}} {
+		if _, _, err := RenderUnits(digest, 998, hosts); err == nil {
+			t.Fatal("accepted invalid egress")
+		}
+	}
+}
 
 func TestActionUnitsSeparateAuthority(t *testing.T) {
 	for _, role := range []string{"worker", "broker"} {
