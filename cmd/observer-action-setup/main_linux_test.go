@@ -31,7 +31,7 @@ func TestSetupClosedExchangeLaunch(t *testing.T) {
 					return context.Canceled
 				}
 				return nil
-			}, nil)
+			}, nil, nil)
 			if mode == "valid" {
 				if code != 0 || calls != 1 {
 					t.Fatal("closed exchange refused")
@@ -53,7 +53,7 @@ func TestSetupProvisionDispatch(t *testing.T) {
 			calls := 0
 			code := run(context.Background(), []string{"observer-action-setup", verb}, []string{"GODEBUG=netdns=go"},
 				func(context.Context) error { t.Fatal("unexpected exchange"); return nil },
-				func(context.Context) error { calls++; return nil })
+				func(context.Context) error { calls++; return nil }, nil)
 			if verb == "provision-journal" {
 				if code != 0 || calls != 1 {
 					t.Fatal("closed provisioning command was not dispatched")

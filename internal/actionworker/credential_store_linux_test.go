@@ -45,6 +45,47 @@ func credentialStoreFixture(t *testing.T) (*credentialStore, string) {
 	return s, root
 }
 
+func TestEnrollmentSeedOnlyPublishesIntoEmptyStore(t *testing.T) {
+	for _, mode := range []string{"empty", "existing", "appears-before-rename"} {
+		t.Run(mode, func(t *testing.T) {
+			s, root := credentialStoreFixture(t)
+			path := filepath.Join(root, "worker", "handoff.json")
+			if mode != "existing" {
+				if err := os.Remove(path); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if mode == "appears-before-rename" {
+				s.fault = func(stage string) error {
+					if stage == "before-rename" {
+						return os.WriteFile(path, []byte("retained"), 0600)
+					}
+					return nil
+				}
+			}
+			op, err := newCredentialOperation(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer op.close()
+			if err := s.seed(op); (err == nil) != (mode == "empty") {
+				t.Fatal("unexpected seed result")
+			}
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if mode == "appears-before-rename" {
+				if string(raw) != "retained" {
+					t.Fatal("seed replaced retained state")
+				}
+			} else if h, err := decodeHandoff(raw, s.binding); err != nil || h.Phase != phaseUnenrolled {
+				t.Fatal("invalid initial state")
+			}
+		})
+	}
+}
+
 func TestCredentialStoreLeaseCASAndDurableAttempt(t *testing.T) {
 	s, root := credentialStoreFixture(t)
 	op, err := newCredentialOperation(context.Background())
