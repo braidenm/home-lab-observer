@@ -126,9 +126,9 @@ and binary byte. It is not a signature or a claim that an installation has passe
 The binary build step uses clean pinned Linux/amd64 source and Go 1.27.3, builds all three roles twice, and
 publishes the matching binaries and a checksum list into a new local output directory. This intermediate
 output is not an installable release: it contains no units, installer, host configuration or credentials.
-The build-only candidate archive wraps that exact four-file payload in a deterministic ustar/gzip archive,
-compares two archive builds and publishes a separate archive checksum. It is for disposable acceptance staging,
-not for owner download or service installation. The installed manifest and verified service resources remain separate gates.
+The build-only candidate uses the closed action manifest and deterministic ustar/gzip writer to package each
+binary build with the two exact unit templates. It compares the archives, manifests, and checksum files before
+publishing a local candidate for disposable acceptance staging. It does not emit an installer.
 
 The action manifest verifier has its own closed profile. Its initial exact payload contains the three static
 role-bound binaries and the two embedded service templates. The trusted digest covers the canonical manifest;
