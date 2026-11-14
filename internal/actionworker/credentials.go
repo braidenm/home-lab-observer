@@ -25,6 +25,24 @@ type Settings struct {
 	Binding actionremote.Binding
 }
 
+// EncodeInstallSettings shares the worker's exact installed-record validation.
+func EncodeInstallSettings(s Settings) ([]byte, error) {
+	raw, err := json.Marshal(struct {
+		Version             string `json:"version"`
+		Origin              string `json:"origin"`
+		ServerID            string `json:"server_id"`
+		OwnerUserID         string `json:"owner_user_id"`
+		ConnectorInstanceID string `json:"connector_instance_id"`
+	}{"observer-action-worker/v1", s.Origin, s.Binding.ServerID, s.Binding.OwnerUserID, s.Binding.ConnectorInstanceID})
+	if err != nil {
+		return nil, ErrUnsafe
+	}
+	if _, err := decodeSettings(raw); err != nil {
+		return nil, err
+	}
+	return raw, nil
+}
+
 type unavailableCredential struct{}
 
 func (unavailableCredential) Credential(context.Context, actionremote.Binding) (actionremote.Credential, error) {
