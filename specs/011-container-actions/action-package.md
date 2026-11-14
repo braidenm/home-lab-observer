@@ -126,6 +126,9 @@ and binary byte. It is not a signature or a claim that an installation has passe
 The binary build step uses clean pinned Linux/amd64 source and Go 1.27.3, builds all three roles twice, and
 publishes the matching binaries and a checksum list into a new local output directory. This intermediate
 output is not an installable release: it contains no units, installer, host configuration or credentials.
+The build-only candidate archive wraps that exact four-file payload in a deterministic ustar/gzip archive,
+compares two archive builds and publishes a separate archive checksum. It is for disposable acceptance staging,
+not for owner download or service installation. The installed manifest and verified service resources remain separate gates.
 
 Root-owned `/opt/home-lab-observer-actions/releases/<manifestSHA>` holds verified immutable payload; separate
 root-owned installed record and worker-root/broker-root skeletons use existing protected publication patterns.
