@@ -322,7 +322,7 @@ func copyBundleFiles(source, destination, digest string, names []string, verify 
 	defer inputDirectory.Close()
 	for _, name := range append(names, connectedbundle.ManifestName) {
 		mode := os.FileMode(0644)
-		if strings.HasPrefix(name, "observer-connected-") {
+		if strings.HasPrefix(name, "observer-connected-") || name == "observer-action-worker" || name == "observer-action-broker" || name == "observer-action-setup" {
 			mode = 0755
 		}
 		fd, err := unix.Openat(int(inputDirectory.Fd()), name, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
