@@ -151,6 +151,11 @@ the prepared private directory; it opens no listener or Engine connection and ne
 The stopped installer must invoke it inside the broker view before allowing normal service startup. The command
 is not an installer or an acceptance receipt on its own.
 
+The stopped installer prepares the private worker directory and empty lock. The verified setup binary's
+`seed-enrollment` verb, run as the worker, reads only protected settings and writes the canonical UNENROLLED
+record under that lock. It requires both credential records to be absent and publishes without replacement.
+It consumes no input and makes no network request. An existing record or failed publication is not reset.
+
 Runtime proposal: two disabled `Type=exec` services, Restart=no, no socket activation/inherited FDs; zero core dumps,
 capability sets empty, NoNewPrivileges, fixed executable allowlist, protected RootDirectory views and restrictive
 syscalls. Worker alone sees fixed first-party HTTPS origin, reviewed CA/DNS/host inputs, own credential directory
