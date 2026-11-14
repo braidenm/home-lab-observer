@@ -135,6 +135,11 @@ role-bound binaries and the two embedded service templates. The trusted digest c
 the manifest covers file names, modes, sizes and hashes. Observation profiles do not accept this bundle.
 Verification does not install files, provision roles or establish effective service isolation.
 
+Stopped release staging accepts an extracted action bundle and an independently verified manifest digest.
+It verifies before writing, creates a fresh root-owned release directory under the fixed action prefix,
+then copies and re-verifies the exact final bytes. Existing or partial installations are refused and retained.
+Staging alone creates no users, mounts, services, approval records, or enrollment credentials.
+
 Root-owned `/opt/home-lab-observer-actions/releases/<manifestSHA>` holds verified immutable payload; separate
 root-owned installed record and worker-root/broker-root skeletons use existing protected publication patterns.
 Keep ADR031 exact role/path/mode/ACL rules. Resolve unique numeric IDs and reject foreign primary/supplementary
