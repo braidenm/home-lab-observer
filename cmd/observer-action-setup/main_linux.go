@@ -21,11 +21,11 @@ func main() {
 		os.Exit(22)
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
-	code := run(ctx, os.Args, os.Environ(), actionworker.RunExchange, actionbroker.ProvisionJournal)
+	code := run(ctx, os.Args, os.Environ(), actionworker.RunExchange, actionbroker.ProvisionJournal, actionworker.SeedEnrollment)
 	cancel()
 	os.Exit(code)
 }
-func run(ctx context.Context, args, environ []string, exchange, provision func(context.Context) error) int {
+func run(ctx context.Context, args, environ []string, exchange, provision, seed func(context.Context) error) int {
 	if ctx == nil || ctx.Err() != nil || len(args) != 2 || args[0] == "" || connectedprofile.CheckEnvironment(environ) != nil {
 		return 22
 	}
@@ -35,6 +35,8 @@ func run(ctx context.Context, args, environ []string, exchange, provision func(c
 		operation = exchange
 	case "provision-journal":
 		operation = provision
+	case "seed-enrollment":
+		operation = seed
 	}
 	if operation == nil || operation(ctx) != nil {
 		return 22

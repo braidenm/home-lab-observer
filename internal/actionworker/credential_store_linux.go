@@ -232,7 +232,7 @@ func (s *credentialStore) publish(op *credentialOperation, name string, raw []by
 		name string
 		old  credentialFile
 	}{{"handoff.json", s.handoffFile}, {"active.json", s.activeFile}} {
-		now, err := s.read(op.ctx, pair.name, pair.name == "active.json")
+		now, err := s.read(op.ctx, pair.name, !pair.old.present)
 		if err != nil || !sameCredentialFile(now, pair.old) {
 			clear(now.raw)
 			return ErrUnsafe
@@ -273,7 +273,7 @@ func (s *credentialStore) publish(op *credentialOperation, name string, raw []by
 		name string
 		old  credentialFile
 	}{{"handoff.json", s.handoffFile}, {"active.json", s.activeFile}} {
-		now, err := s.read(op.ctx, pair.name, pair.name == "active.json")
+		now, err := s.read(op.ctx, pair.name, !pair.old.present)
 		if err != nil || !sameCredentialFile(now, pair.old) {
 			clear(now.raw)
 			return ErrUnsafe
@@ -284,7 +284,11 @@ func (s *credentialStore) publish(op *credentialOperation, name string, raw []by
 	if unix.Fstat(fd, &staged) != nil || !s.validFile(staged, false) || !noACL(fd) || unix.Fstatat(s.dir(), temp, &current, unix.AT_SYMLINK_NOFOLLOW) != nil || !sameWitness(current, staged) || s.stage("before-rename") != nil || op.check() != nil {
 		return ErrUnsafe
 	}
-	if unix.Renameat(s.dir(), temp, s.dir(), name) != nil {
+	flags := uint(0)
+	if name == "handoff.json" && !s.handoffFile.present || name == "active.json" && !s.activeFile.present {
+		flags = unix.RENAME_NOREPLACE
+	}
+	if unix.Renameat2(s.dir(), temp, s.dir(), name, flags) != nil {
 		return ErrUnsafe
 	}
 	renamed = true
