@@ -29,6 +29,8 @@ var actionBundleSpec = bundleSpec{
 	resources: actions.Resources,
 }
 
+func ActionNames() []string { return names(actionBundleSpec) }
+
 func EncodeActions(m Manifest) ([]byte, error) {
 	return encode(m, func() error { return validateManifest(m, actionBundleSpec, false) })
 }
