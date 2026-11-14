@@ -9,18 +9,16 @@ root=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 bash "$root/scripts/build-action-binaries-linux.sh" "$version" "$revision" "$output"
 output=$(realpath -- "$output")
 name="home-lab-observer-actions_${version}_linux_amd64.tar.gz"
-members=(SHA256SUMS observer-action-broker observer-action-setup observer-action-worker)
-pack() {
-  tar --format=ustar --mtime=@0 --owner=0 --group=0 --numeric-owner \
-    -C "$output/payload" -cf - -- "${members[@]}" | gzip -n > "$1"
-}
-pack "$output/first/$name"
-pack "$output/second/$name"
-cmp -- "$output/first/$name" "$output/second/$name"
+for round in first second; do
+  "$output/connectedpack" --mode pack --profile actions --version "$version" --commit "$revision" \
+    --binaries "$output/$round" --output "$output/$round-packed"
+done
+members=("$name" connected-manifest.json SHA256SUMS)
+for member in "${members[@]}"; do
+  cmp -- "$output/first-packed/$member" "$output/second-packed/$member"
+done
 mkdir -m 700 -- "$output/candidate"
-install -m 644 -- "$output/first/$name" "$output/candidate/$name"
-(
-  cd -- "$output/candidate"
-  sha256sum -- "$name" > SHA256SUMS
-)
+for member in "${members[@]}"; do
+  install -m 644 -- "$output/first-packed/$member" "$output/candidate/$member"
+done
 echo 'ACTION_CANDIDATE_REPRODUCIBLE_NOT_INSTALLABLE'

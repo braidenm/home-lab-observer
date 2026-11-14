@@ -17,6 +17,7 @@ import (
 	"github.com/braidenm/home-lab-observer/internal/connectedprofile"
 	"github.com/braidenm/home-lab-observer/internal/connectedunits"
 	"github.com/braidenm/home-lab-observer/internal/ownerfs"
+	"github.com/braidenm/home-lab-observer/packaging/actions"
 )
 
 type packSpec struct {
@@ -52,6 +53,14 @@ var richProcessesDockerPackSpec = packSpec{
 	writeArchive: connectedbundle.WriteRichProcessesDockerArchive, render: connectedbootstrap.RenderRichProcessesDocker,
 }
 
+var actionPackSpec = packSpec{
+	contract: connectedidentity.ActionContractDigest(), installRole: "action-setup",
+	directoryPrefix: "home-lab-observer-actions_",
+	binaries:        []string{"observer-action-worker", "observer-action-broker", "observer-action-setup"},
+	resources:       actions.Resources, createManifest: connectedbundle.CreateActionManifest,
+	writeArchive: connectedbundle.WriteActionArchive,
+}
+
 func main() {
 	if run(os.Args[1:]) != nil {
 		fmt.Fprintln(os.Stderr, "CONNECTED_PACK_FAILED")
@@ -63,7 +72,7 @@ func run(args []string) error {
 	f := flag.NewFlagSet("connectedpack", flag.ContinueOnError)
 	f.SetOutput(io.Discard)
 	mode := f.String("mode", "", "identity or pack")
-	profile := f.String("profile", "numeric", "numeric, rich-processes or rich-processes-docker")
+	profile := f.String("profile", "numeric", "numeric, rich-processes, rich-processes-docker or actions")
 	role := f.String("role", "", "connected role")
 	version := f.String("version", "", "prerelease version")
 	commit := f.String("commit", "", "source commit")
@@ -71,25 +80,6 @@ func run(args []string) error {
 	output := f.String("output", "", "new output directory")
 	if f.Parse(args) != nil || f.NArg() != 0 {
 		return connectedbundle.ErrInvalid
-	}
-	if *profile == "actions" {
-		if *mode != "identity" || *binaries != "" || *output != "" {
-			return connectedbundle.ErrInvalid
-		}
-		switch *role {
-		case "action-worker", "action-broker", "action-setup":
-		default:
-			return connectedbundle.ErrInvalid
-		}
-		record, err := connectedidentity.Encode(connectedidentity.Identity{
-			Role: *role, Version: *version, Commit: *commit, OS: "linux", Arch: "amd64",
-			ContractSHA256: connectedidentity.ActionContractDigest(),
-		})
-		if err != nil {
-			return err
-		}
-		fmt.Print(record)
-		return nil
 	}
 	var spec packSpec
 	switch *profile {
@@ -99,6 +89,11 @@ func run(args []string) error {
 		spec = richProcessesPackSpec
 	case "rich-processes-docker":
 		spec = richProcessesDockerPackSpec
+	case "actions":
+		spec = actionPackSpec
+		if *mode == "identity" && *role != "action-worker" && *role != "action-broker" && *role != "action-setup" {
+			return connectedbundle.ErrInvalid
+		}
 	default:
 		return connectedbundle.ErrInvalid
 	}
@@ -202,12 +197,15 @@ func run(args []string) error {
 		return connectedbundle.ErrInvalid
 	}
 	archiveSHA := hex.EncodeToString(hash.Sum(nil))
-	installer, err := spec.render(manifest, archiveSHA, archiveInfo.Size())
-	if err != nil || writeNew(filepath.Join(*output, spec.installerName), installer) != nil {
-		return connectedbundle.ErrInvalid
+	checksums := archiveSHA + "  " + archiveName + "\n" + manifestSHA + "  " + connectedbundle.ManifestName + "\n"
+	if spec.render != nil {
+		installer, err := spec.render(manifest, archiveSHA, archiveInfo.Size())
+		if err != nil || writeNew(filepath.Join(*output, spec.installerName), installer) != nil {
+			return connectedbundle.ErrInvalid
+		}
+		installerHash := sha256.Sum256(installer)
+		checksums += hex.EncodeToString(installerHash[:]) + "  " + spec.installerName + "\n"
 	}
-	installerHash := sha256.Sum256(installer)
-	checksums := archiveSHA + "  " + archiveName + "\n" + manifestSHA + "  " + connectedbundle.ManifestName + "\n" + hex.EncodeToString(installerHash[:]) + "  " + spec.installerName + "\n"
 	if writeNew(filepath.Join(*output, "SHA256SUMS"), []byte(checksums)) != nil {
 		return connectedbundle.ErrInvalid
 	}

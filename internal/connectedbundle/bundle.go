@@ -243,7 +243,7 @@ func inspectBinary(f *os.File, size int64, want connectedidentity.Identity) erro
 		return ErrInvalid
 	}
 	info, err := buildinfo.Read(f)
-	if err != nil || info.Path != "github.com/braidenm/home-lab-observer/cmd/observer-connected-"+want.Role {
+	if err != nil || info.Path != commandPath(want.Role) {
 		return ErrInvalid
 	}
 	settings := make(map[string]string, 3)
