@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/braidenm/home-lab-observer/internal/connectedbundle"
+	"github.com/braidenm/home-lab-observer/internal/connectedidentity"
 	"github.com/braidenm/home-lab-observer/internal/connectedinstalllease"
 )
 
@@ -15,11 +16,11 @@ const actionReleaseRoot = "/opt/home-lab-observer-actions"
 
 // StageActionRelease only stages verified bytes. It does not provision,
 // enroll, register or start a service. Existing state is never adopted.
-func StageActionRelease(ctx context.Context, source, digest string) error {
+func StageActionRelease(ctx context.Context, source, digest string, identity connectedidentity.Identity) error {
 	if ctx == nil || ctx.Err() != nil || os.Getuid() != 0 || os.Geteuid() != 0 {
 		return ErrUnsafe
 	}
-	if _, err := connectedbundle.VerifyActionDirectory(source, digest); err != nil {
+	if verifyActionStageSource(source, digest, identity) != nil {
 		return ErrUnsafe
 	}
 	lease, err := connectedinstalllease.Acquire()
@@ -53,6 +54,18 @@ func StageActionRelease(ctx context.Context, source, digest string) error {
 	}
 	if err := copyBundleFiles(source, release, digest, connectedbundle.ActionNames(), connectedbundle.VerifyActionDirectory); err != nil || ctx.Err() != nil {
 		return ErrRecovery
+	}
+	return nil
+}
+
+func verifyActionStageSource(source, digest string, identity connectedidentity.Identity) error {
+	if identity.Validate() != nil || identity.Role != "action-setup" {
+		return ErrUnsafe
+	}
+	m, err := connectedbundle.VerifyActionDirectory(source, digest)
+	if err != nil || m.Version != identity.Version || m.Commit != identity.Commit ||
+		m.ContractSHA256 != identity.ContractSHA256 || m.OS != identity.OS || m.Arch != identity.Arch {
+		return ErrUnsafe
 	}
 	return nil
 }

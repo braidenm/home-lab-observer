@@ -5,7 +5,34 @@ package main
 import (
 	"context"
 	"testing"
+
+	"github.com/braidenm/home-lab-observer/internal/connectedidentity"
 )
+
+func TestStageReleaseRejectsOverrides(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		env  []string
+		want int
+	}{
+		{[]string{"setup", "stage-release", "/fixture", "digest"}, []string{"GODEBUG=netdns=go"}, 0},
+		{[]string{"setup", "stage-release", "/fixture", "digest", "/destination"}, []string{"GODEBUG=netdns=go"}, 22},
+		{[]string{"setup", "stage-release", "/fixture", "digest"}, []string{"HTTPS_PROXY=https://example.invalid"}, 22},
+	} {
+		calls := 0
+		got := runStage(context.Background(), tc.args, tc.env, connectedidentity.Identity{},
+			func(_ context.Context, src, digest string, _ connectedidentity.Identity) error {
+				calls++
+				if src != "/fixture" || digest != "digest" {
+					t.Fatal("changed staging inputs")
+				}
+				return nil
+			})
+		if got != tc.want || (got == 0) != (calls == 1) {
+			t.Fatalf("status %d, staging calls %d", got, calls)
+		}
+	}
+}
 
 func TestSetupClosedExchangeLaunch(t *testing.T) {
 	for _, mode := range []string{"valid", "extra", "root", "secret", "proxy", "trust", "error"} {
