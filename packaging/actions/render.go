@@ -16,6 +16,14 @@ var workerTemplate string
 //go:embed home-lab-observer-action-broker.service.tmpl
 var brokerTemplate string
 
+// Resources returns the exact unrendered resources shipped with the bundle.
+func Resources() map[string][]byte {
+	return map[string][]byte{
+		"home-lab-observer-action-worker.service.tmpl": []byte(workerTemplate),
+		"home-lab-observer-action-broker.service.tmpl": []byte(brokerTemplate),
+	}
+}
+
 var digestPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
 // RenderUnits renders only fixed unit templates. Egress accepts literal hosts,

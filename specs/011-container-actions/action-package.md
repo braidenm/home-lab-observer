@@ -130,6 +130,11 @@ The build-only candidate archive wraps that exact four-file payload in a determi
 compares two archive builds and publishes a separate archive checksum. It is for disposable acceptance staging,
 not for owner download or service installation. The installed manifest and verified service resources remain separate gates.
 
+The action manifest verifier has its own closed profile. Its initial exact payload contains the three static
+role-bound binaries and the two embedded service templates. The trusted digest covers the canonical manifest;
+the manifest covers file names, modes, sizes and hashes. Observation profiles do not accept this bundle.
+Verification does not install files, provision roles or establish effective service isolation.
+
 Root-owned `/opt/home-lab-observer-actions/releases/<manifestSHA>` holds verified immutable payload; separate
 root-owned installed record and worker-root/broker-root skeletons use existing protected publication patterns.
 Keep ADR031 exact role/path/mode/ACL rules. Resolve unique numeric IDs and reject foreign primary/supplementary
