@@ -156,6 +156,8 @@ exact rendered egress before accepting an action grant from an echo-disabled ter
 bounded grant bytes to the isolated worker exchange through a private anonymous pipe owned by that worker.
 The root command does not save the grant or pass it in command arguments, environment, or a unit file.
 It does not start or enable the runtime services and does not retry an uncertain exchange.
+Before returning success, it runs a separate status-only worker probe. The probe requires a durable READY record
+and an exact, unexpired ACTIVE status for that credential; it cannot claim, renew or overwrite enrollment state.
 
 Root-owned `/opt/home-lab-observer-actions/releases/<manifestSHA>` holds verified immutable payload; separate
 root-owned installed record and worker-root/broker-root skeletons use existing protected publication patterns.

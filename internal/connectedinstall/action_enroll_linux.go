@@ -70,7 +70,10 @@ func EnrollStoppedAction(ctx context.Context, identity connectedidentity.Identit
 	}
 	defer input.Close()
 	clear(raw)
-	if runActionBootstrap(ctx, "exchange", digest, socket.gid, network, input) != nil || verifyStoppedActionUnits(ctx) != nil {
+	if runActionBootstrap(ctx, "exchange", digest, socket.gid, network, input) != nil ||
+		verifyStoppedActionUnits(ctx) != nil || !sameDockerSocket(socket) ||
+		runActionBootstrap(ctx, "verify-enrollment", digest, socket.gid, network, nil) != nil ||
+		verifyStoppedActionUnits(ctx) != nil {
 		return ErrRecovery
 	}
 	return nil

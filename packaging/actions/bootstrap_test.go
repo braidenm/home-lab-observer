@@ -9,7 +9,8 @@ import (
 func TestBootstrapPropertiesRestrictAllThreeOperations(t *testing.T) {
 	digest := strings.Repeat("a", 64)
 	addresses := []netip.Addr{netip.MustParseAddr("192.0.2.10")}
-	for _, verb := range []string{"seed-enrollment", "exchange", "provision-journal"} {
+	for _, verb := range []string{"seed-enrollment", "exchange", "verify-enrollment", "provision-journal"} {
+		needsHTTPS := verb == "exchange" || verb == "verify-enrollment"
 		props, err := BootstrapProperties(digest, verb, 998, addresses)
 		if err != nil {
 			t.Fatal(err)
@@ -22,8 +23,8 @@ func TestBootstrapPropertiesRestrictAllThreeOperations(t *testing.T) {
 		}
 		if !strings.Contains(raw, "ExecPaths=/bin/observer-action-setup\n") ||
 			!strings.Contains(raw, "RuntimeMaxSec=30s") ||
-			strings.Contains(raw, "PrivateNetwork=yes") != (verb != "exchange") ||
-			strings.Contains(raw, "IPAddressDeny=any") != (verb == "exchange") ||
+			strings.Contains(raw, "PrivateNetwork=yes") != !needsHTTPS ||
+			strings.Contains(raw, "IPAddressDeny=any") != needsHTTPS ||
 			strings.Contains(raw, "worker.json") != (verb != "provision-journal") ||
 			strings.Contains(raw, "/journal") != (verb == "provision-journal") {
 			t.Fatalf("%s role or network policy mismatch", verb)

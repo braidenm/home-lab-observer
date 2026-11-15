@@ -33,6 +33,10 @@ func main() {
 			connectedinstall.EnrollStoppedAction(ctx, identity, os.Args[2], os.Stdin, os.Stderr) == nil {
 			code = 0
 		}
+	} else if len(os.Args) == 2 && os.Args[1] == "verify-enrollment" {
+		if connectedprofile.CheckEnvironment(os.Environ()) == nil && actionworker.VerifyEnrollment(ctx) == nil {
+			code = 0
+		}
 	} else {
 		code = run(ctx, os.Args, os.Environ(), actionworker.RunExchange, actionbroker.ProvisionJournal, actionworker.SeedEnrollment)
 	}

@@ -16,7 +16,7 @@ func BootstrapProperties(digest, verb string, engineGID uint32, egress []netip.A
 	}
 	var source, binary string
 	switch verb {
-	case "seed-enrollment", "exchange":
+	case "seed-enrollment", "exchange", "verify-enrollment":
 		source, binary = worker, "observer-action-worker"
 	case "provision-journal":
 		source, binary = broker, "observer-action-broker"
@@ -30,6 +30,7 @@ func BootstrapProperties(digest, verb string, engineGID uint32, egress []netip.A
 
 func setupProperties(source, binary, digest, verb string) []string {
 	var props, readOnly []string
+	needsHTTPS := verb == "exchange" || verb == "verify-enrollment"
 	for _, line := range strings.Split(strings.SplitN(source, "[Service]\n", 2)[1], "\n") {
 		key, value, ok := strings.Cut(line, "=")
 		if !ok {
@@ -49,7 +50,7 @@ func setupProperties(source, binary, digest, verb string) []string {
 			value = strings.ReplaceAll(value, " /run/home-lab-observer-actions/worker", "")
 			line = key + "=" + value
 		case "IPAddressAllow", "IPAddressDeny", "RestrictAddressFamilies", "PrivateNetwork":
-			if verb != "exchange" {
+			if !needsHTTPS {
 				continue
 			}
 		}
@@ -58,7 +59,7 @@ func setupProperties(source, binary, digest, verb string) []string {
 	readOnly = append(readOnly, "/opt/home-lab-observer-actions/releases/"+digest+"/observer-action-setup:/bin/observer-action-setup")
 	props = append(props, "ExecPaths=/bin/observer-action-setup",
 		"BindReadOnlyPaths="+strings.Join(readOnly, " "), "RuntimeMaxSec=30s")
-	if verb != "exchange" {
+	if !needsHTTPS {
 		props = append(props, "PrivateNetwork=yes", "RestrictAddressFamilies=AF_UNIX")
 	}
 	return props
