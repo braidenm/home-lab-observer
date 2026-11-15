@@ -13,8 +13,8 @@ import (
 )
 
 // prepareActionConfig provisions only the stopped service accounts and
-// configuration. It deliberately does not register units, mount namespaces,
-// seed credentials, or claim readiness. Failed partial state is retained.
+// configuration, then registers the inactive units. It does not mount
+// namespaces, seed credentials, or claim readiness. Partial state is retained.
 func prepareActionConfig(ctx context.Context, digest string, identity connectedidentity.Identity,
 	inputs actionConfigInputs, approved actionengine.SocketWitness) error {
 	if ctx == nil || ctx.Err() != nil || os.Getuid() != 0 || os.Geteuid() != 0 ||
@@ -45,7 +45,7 @@ func prepareActionConfig(ctx context.Context, digest string, identity connectedi
 			return ErrUnsafe
 		}
 	}
-	for _, unit := range []string{"home-lab-observer-action-worker.service", "home-lab-observer-action-broker.service"} {
+	for _, unit := range []string{actionWorkerUnit, actionBrokerUnit} {
 		raw, err := runTool(ctx, toolSystemctl, []string{"show", "--property=LoadState", "--value", "--", unit}, nil, 1024)
 		if err != nil || string(raw) != "not-found\n" {
 			return ErrUnsafe
@@ -67,5 +67,8 @@ func prepareActionConfig(ctx context.Context, digest string, identity connectedi
 	if err != nil || createActionDirectories(ctx, i) != nil || !sameDockerSocket(socket) {
 		return ErrRecovery
 	}
-	return publishActionConfig(ctx, i, config, network)
+	if publishActionConfig(ctx, i, config, network) != nil || !sameDockerSocket(socket) {
+		return ErrRecovery
+	}
+	return registerStoppedActionUnits(ctx, network)
 }
