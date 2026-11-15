@@ -252,7 +252,13 @@ func (l installLayout) publishFile(role fileRole, data []byte) error {
 
 // publishFileAt is a synthetic-root fault boundary for one closed file role.
 func publishFileAt(parent *os.File, spec fileSpec, data []byte, syncFile func(*os.File) error) error {
-	if !trustedRootParent(parent) || spec.name == "" || spec.limit < 1 || len(data) == 0 || len(data) > spec.limit {
+	return publishGroupedFileAt(parent, 0, 0, spec, data, syncFile)
+}
+
+func publishGroupedFileAt(parent *os.File, parentGID, fileGID uint32, spec fileSpec, data []byte, syncFile func(*os.File) error) error {
+	if !(parentGID == 0 && trustedRootParent(parent) ||
+		parentGID != 0 && parent != nil && exactDirectory(parent, directorySpec{gid: parentGID, mode: 0750})) ||
+		spec.name == "" || spec.limit < 1 || len(data) == 0 || len(data) > spec.limit {
 		return ErrUnsafe
 	}
 	if syncFile == nil {
@@ -272,7 +278,7 @@ func publishFileAt(parent *os.File, spec fileSpec, data []byte, syncFile func(*o
 		return ErrRecovery
 	}
 	f := os.NewFile(uintptr(fd), temp)
-	if f.Chown(0, 0) != nil || f.Chmod(spec.mode) != nil || !regular(f, 0, spec.mode, 0) {
+	if f.Chown(0, int(fileGID)) != nil || f.Chmod(spec.mode) != nil || !regularOwned(f, 0, fileGID, spec.mode, 0) {
 		f.Close()
 		return ErrRecovery
 	}
