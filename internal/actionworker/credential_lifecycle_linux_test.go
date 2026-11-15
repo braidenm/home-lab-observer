@@ -114,6 +114,37 @@ func lifecycleFixture(t *testing.T, phase handoffPhase) (*credentialLifecycle, *
 	r := &lifecycleRemoteFixture{prepared: prepared, active: active, old: a}
 	return &credentialLifecycle{store: s, remote: r, binding: b}, r, root
 }
+func TestVerifyEnrollmentIsStatusOnlyAndFailsClosed(t *testing.T) {
+	for _, mode := range []string{"active", "inactive", "unavailable", "not-ready"} {
+		t.Run(mode, func(t *testing.T) {
+			phase := phaseReady
+			if mode == "not-ready" {
+				phase = phasePrepared
+			}
+			l, r, _ := lifecycleFixture(t, phase)
+			r.activated = mode == "inactive"
+			if mode == "unavailable" {
+				r.fail = "old-status"
+			}
+			op, err := newCredentialOperation(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer op.close()
+			if err := l.verifyEnrollment(op); (err == nil) != (mode == "active") {
+				t.Fatal("unexpected enrollment readiness")
+			}
+			if mode == "not-ready" {
+				if len(r.calls) != 0 {
+					t.Fatal("non-ready store contacted platform")
+				}
+			} else if len(r.calls) != 1 || r.calls[0] != "old-status" {
+				t.Fatal("readiness did not use exactly one status call")
+			}
+		})
+	}
+}
+
 func TestCredentialLifecycleQuietRenewalConsumesActualStore(t *testing.T) {
 	l, r, _ := lifecycleFixture(t, phaseReady)
 	if l.maintain(context.Background()) != nil {
