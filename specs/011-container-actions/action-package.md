@@ -151,6 +151,12 @@ command also creates the host namespace reference and private worker lock, then 
 seeds the enrollment record in separate, networkless transient services before registering the inactive runtime
 units. Failure preserves all partial state. Success does not indicate that token exchange has completed.
 
+`enroll-stopped <manifest-digest>` revalidates the staged release, protected namespace, inactive units and
+exact rendered egress before accepting an action grant from an echo-disabled terminal. It passes only the
+bounded grant bytes to the isolated worker exchange through a private anonymous pipe owned by that worker.
+The root command does not save the grant or pass it in command arguments, environment, or a unit file.
+It does not start or enable the runtime services and does not retry an uncertain exchange.
+
 Root-owned `/opt/home-lab-observer-actions/releases/<manifestSHA>` holds verified immutable payload; separate
 root-owned installed record and worker-root/broker-root skeletons use existing protected publication patterns.
 Keep ADR031 exact role/path/mode/ACL rules. Resolve unique numeric IDs and reject foreign primary/supplementary

@@ -30,6 +30,10 @@ func registerStoppedActionUnits(ctx context.Context, network actionNetworkResour
 	if _, err := runTool(ctx, toolSystemctl, []string{"daemon-reload"}, nil, 1024); err != nil {
 		return ErrRecovery
 	}
+	return verifyStoppedActionUnits(ctx)
+}
+
+func verifyStoppedActionUnits(ctx context.Context) error {
 	for _, unit := range []string{actionBrokerUnit, actionWorkerUnit} {
 		out, err := runTool(ctx, toolSystemctl, []string{"show", "--no-pager",
 			"--property=Id,LoadState,ActiveState,UnitFileState,FragmentPath,DropInPaths,NeedDaemonReload", "--", unit}, nil, 1024)

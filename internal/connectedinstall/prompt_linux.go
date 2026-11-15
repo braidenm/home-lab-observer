@@ -15,6 +15,10 @@ import (
 // echo. Both fixed installers share the cancellation and terminal-restore path;
 // callers never put the grant on argv, environment or command history.
 func ReadEnrollmentGrantFrom(ctx context.Context, terminal *os.File, prompt io.Writer) (result []byte, resultErr error) {
+	return readFixedGrantFrom(ctx, terminal, prompt, 47, "One-use enrollment grant (paste only hle_ value): ")
+}
+
+func readFixedGrantFrom(ctx context.Context, terminal *os.File, prompt io.Writer, size int, label string) (result []byte, resultErr error) {
 	if ctx == nil || terminal == nil || prompt == nil {
 		return nil, ErrUnsafe
 	}
@@ -35,11 +39,11 @@ func ReadEnrollmentGrantFrom(ctx context.Context, terminal *os.File, prompt io.W
 			resultErr = ErrUnsafe
 		}
 	}()
-	fmt.Fprint(prompt, "One-use enrollment grant (paste only hle_ value): ")
-	buf := make([]byte, 0, 48)
+	fmt.Fprint(prompt, label)
+	buf := make([]byte, 0, size+1)
 	one := make([]byte, 1)
 	defer clear(one)
-	for len(buf) <= 47 {
+	for len(buf) <= size {
 		if ctx.Err() != nil {
 			clear(buf)
 			return nil, ErrUnsafe
@@ -64,7 +68,7 @@ func ReadEnrollmentGrantFrom(ctx context.Context, terminal *os.File, prompt io.W
 		buf = append(buf, one[0])
 	}
 	fmt.Fprintln(prompt)
-	if len(buf) != 47 {
+	if len(buf) != size {
 		clear(buf)
 		return nil, ErrUnsafe
 	}
