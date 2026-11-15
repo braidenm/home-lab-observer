@@ -17,12 +17,16 @@ var ErrUnsafe = errors.New("connected_install_unsafe")
 var ErrRecovery = errors.New("connected_install_recovery_required")
 
 func regular(f *os.File, uid uint32, mode os.FileMode, limit int64) bool {
+	return regularOwned(f, uid, 0, mode, limit)
+}
+
+func regularOwned(f *os.File, uid, gid uint32, mode os.FileMode, limit int64) bool {
 	i, err := f.Stat()
 	if err != nil || !i.Mode().IsRegular() || i.Mode().Perm() != mode || i.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 || i.Size() > limit {
 		return false
 	}
 	s, ok := i.Sys().(*syscall.Stat_t)
-	return ok && s.Uid == uid && s.Gid == 0 && s.Nlink == 1 && noACL(int(f.Fd()))
+	return ok && s.Uid == uid && s.Gid == gid && s.Nlink == 1 && noACL(int(f.Fd()))
 }
 
 func noACL(fd int) bool {
