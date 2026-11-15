@@ -220,6 +220,23 @@ func VerifyBroker(approvedEngineGID uint32) (Identity, error) {
 	}
 	return i, nil
 }
+
+// InspectInstallPrincipals validates the static local account records before
+// the installer assigns private files. It does not attest a running process.
+func InspectInstallPrincipals(engineGID uint32) (Identity, error) {
+	r, err := loadIdentities()
+	i := r.identity
+	if err != nil || engineGID == 0 || engineGID == ^uint32(0) ||
+		engineGID == i.WorkerGID || engineGID == i.BrokerGID || engineGID == i.IPCGID {
+		return Identity{}, ErrProfile
+	}
+	for _, g := range r.brokerMemberships {
+		if g != i.BrokerGID && g != i.IPCGID {
+			return Identity{}, ErrProfile
+		}
+	}
+	return i, nil
+}
 func VerifyAdmin() (Identity, error) {
 	if os.Getuid() != 0 || os.Geteuid() != 0 || VerifyHostNamespace() != nil {
 		return Identity{}, ErrProfile

@@ -168,8 +168,11 @@ It consumes no input and makes no network request. An existing record or failed 
 
 Runtime proposal: two disabled `Type=exec` services, Restart=no, no socket activation/inherited FDs; zero core dumps,
 capability sets empty, NoNewPrivileges, fixed executable allowlist, protected RootDirectory views and restrictive
-syscalls. Worker alone sees fixed first-party HTTPS origin, reviewed CA/DNS/host inputs, own credential directory
-and worker IPC. Use the existing first-party origin/egress-resolution policy; no URL/proxy/CA CLI overrides. Broker
+syscalls. Worker alone sees the fixed first-party HTTPS origin, reviewed CA bytes, its credential directory,
+worker IPC, and the reviewed origin's TLS-verified addresses in a generated hosts file. Use the same literal addresses
+for the worker's IP allowlist. Runtime DNS and DNS egress are not needed for this first profile; if all
+installed addresses drift, the worker fails closed. Reuse the existing first-party origin resolver at setup.
+There are no URL/proxy/CA CLI overrides. Broker
 has AF_UNIX/PrivateNetwork only, approved Engine bind at /engine/docker.sock, policy/Engine witness and journal,
 never credentials/IP egress. Both retain actual host PID/user namespace: PrivateUsers=false, no private PID/proc;
 expose required read-only proc namespace handles/identity files, not a broad host filesystem. Initial proposed caps
