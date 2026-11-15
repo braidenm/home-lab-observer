@@ -26,11 +26,25 @@ func main() {
 	code := 22
 	if len(os.Args) > 1 && os.Args[1] == "stage-release" {
 		code = runStage(ctx, os.Args, os.Environ(), identity, connectedinstall.StageActionRelease)
+	} else if len(os.Args) > 1 && os.Args[1] == "prepare-stopped" {
+		code = runPrepare(ctx, os.Args, os.Environ(), identity, connectedinstall.PrepareStoppedAction)
 	} else {
 		code = run(ctx, os.Args, os.Environ(), actionworker.RunExchange, actionbroker.ProvisionJournal, actionworker.SeedEnrollment)
 	}
 	cancel()
 	os.Exit(code)
+}
+
+func runPrepare(ctx context.Context, args, environ []string, identity connectedidentity.Identity,
+	prepare func(context.Context, connectedidentity.Identity, []string) error) int {
+	if ctx == nil || ctx.Err() != nil || len(args) != 13 || args[0] == "" || args[1] != "prepare-stopped" ||
+		connectedprofile.CheckEnvironment(environ) != nil || prepare == nil {
+		return 22
+	}
+	if prepare(ctx, identity, args[2:]) != nil {
+		return 22
+	}
+	return 0
 }
 
 func runStage(ctx context.Context, args, environ []string, identity connectedidentity.Identity,

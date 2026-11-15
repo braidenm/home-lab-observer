@@ -6,15 +6,40 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/braidenm/home-lab-observer/internal/actionengine"
+	"github.com/braidenm/home-lab-observer/internal/actionjournal"
 	"github.com/braidenm/home-lab-observer/internal/connectedidentity"
 	"github.com/braidenm/home-lab-observer/internal/connectedinstalllease"
 )
 
+// PrepareStoppedAction accepts only the explicit nonsecret approval tuple.
+// Paths, origin, service names and executable names are not caller inputs.
+func PrepareStoppedAction(ctx context.Context, identity connectedidentity.Identity, args []string) error {
+	if len(args) != 11 {
+		return ErrUnsafe
+	}
+	parse := func(s string, bits int) (uint64, bool) {
+		n, err := strconv.ParseUint(s, 10, bits)
+		return n, err == nil && strconv.FormatUint(n, 10) == s
+	}
+	dev, devOK := parse(args[8], 64)
+	ino, inoOK := parse(args[9], 64)
+	gid, gidOK := parse(args[10], 32)
+	grace, graceOK := parse(args[7], 8)
+	if !devOK || !inoOK || !gidOK || !graceOK || ino == 0 || gid == 0 || gid == 1<<32-1 {
+		return ErrUnsafe
+	}
+	return prepareActionConfig(ctx, args[0], identity, actionConfigInputs{
+		binding: actionjournal.Binding{ServerID: args[1], OwnerID: args[2], InstallationID: args[3]},
+		target: args[4], generation: args[5], container: args[6], grace: uint8(grace),
+	}, actionengine.SocketWitness{Device: dev, Inode: ino, GroupID: uint32(gid)})
+}
+
 // prepareActionConfig provisions only the stopped service accounts and
-// configuration. It deliberately does not register units, mount namespaces,
-// seed credentials, or claim readiness. Failed partial state is retained.
+// configuration, then registers the inactive units. It does not mount
+// namespaces, seed credentials, or claim readiness. Partial state is retained.
 func prepareActionConfig(ctx context.Context, digest string, identity connectedidentity.Identity,
 	inputs actionConfigInputs, approved actionengine.SocketWitness) error {
 	if ctx == nil || ctx.Err() != nil || os.Getuid() != 0 || os.Geteuid() != 0 ||
@@ -45,7 +70,7 @@ func prepareActionConfig(ctx context.Context, digest string, identity connectedi
 			return ErrUnsafe
 		}
 	}
-	for _, unit := range []string{"home-lab-observer-action-worker.service", "home-lab-observer-action-broker.service"} {
+	for _, unit := range []string{actionWorkerUnit, actionBrokerUnit} {
 		raw, err := runTool(ctx, toolSystemctl, []string{"show", "--property=LoadState", "--value", "--", unit}, nil, 1024)
 		if err != nil || string(raw) != "not-found\n" {
 			return ErrUnsafe
@@ -67,5 +92,8 @@ func prepareActionConfig(ctx context.Context, digest string, identity connectedi
 	if err != nil || createActionDirectories(ctx, i) != nil || !sameDockerSocket(socket) {
 		return ErrRecovery
 	}
-	return publishActionConfig(ctx, i, config, network)
+	if publishActionConfig(ctx, i, config, network) != nil || !sameDockerSocket(socket) {
+		return ErrRecovery
+	}
+	return registerStoppedActionUnits(ctx, network)
 }

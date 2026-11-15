@@ -140,6 +140,15 @@ It verifies before writing, creates a fresh root-owned release directory under t
 then copies and re-verifies the exact final bytes. Existing or partial installations are refused and retained.
 Staging alone creates no users, mounts, services, approval records, or enrollment credentials.
 
+Stopped unit registration publishes the rendered worker and broker units only to their fixed systemd paths,
+without replacement, then reloads unit metadata. Verification requires the loaded files to be the installed
+fragments, inactive and static (no install section), with no drop-ins or pending daemon reload.
+Registration does not run either service or consume an enrollment grant.
+The fixed setup command `prepare-stopped` accepts the manifest digest, server ID, owner ID, connector instance ID,
+opaque target ID, Engine generation, full container ID, stop grace, and the approved socket device, inode and
+group ID in that order. It accepts no credentials, source path, executable, unit name, or origin. This intermediate
+command leaves installed units inactive; it does not indicate that journal or enrollment bootstrap has completed.
+
 Root-owned `/opt/home-lab-observer-actions/releases/<manifestSHA>` holds verified immutable payload; separate
 root-owned installed record and worker-root/broker-root skeletons use existing protected publication patterns.
 Keep ADR031 exact role/path/mode/ACL rules. Resolve unique numeric IDs and reject foreign primary/supplementary
