@@ -28,6 +28,11 @@ func main() {
 		code = runStage(ctx, os.Args, os.Environ(), identity, connectedinstall.StageActionRelease)
 	} else if len(os.Args) > 1 && os.Args[1] == "prepare-stopped" {
 		code = runPrepare(ctx, os.Args, os.Environ(), identity, connectedinstall.PrepareStoppedAction)
+	} else if len(os.Args) == 3 && os.Args[1] == "enroll-stopped" {
+		if connectedprofile.CheckEnvironment(os.Environ()) == nil &&
+			connectedinstall.EnrollStoppedAction(ctx, identity, os.Args[2], os.Stdin, os.Stderr) == nil {
+			code = 0
+		}
 	} else {
 		code = run(ctx, os.Args, os.Environ(), actionworker.RunExchange, actionbroker.ProvisionJournal, actionworker.SeedEnrollment)
 	}

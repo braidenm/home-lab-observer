@@ -5,6 +5,7 @@ package connectedinstall
 import (
 	"context"
 	"io"
+	"os"
 	"os/exec"
 	"time"
 
@@ -12,7 +13,11 @@ import (
 )
 
 func runLocalActionBootstrap(ctx context.Context, verb, digest string, gid uint32, network actionNetworkResources) error {
-	if ctx == nil || ctx.Err() != nil || (verb != "provision-journal" && verb != "seed-enrollment") {
+	return runActionBootstrap(ctx, verb, digest, gid, network, nil)
+}
+
+func runActionBootstrap(ctx context.Context, verb, digest string, gid uint32, network actionNetworkResources, input *os.File) error {
+	if ctx == nil || ctx.Err() != nil || (verb == "exchange") != (input != nil) {
 		return ErrUnsafe
 	}
 	props, err := actions.BootstrapProperties(digest, verb, gid, network.addresses)
@@ -24,13 +29,20 @@ func runLocalActionBootstrap(ctx context.Context, verb, digest string, gid uint3
 	for _, property := range props {
 		args = append(args, "--property="+property)
 	}
-	args = append(args, "--property=StandardInput=null", "--property=StandardOutput=null",
-		"--property=StandardError=null", "--", "/bin/observer-action-setup", verb)
+	if input != nil {
+		args = append(args, "--pipe")
+	} else {
+		args = append(args, "--property=StandardInput=null", "--property=StandardOutput=null", "--property=StandardError=null")
+	}
+	args = append(args, "--", "/bin/observer-action-setup", verb)
 	child, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(child, "/usr/bin/systemd-run", args...)
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "LANG=C", "LC_ALL=C"}
 	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
+	if input != nil {
+		cmd.Stdin = input
+	}
 	cmd.WaitDelay = time.Second
 	if cmd.Run() != nil || child.Err() != nil {
 		// The manager also applies its own runtime bound. Refusal never
