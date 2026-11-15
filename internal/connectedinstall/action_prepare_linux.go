@@ -33,13 +33,13 @@ func PrepareStoppedAction(ctx context.Context, identity connectedidentity.Identi
 	}
 	return prepareActionConfig(ctx, args[0], identity, actionConfigInputs{
 		binding: actionjournal.Binding{ServerID: args[1], OwnerID: args[2], InstallationID: args[3]},
-		target: args[4], generation: args[5], container: args[6], grace: uint8(grace),
+		target:  args[4], generation: args[5], container: args[6], grace: uint8(grace),
 	}, actionengine.SocketWitness{Device: dev, Inode: ino, GroupID: uint32(gid)})
 }
 
 // prepareActionConfig provisions only the stopped service accounts and
-// configuration, then registers the inactive units. It does not mount
-// namespaces, seed credentials, or claim readiness. Partial state is retained.
+// configuration and initializes private stores before registering inactive
+// units. It does not consume an enrollment grant. Partial state is retained.
 func prepareActionConfig(ctx context.Context, digest string, identity connectedidentity.Identity,
 	inputs actionConfigInputs, approved actionengine.SocketWitness) error {
 	if ctx == nil || ctx.Err() != nil || os.Getuid() != 0 || os.Geteuid() != 0 ||
@@ -92,7 +92,12 @@ func prepareActionConfig(ctx context.Context, digest string, identity connectedi
 	if err != nil || createActionDirectories(ctx, i) != nil || !sameDockerSocket(socket) {
 		return ErrRecovery
 	}
-	if publishActionConfig(ctx, i, config, network) != nil || !sameDockerSocket(socket) {
+	if publishActionConfig(ctx, i, config, network) != nil || !sameDockerSocket(socket) ||
+		prepareActionNamespace(ctx) != nil || prepareActionCredentialLock(i) != nil {
+		return ErrRecovery
+	}
+	if runLocalActionBootstrap(ctx, "provision-journal", digest, socket.gid, network) != nil ||
+		runLocalActionBootstrap(ctx, "seed-enrollment", digest, socket.gid, network) != nil || !sameDockerSocket(socket) {
 		return ErrRecovery
 	}
 	return registerStoppedActionUnits(ctx, network)
