@@ -16,6 +16,7 @@ type actionNetworkResources struct {
 	workerUnit string
 	brokerUnit string
 	hosts      string
+	addresses  []netip.Addr
 }
 
 func resolveActionNetwork(ctx context.Context, digest string, engineGID uint32) (actionNetworkResources, error) {
@@ -44,5 +45,5 @@ func renderActionNetwork(digest string, engineGID uint32, addresses []string) (a
 	if err != nil {
 		return actionNetworkResources{}, ErrUnsafe
 	}
-	return actionNetworkResources{workerUnit: worker, brokerUnit: broker, hosts: hosts.String()}, nil
+	return actionNetworkResources{workerUnit: worker, brokerUnit: broker, hosts: hosts.String(), addresses: ips}, nil
 }
